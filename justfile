@@ -25,23 +25,23 @@ stop:
 # Stop then start
 restart: stop start
 
-# ─── Server (Bun, port 4000) ────────────────────────────
+# ─── Server (Docker, port 4000) ─────────────────────────
 
-# Install server dependencies
+# Build the server container image
 server-install:
-    cd {{project_root}}/apps/server && bun install
+    cd {{project_root}} && docker compose build server
 
-# Start server in dev mode (watch)
+# Start server in Docker (attached)
 server:
-    cd {{project_root}}/apps/server && SERVER_PORT={{server_port}} bun run dev
+    cd {{project_root}} && SERVER_PORT={{server_port}} docker compose up --build server
 
-# Start server in production mode
+# Start server in Docker (detached)
 server-prod:
-    cd {{project_root}}/apps/server && SERVER_PORT={{server_port}} bun run start
+    cd {{project_root}} && SERVER_PORT={{server_port}} docker compose up -d --build server
 
-# Typecheck server
+# Typecheck server inside the container
 server-typecheck:
-    cd {{project_root}}/apps/server && bun run typecheck
+    cd {{project_root}} && docker compose run --rm server bun run typecheck
 
 # ─── Client (Vue + Vite, port 5173) ─────────────────────
 

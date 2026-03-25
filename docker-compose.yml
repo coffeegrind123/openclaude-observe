@@ -1,0 +1,22 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      SERVER_PORT: "4000"
+      VITE_PORT: "5173"
+      DB_PATH: /data/events.db
+    ports:
+      - "${SERVER_PORT:-4000}:4000"
+      - "${CLIENT_PORT:-5173}:5173"
+    volumes:
+      - ./apps/server:/app/apps/server
+      - ./apps/client:/app/apps/client
+      - server_node_modules:/app/apps/server/node_modules
+      - client_node_modules:/app/apps/client/node_modules
+      - ./data:/data
+
+volumes:
+  server_node_modules:
+  client_node_modules:

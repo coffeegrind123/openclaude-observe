@@ -6,6 +6,10 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     port: parseInt(process.env.VITE_PORT || '5173'),
-    strictPort: false, // Allow fallback to next available port if occupied
+    strictPort: false,
+    host: '0.0.0.0',
+    watch: {
+      usePolling: true,
+    },
   }
 })

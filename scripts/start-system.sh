@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🚀 Starting Multi-Agent Observability System"
+echo "Starting Multi-Agent Observability System"
 echo "==========================================="
 
 # Colors for output
@@ -23,64 +23,34 @@ echo -e "${BLUE}Configuration:${NC}"
 echo -e "  Server Port: ${GREEN}$SERVER_PORT${NC}"
 echo -e "  Client Port: ${GREEN}$CLIENT_PORT${NC}"
 
-# Function to kill processes on a port
-kill_port() {
-    local port=$1
-    local name=$2
+# Ensure data directory exists
+mkdir -p "$PROJECT_ROOT/data"
 
-    echo -e "\n${YELLOW}Checking for existing $name on port $port...${NC}"
+# Stop any existing containers
+echo -e "\n${YELLOW}Stopping existing containers...${NC}"
+cd "$PROJECT_ROOT"
+docker compose down >/dev/null 2>&1 || true
 
-    # Find PIDs using the port
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS
-        PIDS=$(lsof -ti :$port 2>/dev/null)
-    else
-        # Linux
-        PIDS=$(lsof -ti :$port 2>/dev/null || fuser -n tcp $port 2>/dev/null | awk '{print $2}')
-    fi
-
-    if [ -n "$PIDS" ]; then
-        echo -e "${RED}Found existing processes on port $port: $PIDS${NC}"
-        for PID in $PIDS; do
-            kill -9 $PID 2>/dev/null && echo -e "${GREEN}✅ Killed process $PID${NC}" || echo -e "${RED}❌ Failed to kill process $PID${NC}"
-        done
-        sleep 1
-    else
-        echo -e "${GREEN}✅ Port $port is available${NC}"
-    fi
-}
-
-# Kill any existing processes on our ports
-kill_port $SERVER_PORT "server"
-kill_port $CLIENT_PORT "client"
-
-# Start server
-echo -e "\n${GREEN}Starting server on port $SERVER_PORT...${NC}"
-cd "$PROJECT_ROOT/apps/server"
-SERVER_PORT=$SERVER_PORT bun run dev &
-SERVER_PID=$!
+# Build and start all services
+echo -e "\n${GREEN}Building and starting containers...${NC}"
+cd "$PROJECT_ROOT"
+SERVER_PORT=$SERVER_PORT CLIENT_PORT=$CLIENT_PORT docker compose up -d --build
 
 # Wait for server to be ready
 echo -e "${YELLOW}Waiting for server to start...${NC}"
-for i in {1..10}; do
+for i in {1..15}; do
     if curl -s http://localhost:$SERVER_PORT/health >/dev/null 2>&1 || curl -s http://localhost:$SERVER_PORT/events/filter-options >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ Server is ready!${NC}"
+        echo -e "${GREEN}Server is ready!${NC}"
         break
     fi
     sleep 1
 done
 
-# Start client
-echo -e "\n${GREEN}Starting client on port $CLIENT_PORT...${NC}"
-cd "$PROJECT_ROOT/apps/client"
-VITE_PORT=$CLIENT_PORT bun run dev &
-CLIENT_PID=$!
-
 # Wait for client to be ready
 echo -e "${YELLOW}Waiting for client to start...${NC}"
-for i in {1..10}; do
+for i in {1..15}; do
     if curl -s http://localhost:$CLIENT_PORT >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ Client is ready!${NC}"
+        echo -e "${GREEN}Client is ready!${NC}"
         break
     fi
     sleep 1
@@ -88,33 +58,14 @@ done
 
 # Display status
 echo -e "\n${BLUE}============================================${NC}"
-echo -e "${GREEN}✅ Multi-Agent Observability System Started${NC}"
+echo -e "${GREEN}Multi-Agent Observability System Started${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo
-echo -e "🖥️  Client URL: ${GREEN}http://localhost:$CLIENT_PORT${NC}"
-echo -e "🔌 Server API: ${GREEN}http://localhost:$SERVER_PORT${NC}"
-echo -e "📡 WebSocket: ${GREEN}ws://localhost:$SERVER_PORT/stream${NC}"
+echo -e "Client URL: ${GREEN}http://localhost:$CLIENT_PORT${NC}"
+echo -e "Server API: ${GREEN}http://localhost:$SERVER_PORT${NC}"
+echo -e "WebSocket:  ${GREEN}ws://localhost:$SERVER_PORT/stream${NC}"
+echo -e "Data dir:   ${GREEN}$PROJECT_ROOT/data${NC}"
 echo
-echo -e "📝 Process IDs:"
-echo -e "   Server PID: ${YELLOW}$SERVER_PID${NC}"
-echo -e "   Client PID: ${YELLOW}$CLIENT_PID${NC}"
-echo
-echo -e "To stop the system, run: ${YELLOW}./scripts/reset-system.sh${NC}"
-echo -e "To test the system, run: ${YELLOW}./scripts/test-system.sh${NC}"
-echo
-echo -e "${BLUE}Press Ctrl+C to stop both processes${NC}"
-
-# Function to cleanup on exit
-cleanup() {
-    echo -e "\n${YELLOW}Shutting down...${NC}"
-    kill $SERVER_PID 2>/dev/null
-    kill $CLIENT_PID 2>/dev/null
-    echo -e "${GREEN}✅ Stopped all processes${NC}"
-    exit 0
-}
-
-# Set up trap to cleanup on Ctrl+C
-trap cleanup INT
-
-# Wait for both processes
-wait $SERVER_PID $CLIENT_PID
+echo -e "To view logs:        ${YELLOW}docker compose logs -f${NC}"
+echo -e "To stop the system:  ${YELLOW}./scripts/reset-system.sh${NC}"
+echo -e "To test the system:  ${YELLOW}./scripts/test-system.sh${NC}"

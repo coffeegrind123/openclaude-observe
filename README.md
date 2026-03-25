@@ -4,14 +4,14 @@ Real-time monitoring and visualization for Claude Code agents through comprehens
 
 ## 🎯 Overview
 
-This system provides complete observability into Claude Code agent behavior by capturing, storing, and visualizing Claude Code [Hook events](https://docs.anthropic.com/en/docs/claude-code/hooks) in real-time. It enables monitoring of multiple concurrent agents with session tracking, event filtering, and live updates. 
+This system provides complete observability into Claude Code agent behavior by capturing, storing, and visualizing Claude Code [Hook events](https://docs.anthropic.com/en/docs/claude-code/hooks) in real-time. It enables monitoring of multiple concurrent agents with session tracking, event filtering, and live updates.
 
 <img src="images/app.png" alt="Multi-Agent Observability Dashboard" style="max-width: 800px; width: 100%;">
 
 ## 🏗️ Architecture
 
 ```
-Claude Agents → Hook Scripts → HTTP POST → Bun Server → SQLite → WebSocket → Vue Client
+Claude Agents → Hook Scripts → HTTP POST → Dockerized Bun Server → SQLite → WebSocket → Vue Client
 ```
 
 ![Agent Data Flow Animation](images/AgentDataFlowV2.gif)
@@ -22,7 +22,8 @@ Before getting started, ensure you have the following installed:
 
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Anthropic's official CLI for Claude
 - **[Astral uv](https://docs.astral.sh/uv/)** - Fast Python package manager (required for hook scripts)
-- **[Bun](https://bun.sh/)**, **npm**, or **yarn** - For running the server and client
+- **[Docker](https://www.docker.com/)** - For running the server container
+- **[Bun](https://bun.sh/)**, **npm**, or **yarn** - For running the client
 - **[just](https://github.com/casey/just)** (optional) - Command runner for project recipes
 - **Anthropic API Key** - Set as `ANTHROPIC_API_KEY` environment variable
 - **OpenAI API Key** (optional) - For multi-model support with just-prompt MCP tool
@@ -36,14 +37,15 @@ To setup observability in your repo,we need to copy the .claude directory to you
 To integrate the observability hooks into your projects:
 
 1. **Copy the entire `.claude` directory to your project root:**
+
    ```bash
    cp -R .claude /path/to/your/project/
    ```
 
 2. **Update the `settings.json` configuration:**
-   
+
    Open `.claude/settings.json` in your project and modify the `source-app` parameter to identify your project:
-   
+
    ```json
    {
      "hooks": {
@@ -90,10 +92,11 @@ To integrate the observability hooks into your projects:
      }
    }
    ```
-   
+
    Replace `YOUR_PROJECT_NAME` with a unique identifier for your project (e.g., `my-api-server`, `react-app`, etc.).
 
 3. **Ensure the observability server is running:**
+
    ```bash
    # From the observability project directory (this codebase)
    ./scripts/start-system.sh
@@ -209,8 +212,7 @@ claude-code-hooks-multi-agent-observability/
 │
 ├── scripts/               # Utility scripts
 │   ├── start-system.sh   # Launch server & client
-│   ├── reset-system.sh   # Stop all processes
-│   └── test-system.sh    # System validation
+│   └── reset-system.sh   # Stop all processes
 │
 └── logs/                 # Application logs (gitignored)
 ```
@@ -323,6 +325,7 @@ Vue 3 application with real-time visualization:
 ### UserPromptSubmit Event (v1.0.54+)
 
 The `UserPromptSubmit` hook captures every user prompt before Claude processes it. In the UI:
+
 - Displays as `Prompt: "user's message"` in italic text
 - Shows the actual prompt content inline (truncated to 100 chars)
 - Summary appears on the right side when AI summarization is enabled
@@ -333,11 +336,13 @@ The `UserPromptSubmit` hook captures every user prompt before Claude processes i
 ### For New Projects
 
 1. Copy the event sender:
+
    ```bash
    cp .claude/hooks/send_event.py YOUR_PROJECT/.claude/hooks/
    ```
 
 2. Add to your `.claude/settings.json`:
+
    ```json
    {
      "hooks": {
@@ -355,6 +360,7 @@ The `UserPromptSubmit` hook captures every user prompt before Claude processes i
 ### For This Project
 
 Already integrated! Hooks run both validation and observability:
+
 ```json
 {
   "type": "command",
@@ -399,6 +405,7 @@ just hook-test pre_tool_use
 Copy `.env.sample` to `.env` in the project root and fill in your API keys:
 
 **Application Root** (`.env` file):
+
 - `ANTHROPIC_API_KEY` – Anthropic Claude API key (required)
 - `ENGINEER_NAME` – Your name (for logging/identification)
 - `OPENAI_API_KEY` – OpenAI API key (optional)
@@ -406,6 +413,7 @@ Copy `.env.sample` to `.env` in the project root and fill in your API keys:
 - `FIRECRAWL_API_KEY` – Firecrawl API key (optional, for web scraping)
 
 **Client** (`.env` file in `apps/client/.env`):
+
 - `VITE_MAX_EVENTS_TO_DISPLAY=100` – Maximum events to show (removes oldest when exceeded)
 
 ### Server Ports
@@ -433,6 +441,7 @@ Use the `/plan_w_team` slash command to create team-based implementation plans:
 This generates a spec document in `specs/` with task breakdowns, team member assignments, dependencies, and acceptance criteria. Plans are validated by Stop hook validators that ensure required sections are present.
 
 Execute a plan with:
+
 ```bash
 /build specs/<plan-name>.md
 ```
@@ -482,9 +491,9 @@ This is what separates engineers from vibe coders: understanding what's happenin
 - **Communication**: HTTP REST, WebSocket
 
 ## Master AI **Agentic Coding**
+>
 > And prepare for the future of software engineering
 
 Learn tactical agentic coding patterns with [Tactical Agentic Coding](https://agenticengineer.com/tactical-agentic-coding?y=opsorch)
 
 Follow the [IndyDevDan YouTube channel](https://www.youtube.com/@indydevdan) to improve your agentic coding advantage.
-
