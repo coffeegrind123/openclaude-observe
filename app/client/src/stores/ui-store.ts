@@ -48,8 +48,16 @@ interface UIState {
 
   expandedEventIds: Set<number>
   scrollToEventId: number | null
+  expandAllCounter: number // incremented to signal "expand all" to event stream
   toggleExpandedEvent: (id: number) => void
+  collapseAllEvents: () => void
+  requestExpandAll: () => void
+  expandAllEvents: (ids: number[]) => void
   setScrollToEventId: (id: number | null) => void
+
+  // Auto-follow
+  autoFollow: boolean
+  setAutoFollow: (enabled: boolean) => void
 }
 
 const { projectId: initialProjectId, sessionId: initialSessionId } = parseHash()
@@ -102,11 +110,21 @@ export const useUIStore = create<UIState>((set, get) => ({
   toggleExpandedEvent: (id) =>
     set((s) => {
       const next = new Set(s.expandedEventIds)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return { expandedEventIds: next }
+      const isExpanding = !next.has(id)
+      if (isExpanding) next.add(id)
+      else next.delete(id)
+      // Disable auto-follow when expanding a row
+      return { expandedEventIds: next, ...(isExpanding ? { autoFollow: false } : {}) }
     }),
+  expandAllCounter: 0,
+  collapseAllEvents: () => set({ expandedEventIds: new Set() }),
+  requestExpandAll: () =>
+    set((s) => ({ expandAllCounter: s.expandAllCounter + 1, autoFollow: false })),
+  expandAllEvents: (ids: number[]) => set({ expandedEventIds: new Set(ids), autoFollow: false }),
   setScrollToEventId: (id) => set({ scrollToEventId: id }),
+
+  autoFollow: true,
+  setAutoFollow: (enabled) => set({ autoFollow: enabled }),
 }))
 
 if (typeof window !== 'undefined') {

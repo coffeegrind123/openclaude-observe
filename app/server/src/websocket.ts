@@ -1,24 +1,42 @@
-// app/server/src/websocket.ts
-import type { ServerWebSocket } from 'bun'
-import type { WSMessage } from './types'
+import { WebSocketServer, WebSocket } from 'ws'
+import type { Server } from 'http'
 
-const clients = new Set<ServerWebSocket<unknown>>()
+const clients = new Set<WebSocket>()
 
-export function addClient(ws: ServerWebSocket<unknown>): void {
-  clients.add(ws)
+export function attachWebSocket(server: Server, enabled: boolean) {
+  if (!enabled) {
+    console.log('[WS] WebSocket disabled')
+    return
+  }
+
+  const wss = new WebSocketServer({ server, path: '/api/events/stream' })
+
+  wss.on('connection', (ws) => {
+    clients.add(ws)
+    console.log('[WS] Client connected')
+
+    ws.on('close', () => {
+      clients.delete(ws)
+      console.log('[WS] Client disconnected')
+    })
+
+    ws.on('error', () => {
+      clients.delete(ws)
+    })
+  })
+
+  console.log('[WS] WebSocket enabled on /api/events/stream')
 }
 
-export function removeClient(ws: ServerWebSocket<unknown>): void {
-  clients.delete(ws)
-}
-
-export function broadcast(message: WSMessage): void {
+export function broadcast(message: object): void {
   const json = JSON.stringify(message)
   for (const client of clients) {
-    try {
-      client.send(json)
-    } catch {
-      clients.delete(client)
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(json)
+      } catch {
+        clients.delete(client)
+      }
     }
   }
 }

@@ -40,5 +40,6 @@ export const api = {
   },
   getThread: (eventId: number) =>
     fetchJson<ParsedEvent[]>(`/events/${eventId}/thread`),
-  deleteData: () => fetch(`${API_BASE}/data`, { method: 'DELETE' }),
+  clearSessionEvents: (sessionId: string) =>
+    fetch(`${API_BASE}/sessions/${encodeURIComponent(sessionId)}/events`, { method: 'DELETE' }),
 };

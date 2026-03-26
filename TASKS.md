@@ -19,6 +19,12 @@
 - [x] Order agent chips: Main first, then by most recent activity
 - [x] Auto scroll to bottom on session select
 - [x] Add bottom padding to event stream
+- [x] Chat thread deduping (Pre/PostToolUse merged client-side)
+- [x] Stop event shows user prompt above Final message
+- [x] SubAgentStop expanded summary with Agent command and results
+- [x] Replace CLAUDE_OBSERVE_PORT with CLAUDE_OBSERVE_EVENTS_ENDPOINT
+- [x] Auto-follow toggle + clear session button in nav
+- [x] DELETE /api/sessions/:id/events endpoint (removed insecure DELETE /api/data)
 
 ---
 
@@ -26,6 +32,12 @@
 
 Don't implement these yet. They're here for future reference.
 
+- [ ] Track token & context window usage per session and agent
+  - On Stop hook, use two-way pattern: hook reads transcript JSONL, sums `usage` fields from all assistant messages, posts totals to `/api/sessions/:id/usage` callback
+  - Subagent usage already available in PostToolUse:Agent `tool_response` (totalTokens, totalDurationMs, usage breakdown) — just need to surface in UI
+  - Store session-level totals: total input/output tokens, cache read/creation, total duration
+  - Show in sidebar (per session) and scope bar (per agent)
+  - New `getSessionUsage` command for the two-way hook pattern
 - [ ] Add a toggle icon in top right of Top Nav for a Logs view
   - Logs view should just show the raw events and payloads for the selected project or session
   - User can toggle between the "normal" view and raw logs

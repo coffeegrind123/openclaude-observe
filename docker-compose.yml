@@ -5,10 +5,11 @@ services:
       dockerfile: Dockerfile
     environment:
       SERVER_PORT: "4001"
-      DB_PATH: /data/events.db
+      DB_PATH: /data/observe.db
+      CLIENT_DIST_PATH: /app/client/dist
+      ENABLE_WEBSOCKET: "true"
       SERVER_LOG_LEVEL: "debug"
     ports:
-      - "${SERVER_PORT:-4001}:4001"
-      - "${CLIENT_PORT:-5174}:5174"
+      - "${PORT:-4001}:4001"
     volumes:
       - ./data:/data
