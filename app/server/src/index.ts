@@ -14,6 +14,7 @@ import {
   getEventsForAgent,
   getSessionById,
   clearAllData,
+  getThreadForEvent,
 } from './db'
 import { parseRawEvent } from './parser'
 import { addClient, removeClient, broadcast } from './websocket'
@@ -242,6 +243,25 @@ const server = Bun.serve({
     if (agentEventsMatch && req.method === 'GET') {
       const agentId = decodeURIComponent(agentEventsMatch[1])
       const rows = getEventsForAgent(agentId)
+      const events: ParsedEvent[] = rows.map((r: any) => ({
+        id: r.id,
+        agentId: r.agent_id,
+        sessionId: r.session_id,
+        type: r.type,
+        subtype: r.subtype,
+        toolName: r.tool_name,
+        summary: r.summary,
+        timestamp: r.timestamp,
+        payload: JSON.parse(r.payload),
+      }))
+      return json(events)
+    }
+
+    // GET /api/events/:id/thread — conversation thread for a specific event
+    const threadMatch = url.pathname.match(/^\/api\/events\/(\d+)\/thread$/)
+    if (threadMatch && req.method === 'GET') {
+      const eventId = parseInt(threadMatch[1])
+      const rows = getThreadForEvent(eventId)
       const events: ParsedEvent[] = rows.map((r: any) => ({
         id: r.id,
         agentId: r.agent_id,

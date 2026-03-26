@@ -302,6 +302,48 @@ export function getSessionById(sessionId: string): any {
     .get(sessionId)
 }
 
+// Get the conversation thread for an event: events between the preceding
+// UserPromptSubmit and the next UserPromptSubmit/Stop (inclusive).
+export function getThreadForEvent(eventId: number): Array<any> {
+  const event = getDb().prepare('SELECT * FROM events WHERE id = ?').get(eventId) as any;
+  if (!event) return [];
+
+  const sessionId = event.session_id;
+
+  // Find the preceding UserPromptSubmit (or start of session)
+  const prevPrompt = getDb().prepare(`
+    SELECT timestamp FROM events
+    WHERE session_id = ? AND subtype = 'UserPromptSubmit' AND timestamp <= ?
+    ORDER BY timestamp DESC LIMIT 1
+  `).get(sessionId, event.timestamp) as any;
+
+  const startTs = prevPrompt ? prevPrompt.timestamp : 0;
+
+  // Find the next UserPromptSubmit after this event's prompt (to bound the thread)
+  const nextPrompt = getDb().prepare(`
+    SELECT timestamp FROM events
+    WHERE session_id = ? AND subtype = 'UserPromptSubmit' AND timestamp > ?
+    ORDER BY timestamp ASC LIMIT 1
+  `).get(sessionId, startTs) as any;
+
+  const endTs = nextPrompt ? nextPrompt.timestamp : Infinity;
+
+  // Get all events in the thread window
+  if (endTs === Infinity) {
+    return getDb().prepare(`
+      SELECT * FROM events
+      WHERE session_id = ? AND timestamp >= ?
+      ORDER BY timestamp ASC
+    `).all(sessionId, startTs) as any[];
+  }
+
+  return getDb().prepare(`
+    SELECT * FROM events
+    WHERE session_id = ? AND timestamp >= ? AND timestamp < ?
+    ORDER BY timestamp ASC
+  `).all(sessionId, startTs, endTs) as any[];
+}
+
 export function clearAllData(): void {
   const d = getDb()
   d.exec('DELETE FROM events')
