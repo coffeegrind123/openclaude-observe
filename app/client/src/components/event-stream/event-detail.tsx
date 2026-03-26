@@ -269,8 +269,18 @@ function extractResult(toolResponse: any): string | null {
     return text || null;
   }
 
-  // Other object: try content field or stringify
-  if (toolResponse.content) return String(toolResponse.content);
+  // Agent/structured format: { content: [{type:'text', text:'...'}], status, ... }
+  if (Array.isArray(toolResponse.content)) {
+    const text = toolResponse.content
+      .map((r: any) => (r?.type === 'text' && r?.text) ? r.text : '')
+      .filter(Boolean)
+      .join('\n');
+    if (text) return text;
+  }
+
+  // Plain content string
+  if (typeof toolResponse.content === 'string') return toolResponse.content;
+
   return JSON.stringify(toolResponse, null, 2);
 }
 
