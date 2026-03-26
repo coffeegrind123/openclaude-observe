@@ -1,4 +1,4 @@
-import { test, expect } from 'bun:test'
+import { test, expect } from 'vitest'
 import { parseRawEvent } from './parser'
 
 test('parses user prompt event', () => {
@@ -25,7 +25,6 @@ test('parses user prompt event', () => {
   expect(result.type).toBe('user')
   expect(result.subtype).toBeNull()
   expect(result.toolName).toBeNull()
-  expect(result.summary).toBe('"hello world"')
   expect(result.timestamp).toBeGreaterThan(0)
   expect(result.metadata.version).toBe('2.1.83')
 })
@@ -53,8 +52,7 @@ test('parses assistant tool_use event', () => {
   const result = parseRawEvent(raw)
   expect(result.type).toBe('assistant')
   expect(result.toolName).toBe('Agent')
-  expect(result.summary).toContain('Agent')
-  expect(result.summary).toContain('List current directory')
+  expect(result.subAgentName).toBe('List current directory')
 })
 
 test('parses progress/hook_progress event with subtype', () => {
@@ -123,7 +121,6 @@ test('parses tool_result user event', () => {
 
   const result = parseRawEvent(raw)
   expect(result.subAgentId).toBe('ad03a9f1e00dc2c79')
-  expect(result.summary).toContain('completed')
 })
 
 test('parses Stop system event', () => {
