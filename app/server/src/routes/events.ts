@@ -18,6 +18,12 @@ const LOG_LEVEL = process.env.SERVER_LOG_LEVEL || 'debug'
 // Track root agent IDs per session (sessionId -> agentId)
 const sessionRootAgents = new Map<string, string>()
 
+// Track pending Agent tool descriptions so we can name subagents early.
+// When PreToolUse:Agent fires, we store the description keyed by tool_use_id.
+// When the subagent's first event arrives (with ownerAgentId), we look up the
+// most recent pending description to use as the agent name.
+const pendingAgentNames = new Map<string, string>() // sessionId -> description
+
 async function ensureRootAgent(
   store: EventStore,
   sessionId: string,
@@ -50,9 +56,7 @@ router.post('/events', async (c) => {
           : `Keys: ${logKeys} \nPayload: ${payload.slice(0, 500)}`
 
       if (raw.hook_event_name) {
-        const toolInfo = raw.tool_name
-          ? `tool:${raw.tool_name} tool_use_id:${raw.tool_use_id}`
-          : ''
+        const toolInfo = raw.tool_name ? `tool:${raw.tool_name} tool_use_id:${raw.tool_use_id}` : ''
         console.log(`[HOOK:${raw.hook_event_name}] ${toolInfo} \n${logPayload}\n---`)
       } else {
         console.log('[EVENT]', logPayload)
@@ -70,19 +74,34 @@ router.post('/events', async (c) => {
       parsed.timestamp,
     )
 
-    const rootAgentId = await ensureRootAgent(store, parsed.sessionId, parsed.slug, parsed.timestamp)
+    const rootAgentId = await ensureRootAgent(
+      store,
+      parsed.sessionId,
+      parsed.slug,
+      parsed.timestamp,
+    )
+
+    // When PreToolUse:Agent fires, stash the description for early naming
+    if (parsed.subtype === 'PreToolUse' && parsed.toolName === 'Agent' && parsed.subAgentName) {
+      pendingAgentNames.set(parsed.sessionId, parsed.subAgentName)
+    }
 
     // If the event has an ownerAgentId (from payload.agent_id), this event
     // belongs to that agent. Ensure the agent record exists.
     if (parsed.ownerAgentId && parsed.ownerAgentId !== rootAgentId) {
+      // Try to get a name from the pending Agent tool description
+      const pendingName = pendingAgentNames.get(parsed.sessionId) || null
       await store.upsertAgent(
         parsed.ownerAgentId,
         parsed.sessionId,
         rootAgentId,
         null,
-        null,
+        pendingName,
         parsed.timestamp,
       )
+      if (pendingName) {
+        pendingAgentNames.delete(parsed.sessionId)
+      }
     }
     let agentId = parsed.ownerAgentId || rootAgentId
 
