@@ -114,8 +114,8 @@ function ToolDetail({
   // For non-tool events, show basic info
   if (event.subtype === 'UserPromptSubmit') {
     return (
-      <div className="space-y-1">
-        <DetailRow label="Prompt" value={payload.prompt} />
+      <div className="space-y-1.5">
+        <DetailCode label="Prompt" value={payload.prompt} />
       </div>
     );
   }

@@ -60,6 +60,8 @@ export function EventRow({ event, allEvents, agentMap, showAgentLabel }: EventRo
   const LABEL_MAP: Record<string, string> = {
     UserPromptSubmit: 'Prompt',
     stop_hook_summary: 'Stop',
+    SubagentStop: 'SubStop',
+    SessionStart: 'Session',
   };
   const rawLabel = isTool ? 'Tool' : (event.subtype || event.type);
   const displayLabel = LABEL_MAP[rawLabel] || rawLabel;
@@ -96,7 +98,7 @@ export function EventRow({ event, allEvents, agentMap, showAgentLabel }: EventRo
           <span className="text-sm shrink-0" title={event.subtype || event.type}>
             {icon}
           </span>
-          <span className="text-xs font-medium w-16 shrink-0 text-muted-foreground">
+          <span className="text-xs font-medium w-16 shrink-0 truncate text-muted-foreground" title={event.subtype || event.type}>
             {displayLabel}
           </span>
           {isTool && (

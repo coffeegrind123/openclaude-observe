@@ -11,7 +11,7 @@ export function getEventSummary(event: ParsedEvent, allEvents?: ParsedEvent[]): 
 
   switch (event.subtype) {
     case 'UserPromptSubmit':
-      return p.prompt || p.message?.content || '';
+      return oneLine(p.prompt || p.message?.content || '');
 
     case 'SessionStart':
       return p.source ? `Session ${p.source}` : 'New session';
