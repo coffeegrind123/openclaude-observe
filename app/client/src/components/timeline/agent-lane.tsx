@@ -13,6 +13,19 @@ interface AgentLaneProps {
   color: string;
 }
 
+// Friendly label for tooltips
+function tooltipLabel(event: ParsedEvent): string {
+  if (event.subtype === 'PreToolUse' || event.subtype === 'PostToolUse') {
+    return event.toolName || 'Tool';
+  }
+  const map: Record<string, string> = {
+    UserPromptSubmit: 'Prompt',
+    Stop: 'Stop',
+    SessionStart: 'Session Start',
+  };
+  return map[event.subtype || ''] || event.subtype || event.type;
+}
+
 export function AgentLane({ agentName, events, isSubagent, color }: AgentLaneProps) {
   const { timeRange, setScrollToEventId } = useUIStore();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -29,7 +42,24 @@ export function AgentLane({ agentName, events, isSubagent, color }: AgentLanePro
     [events, now, rangeMs]
   );
 
-  // Animation: update positions by forcing re-renders via CSS custom property
+  // Tick marks based on time range
+  const ticks = useMemo(() => {
+    const rangeSec = rangeMs / 1000;
+    const count = { '1m': 6, '5m': 5, '10m': 5 }[timeRange];
+    const stepSec = rangeSec / count;
+    const result: { pct: number; label: string }[] = [];
+    for (let i = 0; i <= count; i++) {
+      const sec = i * stepSec;
+      const pct = 100 - (sec / rangeSec) * 100;
+      let label: string;
+      if (i === 0) label = 'now';
+      else if (sec < 60) label = `${sec}s`;
+      else label = `${Math.round(sec / 60)}m`;
+      result.push({ pct, label });
+    }
+    return result;
+  }, [timeRange, rangeMs]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -59,6 +89,7 @@ export function AgentLane({ agentName, events, isSubagent, color }: AgentLanePro
           if (position < 0 || position > 100) return null;
 
           const icon = getEventIcon(event.subtype, event.toolName);
+          const summary = getEventSummary(event);
 
           return (
             <Tooltip key={event.id}>
@@ -71,20 +102,26 @@ export function AgentLane({ agentName, events, isSubagent, color }: AgentLanePro
                   {icon}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">
-                <div>{event.subtype || event.type}</div>
-                {getEventSummary(event) && <div className="text-muted-foreground">{getEventSummary(event)}</div>}
+              <TooltipContent side="top" className="text-xs max-w-64">
+                <div className="font-medium">{tooltipLabel(event)}</div>
+                {summary && <div className="text-muted-foreground truncate">{summary}</div>}
               </TooltipContent>
             </Tooltip>
           );
         })}
 
-        {[0.2, 0.4, 0.6, 0.8].map((pct) => (
+        {/* Time tick marks */}
+        {ticks.map(({ pct, label }) => (
           <div
-            key={pct}
-            className="absolute top-0 bottom-0 border-l border-border/20"
-            style={{ left: `${pct * 100}%` }}
-          />
+            key={label}
+            className="absolute top-0 bottom-0 flex flex-col items-center"
+            style={{ left: `${pct}%` }}
+          >
+            <div className="w-px h-full border-l border-border/20" />
+            <div className="absolute bottom-0 text-[7px] text-muted-foreground/40 -translate-x-1/2 leading-none">
+              {label}
+            </div>
+          </div>
         ))}
       </div>
     </div>

@@ -11,7 +11,6 @@ interface EventDetailProps {
   event: ParsedEvent;
 }
 
-// Events that show the conversation thread when expanded
 const THREAD_SUBTYPES = ['UserPromptSubmit', 'Stop'];
 
 export function EventDetail({ event }: EventDetailProps) {
@@ -36,15 +35,14 @@ export function EventDetail({ event }: EventDetailProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const p = event.payload as Record<string, any>;
+  const postPayload = (event as any)._postPayload as Record<string, any> | undefined;
+  const cwd = p.cwd as string | undefined;
+
   return (
     <div className="px-4 py-2 bg-muted/30 border-t border-border text-xs space-y-2">
-      {/* Tool info */}
-      {event.toolName && (
-        <div>
-          <span className="text-muted-foreground">Tool: </span>
-          <span className="font-mono">{event.toolName}</span>
-        </div>
-      )}
+      {/* Per-event-type rich detail */}
+      <ToolDetail event={event} payload={p} postPayload={postPayload} cwd={cwd} />
 
       {/* Conversation thread for UserPrompt / Stop events */}
       {showThread && (
@@ -94,6 +92,172 @@ export function EventDetail({ event }: EventDetailProps) {
     </div>
   );
 }
+
+// ── Rich per-tool detail ──────────────────────────────────────
+
+function ToolDetail({
+  event, payload, postPayload, cwd
+}: {
+  event: ParsedEvent;
+  payload: Record<string, any>;
+  postPayload?: Record<string, any>;
+  cwd?: string;
+}) {
+  const ti = payload.tool_input || {};
+  const result = postPayload?.tool_result;
+
+  // For non-tool events, show basic info
+  if (event.subtype === 'UserPromptSubmit') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Prompt" value={payload.prompt} />
+      </div>
+    );
+  }
+
+  if (event.subtype === 'Stop') {
+    return (
+      <div className="space-y-1">
+        {payload.last_assistant_message && (
+          <DetailRow label="Final message" value={payload.last_assistant_message} multiline />
+        )}
+      </div>
+    );
+  }
+
+  if (event.subtype === 'SessionStart') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Source" value={payload.source || 'new'} />
+        {cwd && <DetailRow label="Working dir" value={cwd} />}
+      </div>
+    );
+  }
+
+  // Tool events
+  if (event.subtype !== 'PreToolUse' && event.subtype !== 'PostToolUse') return null;
+
+  switch (event.toolName) {
+    case 'Bash':
+      return (
+        <div className="space-y-1">
+          <DetailRow label="Tool" value={`Bash — ${ti.description || ''}`} />
+          {ti.command && <DetailCode label="Command" value={ti.command} />}
+          {result && <DetailCode label="Result" value={formatResult(result)} />}
+        </div>
+      );
+    case 'Read':
+      return (
+        <div className="space-y-1">
+          <DetailRow label="Tool" value="Read" />
+          <DetailRow label="File" value={relPath(ti.file_path, cwd)} />
+          {ti.offset && <DetailRow label="Offset" value={`line ${ti.offset}${ti.limit ? `, limit ${ti.limit}` : ''}`} />}
+          {result && <DetailCode label="Content" value={formatResult(result)} />}
+        </div>
+      );
+    case 'Write':
+      return (
+        <div className="space-y-1">
+          <DetailRow label="Tool" value="Write" />
+          <DetailRow label="File" value={relPath(ti.file_path, cwd)} />
+          {result && <DetailRow label="Result" value={formatResult(result)} />}
+        </div>
+      );
+    case 'Edit':
+      return (
+        <div className="space-y-1">
+          <DetailRow label="Tool" value="Edit" />
+          <DetailRow label="File" value={relPath(ti.file_path, cwd)} />
+          {ti.old_string && <DetailCode label="Old" value={ti.old_string} />}
+          {ti.new_string && <DetailCode label="New" value={ti.new_string} />}
+          {result && <DetailRow label="Result" value={formatResult(result)} />}
+        </div>
+      );
+    case 'Grep':
+      return (
+        <div className="space-y-1">
+          <DetailRow label="Tool" value="Grep" />
+          <DetailRow label="Pattern" value={`/${ti.pattern}/`} />
+          {ti.path && <DetailRow label="Path" value={relPath(ti.path, cwd)} />}
+          {ti.glob && <DetailRow label="Glob" value={ti.glob} />}
+          {result && <DetailCode label="Result" value={formatResult(result)} />}
+        </div>
+      );
+    case 'Glob':
+      return (
+        <div className="space-y-1">
+          <DetailRow label="Tool" value="Glob" />
+          <DetailRow label="Pattern" value={ti.pattern} />
+          {ti.path && <DetailRow label="Path" value={relPath(ti.path, cwd)} />}
+          {result && <DetailCode label="Result" value={formatResult(result)} />}
+        </div>
+      );
+    case 'Agent':
+      return (
+        <div className="space-y-1">
+          <DetailRow label="Tool" value="Agent" />
+          {ti.description && <DetailRow label="Description" value={ti.description} />}
+          {ti.prompt && <DetailCode label="Prompt" value={ti.prompt} />}
+          {result && <DetailCode label="Result" value={formatResult(result)} />}
+        </div>
+      );
+    default:
+      return (
+        <div className="space-y-1">
+          <DetailRow label="Tool" value={event.toolName || 'Unknown'} />
+          {ti.description && <DetailRow label="Description" value={ti.description} />}
+          {result && <DetailCode label="Result" value={formatResult(result)} />}
+        </div>
+      );
+  }
+}
+
+// ── Helper components ──────────────────────────────────────
+
+function DetailRow({ label, value, multiline }: { label: string; value?: string; multiline?: boolean }) {
+  if (!value) return null;
+  return (
+    <div className={cn('flex gap-2', multiline && 'flex-col')}>
+      <span className="text-muted-foreground shrink-0 w-20 text-right">{label}:</span>
+      <span className={cn(multiline ? 'whitespace-pre-line' : 'truncate')}>{value}</span>
+    </div>
+  );
+}
+
+function DetailCode({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <div className="space-y-0.5">
+      <span className="text-muted-foreground">{label}:</span>
+      <pre className="overflow-x-auto rounded bg-muted/50 p-1.5 font-mono text-[10px] leading-relaxed max-h-40 overflow-y-auto">
+        {value}
+      </pre>
+    </div>
+  );
+}
+
+function formatResult(result: any): string {
+  if (typeof result === 'string') return result;
+  if (Array.isArray(result)) {
+    return result.map((r: any) => {
+      if (typeof r === 'string') return r;
+      if (r?.type === 'text' && r?.text) return r.text;
+      return JSON.stringify(r);
+    }).join('\n');
+  }
+  return JSON.stringify(result, null, 2);
+}
+
+function relPath(fp: string | undefined, cwd: string | undefined): string {
+  if (!fp) return '';
+  if (cwd && fp.startsWith(cwd)) {
+    const rel = fp.slice(cwd.length);
+    return rel.startsWith('/') ? rel.slice(1) : rel;
+  }
+  return fp;
+}
+
+// ── Thread event (for conversation view) ──────────────────
 
 function ThreadEvent({ event, isCurrentEvent }: { event: ParsedEvent; isCurrentEvent: boolean }) {
   const icon = getEventIcon(event.subtype, event.toolName);

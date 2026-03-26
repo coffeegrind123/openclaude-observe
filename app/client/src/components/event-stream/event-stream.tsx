@@ -48,9 +48,9 @@ export function EventStream() {
         toolUseMap.set(e.toolUseId, result.length);
         result.push({ ...e }); // copy so we can mutate status
       } else if (e.subtype === 'PostToolUse' && e.toolUseId && toolUseMap.has(e.toolUseId)) {
-        // Merge into the existing PreToolUse row
+        // Merge: keep PreToolUse row but update status and attach PostToolUse payload
         const idx = toolUseMap.get(e.toolUseId)!;
-        result[idx] = { ...result[idx], status: 'completed' };
+        result[idx] = { ...result[idx], status: 'completed', _postPayload: e.payload } as any;
       } else {
         result.push(e);
       }

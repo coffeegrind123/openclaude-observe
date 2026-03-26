@@ -57,7 +57,7 @@ export function EventRow({ event, allEvents, agentMap, showAgentLabel }: EventRo
 
   // Friendly display labels for subtypes
   const LABEL_MAP: Record<string, string> = {
-    UserPromptSubmit: 'UserPrompt',
+    UserPromptSubmit: 'Prompt',
     stop_hook_summary: 'Stop',
   };
   const rawLabel = isTool ? 'Tool' : (event.subtype || event.type);
