@@ -8,7 +8,7 @@ export function createStore(): EventStore {
 
   switch (adapter) {
     case 'sqlite': {
-      const dbPath = process.env.DB_PATH || 'observe.db'
+      const dbPath = process.env.DB_PATH || '../../data/observe.db'
       return new SqliteAdapter(dbPath)
     }
     default:
