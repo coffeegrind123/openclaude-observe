@@ -92,7 +92,7 @@ export function upsertProject(id: string, name: string): void {
       `
     INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)
     ON CONFLICT(id) DO NOTHING
-  `
+  `,
     )
     .run(id, name, Date.now())
 }
@@ -102,7 +102,7 @@ export function upsertSession(
   projectId: string,
   slug: string | null,
   metadata: Record<string, unknown> | null,
-  timestamp: number
+  timestamp: number,
 ): void {
   getDb()
     .prepare(
@@ -112,7 +112,7 @@ export function upsertSession(
     ON CONFLICT(id) DO UPDATE SET
       slug = COALESCE(excluded.slug, sessions.slug),
       metadata = COALESCE(excluded.metadata, sessions.metadata)
-  `
+  `,
     )
     .run(id, projectId, slug, timestamp, metadata ? JSON.stringify(metadata) : null)
 }
@@ -123,7 +123,7 @@ export function upsertAgent(
   parentAgentId: string | null,
   slug: string | null,
   name: string | null,
-  timestamp: number
+  timestamp: number,
 ): void {
   getDb()
     .prepare(
@@ -133,7 +133,7 @@ export function upsertAgent(
     ON CONFLICT(id) DO UPDATE SET
       slug = COALESCE(excluded.slug, agents.slug),
       name = COALESCE(excluded.name, agents.name)
-  `
+  `,
     )
     .run(id, sessionId, parentAgentId, slug, name, timestamp)
 }
@@ -143,7 +143,7 @@ export function updateAgentStatus(id: string, status: string): void {
     .prepare(
       `
     UPDATE agents SET status = ?, stopped_at = ? WHERE id = ?
-  `
+  `,
     )
     .run(status, status === 'stopped' ? Date.now() : null, id)
 }
@@ -153,7 +153,7 @@ export function updateSessionStatus(id: string, status: string): void {
     .prepare(
       `
     UPDATE sessions SET status = ?, stopped_at = ? WHERE id = ?
-  `
+  `,
     )
     .run(status, status === 'stopped' ? Date.now() : null, id)
 }
@@ -168,16 +168,27 @@ export function insertEvent(
   timestamp: number,
   payload: Record<string, unknown>,
   toolUseId?: string | null,
-  status?: string
+  status?: string,
 ): number {
   const result = getDb()
     .prepare(
       `
     INSERT INTO events (agent_id, session_id, type, subtype, tool_name, summary, timestamp, payload, tool_use_id, status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `
+  `,
     )
-    .run(agentId, sessionId, type, subtype, toolName, summary, timestamp, JSON.stringify(payload), toolUseId || null, status || 'pending')
+    .run(
+      agentId,
+      sessionId,
+      type,
+      subtype,
+      toolName,
+      summary,
+      timestamp,
+      JSON.stringify(payload),
+      toolUseId || null,
+      status || 'pending',
+    )
 
   return result.lastInsertRowid as number
 }
@@ -196,7 +207,7 @@ export function getProjects(): Array<{
     LEFT JOIN sessions s ON s.project_id = p.id
     GROUP BY p.id
     ORDER BY p.created_at DESC
-  `
+  `,
     )
     .all() as any[]
 }
@@ -214,7 +225,7 @@ export function getSessionsForProject(projectId: string): Array<any> {
     WHERE s.project_id = ?
     GROUP BY s.id
     ORDER BY s.started_at DESC
-  `
+  `,
     )
     .all(projectId) as any[]
 }
@@ -230,7 +241,7 @@ export function getAgentsForSession(sessionId: string): Array<any> {
     WHERE a.session_id = ?
     GROUP BY a.id
     ORDER BY a.started_at ASC
-  `
+  `,
     )
     .all(sessionId) as any[]
 }
@@ -244,7 +255,7 @@ export function getEventsForSession(
     search?: string
     limit?: number
     offset?: number
-  }
+  },
 ): Array<any> {
   let sql = 'SELECT * FROM events WHERE session_id = ?'
   const params: any[] = [sessionId]
@@ -292,7 +303,7 @@ export function getEventsForAgent(agentId: string): Array<any> {
     .prepare(
       `
     SELECT * FROM events WHERE agent_id = ? ORDER BY timestamp ASC
-  `
+  `,
     )
     .all(agentId) as any[]
 }
@@ -309,7 +320,7 @@ export function getSessionById(sessionId: string): any {
     LEFT JOIN events e ON e.session_id = s.id
     WHERE s.id = ?
     GROUP BY s.id
-  `
+  `,
     )
     .get(sessionId)
 }
@@ -317,43 +328,59 @@ export function getSessionById(sessionId: string): any {
 // Get the conversation thread for an event: events between the preceding
 // UserPromptSubmit and the next UserPromptSubmit/Stop (inclusive).
 export function getThreadForEvent(eventId: number): Array<any> {
-  const event = getDb().prepare('SELECT * FROM events WHERE id = ?').get(eventId) as any;
-  if (!event) return [];
+  const event = getDb().prepare('SELECT * FROM events WHERE id = ?').get(eventId) as any
+  if (!event) return []
 
-  const sessionId = event.session_id;
+  const sessionId = event.session_id
 
   // Find the preceding UserPromptSubmit (or start of session)
-  const prevPrompt = getDb().prepare(`
+  const prevPrompt = getDb()
+    .prepare(
+      `
     SELECT timestamp FROM events
     WHERE session_id = ? AND subtype = 'UserPromptSubmit' AND timestamp <= ?
     ORDER BY timestamp DESC LIMIT 1
-  `).get(sessionId, event.timestamp) as any;
+  `,
+    )
+    .get(sessionId, event.timestamp) as any
 
-  const startTs = prevPrompt ? prevPrompt.timestamp : 0;
+  const startTs = prevPrompt ? prevPrompt.timestamp : 0
 
   // Find the next UserPromptSubmit after this event's prompt (to bound the thread)
-  const nextPrompt = getDb().prepare(`
+  const nextPrompt = getDb()
+    .prepare(
+      `
     SELECT timestamp FROM events
     WHERE session_id = ? AND subtype = 'UserPromptSubmit' AND timestamp > ?
     ORDER BY timestamp ASC LIMIT 1
-  `).get(sessionId, startTs) as any;
+  `,
+    )
+    .get(sessionId, startTs) as any
 
-  const endTs = nextPrompt ? nextPrompt.timestamp : Infinity;
+  const endTs = nextPrompt ? nextPrompt.timestamp : Infinity
 
   // Get all events in the thread window
   if (endTs === Infinity) {
-    return getDb().prepare(`
+    return getDb()
+      .prepare(
+        `
       SELECT * FROM events
       WHERE session_id = ? AND timestamp >= ?
       ORDER BY timestamp ASC
-    `).all(sessionId, startTs) as any[];
+    `,
+      )
+      .all(sessionId, startTs) as any[]
   }
 
-  return getDb().prepare(`
+  return getDb()
+    .prepare(
+      `
     SELECT * FROM events
     WHERE session_id = ? AND timestamp >= ? AND timestamp < ?
     ORDER BY timestamp ASC
-  `).all(sessionId, startTs, endTs) as any[];
+  `,
+    )
+    .all(sessionId, startTs, endTs) as any[]
 }
 
 export function clearAllData(): void {

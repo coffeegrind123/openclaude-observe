@@ -1,35 +1,33 @@
-import { useProjects } from '@/hooks/use-projects';
-import { useSessions } from '@/hooks/use-sessions';
-import { useUIStore } from '@/stores/ui-store';
-import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronRight, Folder } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useProjects } from '@/hooks/use-projects'
+import { useSessions } from '@/hooks/use-sessions'
+import { useUIStore } from '@/stores/ui-store'
+import { cn } from '@/lib/utils'
+import { ChevronDown, ChevronRight, Folder } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface ProjectListProps {
-  collapsed: boolean;
+  collapsed: boolean
 }
 
 function formatRelativeTime(ts: number): string {
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  const diff = Date.now() - ts
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
 }
 
 export function ProjectList({ collapsed }: ProjectListProps) {
-  const { data: projects } = useProjects();
-  const { selectedProjectId, setSelectedProjectId } = useUIStore();
+  const { data: projects } = useProjects()
+  const { selectedProjectId, setSelectedProjectId } = useUIStore()
 
   if (!projects?.length) {
     return (
-      <div className="text-xs text-muted-foreground p-2">
-        {collapsed ? '' : 'No projects yet'}
-      </div>
-    );
+      <div className="text-xs text-muted-foreground p-2">{collapsed ? '' : 'No projects yet'}</div>
+    )
   }
 
   return (
@@ -41,7 +39,7 @@ export function ProjectList({ collapsed }: ProjectListProps) {
           </div>
         )}
         {projects.map((project) => {
-          const isSelected = selectedProjectId === project.id;
+          const isSelected = selectedProjectId === project.id
 
           if (collapsed) {
             return (
@@ -52,7 +50,7 @@ export function ProjectList({ collapsed }: ProjectListProps) {
                       'flex h-8 w-8 mx-auto items-center justify-center rounded-md text-xs',
                       isSelected
                         ? 'bg-primary/10 text-primary border border-primary/30'
-                        : 'text-muted-foreground hover:bg-accent'
+                        : 'text-muted-foreground hover:bg-accent',
                     )}
                     onClick={() => setSelectedProjectId(isSelected ? null : project.id)}
                   >
@@ -61,7 +59,7 @@ export function ProjectList({ collapsed }: ProjectListProps) {
                 </TooltipTrigger>
                 <TooltipContent side="right">{project.name}</TooltipContent>
               </Tooltip>
-            );
+            )
           }
 
           return (
@@ -69,11 +67,15 @@ export function ProjectList({ collapsed }: ProjectListProps) {
               <button
                 className={cn(
                   'flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm transition-colors',
-                  isSelected ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-accent'
+                  isSelected ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-accent',
                 )}
                 onClick={() => setSelectedProjectId(isSelected ? null : project.id)}
               >
-                {isSelected ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                {isSelected ? (
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                )}
                 <Folder className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{project.name}</span>
                 {project.sessionCount != null && (
@@ -84,32 +86,32 @@ export function ProjectList({ collapsed }: ProjectListProps) {
               </button>
               {isSelected && <SessionList projectId={project.id} />}
             </div>
-          );
+          )
         })}
       </div>
     </TooltipProvider>
-  );
+  )
 }
 
 function shortenCwd(cwd: string): string {
   // Replace /Users/<name> or /home/<name> with ~
-  return cwd.replace(/^\/(?:Users|home)\/[^/]+/, '~');
+  return cwd.replace(/^\/(?:Users|home)\/[^/]+/, '~')
 }
 
 function SessionList({ projectId }: { projectId: string }) {
-  const { data: sessions } = useSessions(projectId);
-  const { selectedSessionId, setSelectedSessionId } = useUIStore();
+  const { data: sessions } = useSessions(projectId)
+  const { selectedSessionId, setSelectedSessionId } = useUIStore()
 
   if (!sessions?.length) {
-    return <div className="text-xs text-muted-foreground pl-6 py-1">No sessions</div>;
+    return <div className="text-xs text-muted-foreground pl-6 py-1">No sessions</div>
   }
 
   return (
     <div className="ml-4 mt-1 space-y-0.5">
       {sessions.map((session) => {
-        const isSelected = selectedSessionId === session.id;
-        const label = session.slug || session.id.slice(0, 8);
-        const cwd = typeof session.metadata?.cwd === 'string' ? session.metadata.cwd : null;
+        const isSelected = selectedSessionId === session.id
+        const label = session.slug || session.id.slice(0, 8)
+        const cwd = typeof session.metadata?.cwd === 'string' ? session.metadata.cwd : null
 
         return (
           <div key={session.id}>
@@ -118,14 +120,14 @@ function SessionList({ projectId }: { projectId: string }) {
                 'flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-xs transition-colors',
                 isSelected
                   ? 'bg-accent text-accent-foreground'
-                  : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                  : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
               )}
               onClick={() => setSelectedSessionId(isSelected ? null : session.id)}
             >
               <span
                 className={cn(
                   'h-2 w-2 shrink-0 rounded-full',
-                  session.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/40'
+                  session.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/40',
                 )}
               />
               <span className="truncate">{label}</span>
@@ -144,8 +146,8 @@ function SessionList({ projectId }: { projectId: string }) {
               </div>
             )}
           </div>
-        );
+        )
       })}
     </div>
-  );
+  )
 }

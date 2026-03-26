@@ -121,7 +121,9 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
           const innerMsg = nestedMsg.message as Record<string, unknown>
           const content = innerMsg.content
           if (Array.isArray(content)) {
-            const toolUse = content.find((c: any) => c.type === 'tool_use') as Record<string, unknown> | undefined
+            const toolUse = content.find((c: any) => c.type === 'tool_use') as
+              | Record<string, unknown>
+              | undefined
             if (toolUse) {
               toolName = (toolUse.name as string) || null
             }
@@ -133,7 +135,9 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
     if (type === 'assistant' && message) {
       const content = message.content
       if (Array.isArray(content)) {
-        const toolUse = content.find((c: any) => c.type === 'tool_use') as Record<string, unknown> | undefined
+        const toolUse = content.find((c: any) => c.type === 'tool_use') as
+          | Record<string, unknown>
+          | undefined
         if (toolUse) {
           toolName = (toolUse.name as string) || null
           if (toolName === 'Agent') {
@@ -150,13 +154,32 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
   }
 
   const metadata: Record<string, unknown> = {}
-  for (const key of ['version', 'gitBranch', 'cwd', 'entrypoint', 'permissionMode', 'userType', 'permission_mode']) {
+  for (const key of [
+    'version',
+    'gitBranch',
+    'cwd',
+    'entrypoint',
+    'permissionMode',
+    'userType',
+    'permission_mode',
+  ]) {
     if (raw[key] !== undefined) metadata[key] = raw[key]
   }
 
   return {
-    projectName, sessionId, slug, type, subtype, toolName, toolUseId,
-    timestamp, ownerAgentId, subAgentId, subAgentName, metadata, raw,
+    projectName,
+    sessionId,
+    slug,
+    type,
+    subtype,
+    toolName,
+    toolUseId,
+    timestamp,
+    ownerAgentId,
+    subAgentId,
+    subAgentName,
+    metadata,
+    raw,
   }
 }
 

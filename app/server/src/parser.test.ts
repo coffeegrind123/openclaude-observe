@@ -1,5 +1,5 @@
-import { test, expect } from 'bun:test';
-import { parseRawEvent } from './parser';
+import { test, expect } from 'bun:test'
+import { parseRawEvent } from './parser'
 
 test('parses user prompt event', () => {
   const raw = {
@@ -16,19 +16,19 @@ test('parses user prompt event', () => {
     gitBranch: 'main',
     cwd: '/Users/joe/project',
     entrypoint: 'cli',
-  };
+  }
 
-  const result = parseRawEvent(raw);
-  expect(result.projectName).toBe('my-project');
-  expect(result.sessionId).toBe('sess-123');
-  expect(result.slug).toBe('twinkly-dragon');
-  expect(result.type).toBe('user');
-  expect(result.subtype).toBeNull();
-  expect(result.toolName).toBeNull();
-  expect(result.summary).toBe('"hello world"');
-  expect(result.timestamp).toBeGreaterThan(0);
-  expect(result.metadata.version).toBe('2.1.83');
-});
+  const result = parseRawEvent(raw)
+  expect(result.projectName).toBe('my-project')
+  expect(result.sessionId).toBe('sess-123')
+  expect(result.slug).toBe('twinkly-dragon')
+  expect(result.type).toBe('user')
+  expect(result.subtype).toBeNull()
+  expect(result.toolName).toBeNull()
+  expect(result.summary).toBe('"hello world"')
+  expect(result.timestamp).toBeGreaterThan(0)
+  expect(result.metadata.version).toBe('2.1.83')
+})
 
 test('parses assistant tool_use event', () => {
   const raw = {
@@ -48,14 +48,14 @@ test('parses assistant tool_use event', () => {
         },
       ],
     },
-  };
+  }
 
-  const result = parseRawEvent(raw);
-  expect(result.type).toBe('assistant');
-  expect(result.toolName).toBe('Agent');
-  expect(result.summary).toContain('Agent');
-  expect(result.summary).toContain('List current directory');
-});
+  const result = parseRawEvent(raw)
+  expect(result.type).toBe('assistant')
+  expect(result.toolName).toBe('Agent')
+  expect(result.summary).toContain('Agent')
+  expect(result.summary).toContain('List current directory')
+})
 
 test('parses progress/hook_progress event with subtype', () => {
   const raw = {
@@ -68,13 +68,13 @@ test('parses progress/hook_progress event with subtype', () => {
       hookName: 'PreToolUse:Agent',
     },
     timestamp: '2026-03-25T22:24:25.482Z',
-  };
+  }
 
-  const result = parseRawEvent(raw);
-  expect(result.type).toBe('progress');
-  expect(result.subtype).toBe('PreToolUse');
-  expect(result.toolName).toBe('Agent');
-});
+  const result = parseRawEvent(raw)
+  expect(result.type).toBe('progress')
+  expect(result.subtype).toBe('PreToolUse')
+  expect(result.toolName).toBe('Agent')
+})
 
 test('parses agent_progress event and extracts agentId', () => {
   const raw = {
@@ -89,13 +89,13 @@ test('parses agent_progress event and extracts agentId', () => {
     toolUseID: 'agent_msg_123',
     parentToolUseID: 'toolu_abc',
     timestamp: '2026-03-25T22:24:25.614Z',
-  };
+  }
 
-  const result = parseRawEvent(raw);
-  expect(result.subAgentId).toBe('ad03a9f1e00dc2c79');
-  expect(result.type).toBe('progress');
-  expect(result.subtype).toBe('agent_progress');
-});
+  const result = parseRawEvent(raw)
+  expect(result.subAgentId).toBe('ad03a9f1e00dc2c79')
+  expect(result.type).toBe('progress')
+  expect(result.subtype).toBe('agent_progress')
+})
 
 test('parses tool_result user event', () => {
   const raw = {
@@ -110,15 +110,21 @@ test('parses tool_result user event', () => {
     },
     message: {
       role: 'user',
-      content: [{ tool_use_id: 'toolu_abc', type: 'tool_result', content: [{ type: 'text', text: 'result' }] }],
+      content: [
+        {
+          tool_use_id: 'toolu_abc',
+          type: 'tool_result',
+          content: [{ type: 'text', text: 'result' }],
+        },
+      ],
     },
     timestamp: '2026-03-25T22:24:31.920Z',
-  };
+  }
 
-  const result = parseRawEvent(raw);
-  expect(result.subAgentId).toBe('ad03a9f1e00dc2c79');
-  expect(result.summary).toContain('completed');
-});
+  const result = parseRawEvent(raw)
+  expect(result.subAgentId).toBe('ad03a9f1e00dc2c79')
+  expect(result.summary).toContain('completed')
+})
 
 test('parses Stop system event', () => {
   const raw = {
@@ -128,12 +134,12 @@ test('parses Stop system event', () => {
     subtype: 'stop_hook_summary',
     timestamp: '2026-03-25T22:24:39.468Z',
     hookCount: 2,
-  };
+  }
 
-  const result = parseRawEvent(raw);
-  expect(result.type).toBe('system');
-  expect(result.subtype).toBe('stop_hook_summary');
-});
+  const result = parseRawEvent(raw)
+  expect(result.type).toBe('system')
+  expect(result.subtype).toBe('stop_hook_summary')
+})
 
 test('extracts hook_event subtype from progress events', () => {
   const raw = {
@@ -146,8 +152,8 @@ test('extracts hook_event subtype from progress events', () => {
       hookName: 'Stop',
     },
     timestamp: '2026-03-25T22:24:39.271Z',
-  };
+  }
 
-  const result = parseRawEvent(raw);
-  expect(result.subtype).toBe('Stop');
-});
+  const result = parseRawEvent(raw)
+  expect(result.subtype).toBe('Stop')
+})

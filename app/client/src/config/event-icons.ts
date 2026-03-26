@@ -22,14 +22,14 @@ export const eventIcons: Record<string, string> = {
   stop_hook_summary: '🔴',
   user: '👤',
   assistant: '🤖',
-};
+}
 
 export function getEventIcon(subtype: string | null, toolName?: string | null): string {
   if (subtype && toolName && eventIcons[`${subtype}:${toolName}`]) {
-    return eventIcons[`${subtype}:${toolName}`];
+    return eventIcons[`${subtype}:${toolName}`]
   }
   if (subtype && eventIcons[subtype]) {
-    return eventIcons[subtype];
+    return eventIcons[subtype]
   }
-  return '📌';
+  return '📌'
 }

@@ -1,90 +1,85 @@
-import { useMemo } from 'react';
-import { useEvents } from '@/hooks/use-events';
-import { useAgents } from '@/hooks/use-agents';
-import { useUIStore } from '@/stores/ui-store';
-import { useSessions } from '@/hooks/use-sessions';
-import { EventRow } from './event-row';
-import type { Agent, ParsedEvent } from '@/types';
+import { useMemo } from 'react'
+import { useEvents } from '@/hooks/use-events'
+import { useAgents } from '@/hooks/use-agents'
+import { useUIStore } from '@/stores/ui-store'
+import { useSessions } from '@/hooks/use-sessions'
+import { EventRow } from './event-row'
+import type { Agent, ParsedEvent } from '@/types'
 
 export function EventStream() {
-  const {
-    selectedProjectId,
-    selectedSessionId,
-    selectedAgentIds,
-    activeEventTypes,
-    searchQuery,
-  } = useUIStore();
+  const { selectedProjectId, selectedSessionId, selectedAgentIds, activeEventTypes, searchQuery } =
+    useUIStore()
 
-  const { data: sessions } = useSessions(selectedProjectId);
-  const effectiveSessionId = selectedSessionId || sessions?.[0]?.id || null;
+  const { data: sessions } = useSessions(selectedProjectId)
+  const effectiveSessionId = selectedSessionId || sessions?.[0]?.id || null
 
   const { data: events } = useEvents(effectiveSessionId, {
     agentIds: selectedAgentIds.length > 0 ? selectedAgentIds : undefined,
     search: searchQuery || undefined,
-  });
+  })
 
-  const { data: agents } = useAgents(effectiveSessionId);
+  const { data: agents } = useAgents(effectiveSessionId)
 
   const agentMap = useMemo(() => {
-    const map = new Map<string, Agent>();
+    const map = new Map<string, Agent>()
     function collect(list: Agent[] | undefined) {
       list?.forEach((a) => {
-        map.set(a.id, a);
-        if (a.children) collect(a.children);
-      });
+        map.set(a.id, a)
+        if (a.children) collect(a.children)
+      })
     }
-    collect(agents);
-    return map;
-  }, [agents]);
+    collect(agents)
+    return map
+  }, [agents])
 
   // Dedupe tool events: merge PostToolUse into matching PreToolUse by toolUseId
   const deduped = useMemo(() => {
-    if (!events) return [];
-    const result: ParsedEvent[] = [];
-    const toolUseMap = new Map<string, number>(); // toolUseId -> index in result
+    if (!events) return []
+    const result: ParsedEvent[] = []
+    const toolUseMap = new Map<string, number>() // toolUseId -> index in result
 
     for (const e of events) {
       if (e.subtype === 'PreToolUse' && e.toolUseId) {
-        toolUseMap.set(e.toolUseId, result.length);
-        result.push({ ...e }); // copy so we can mutate status
+        toolUseMap.set(e.toolUseId, result.length)
+        result.push({ ...e }) // copy so we can mutate status
       } else if (e.subtype === 'PostToolUse' && e.toolUseId && toolUseMap.has(e.toolUseId)) {
         // Merge: keep PreToolUse row but update status and attach PostToolUse payload
-        const idx = toolUseMap.get(e.toolUseId)!;
-        result[idx] = { ...result[idx], status: 'completed', _postPayload: e.payload } as any;
+        const idx = toolUseMap.get(e.toolUseId)!
+        result[idx] = { ...result[idx], status: 'completed', _postPayload: e.payload } as any
       } else {
-        result.push(e);
+        result.push(e)
       }
     }
-    return result;
-  }, [events]);
+    return result
+  }, [events])
 
   const filteredEvents = useMemo(() => {
-    if (activeEventTypes.length === 0) return deduped;
+    if (activeEventTypes.length === 0) return deduped
     return deduped.filter((e) => {
       for (const filter of activeEventTypes) {
         // tool:ToolName — match by tool name (including MCP prefix match)
         if (filter.startsWith('tool:')) {
-          const toolFilter = filter.slice(5);
-          if (e.toolName === toolFilter) return true;
+          const toolFilter = filter.slice(5)
+          if (e.toolName === toolFilter) return true
           // MCP prefix match: tool:mcp__chrome-devtools matches mcp__chrome-devtools__click
-          if (e.toolName?.startsWith(toolFilter + '__')) return true;
-          continue;
+          if (e.toolName?.startsWith(toolFilter + '__')) return true
+          continue
         }
         // Match by type or subtype
-        if (e.type === filter || e.subtype === filter) return true;
+        if (e.type === filter || e.subtype === filter) return true
       }
-      return false;
-    });
-  }, [deduped, activeEventTypes]);
+      return false
+    })
+  }, [deduped, activeEventTypes])
 
-  const showAgentLabel = agentMap.size > 1;
+  const showAgentLabel = agentMap.size > 1
 
   if (!effectiveSessionId) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
         Select a project to view events
       </div>
-    );
+    )
   }
 
   if (!filteredEvents.length) {
@@ -92,7 +87,7 @@ export function EventStream() {
       <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
         No events yet
       </div>
-    );
+    )
   }
 
   return (
@@ -109,5 +104,5 @@ export function EventStream() {
         ))}
       </div>
     </div>
-  );
+  )
 }

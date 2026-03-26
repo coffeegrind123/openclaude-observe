@@ -95,7 +95,7 @@ const server = Bun.serve({
           parsed.projectName,
           parsed.slug,
           Object.keys(parsed.metadata).length > 0 ? parsed.metadata : null,
-          parsed.timestamp
+          parsed.timestamp,
         )
 
         const rootAgentId = ensureRootAgent(parsed.sessionId, parsed.slug, parsed.timestamp)
@@ -109,7 +109,7 @@ const server = Bun.serve({
             rootAgentId,
             null,
             null,
-            parsed.timestamp
+            parsed.timestamp,
           )
         }
         let agentId = parsed.ownerAgentId || rootAgentId
@@ -122,7 +122,7 @@ const server = Bun.serve({
             rootAgentId,
             null,
             parsed.subAgentName,
-            parsed.timestamp
+            parsed.timestamp,
           )
 
           // agent_progress events belong to the subagent
@@ -157,7 +157,7 @@ const server = Bun.serve({
           parsed.timestamp,
           parsed.raw,
           parsed.toolUseId,
-          status
+          status,
         )
 
         const event: ParsedEvent = {
@@ -191,7 +191,11 @@ const server = Bun.serve({
         }
 
         // On SubagentStop, request subagent slug from its transcript
-        if (parsed.subtype === 'SubagentStop' && parsed.subAgentId && parsed.raw.agent_transcript_path) {
+        if (
+          parsed.subtype === 'SubagentStop' &&
+          parsed.subAgentId &&
+          parsed.raw.agent_transcript_path
+        ) {
           requests.push({
             cmd: 'getSessionSlug',
             args: { transcript_path: parsed.raw.agent_transcript_path },
@@ -211,12 +215,14 @@ const server = Bun.serve({
     if (metadataMatch && req.method === 'POST') {
       try {
         const sessionId = decodeURIComponent(metadataMatch[1])
-        const data = await req.json() as Record<string, unknown>
+        const data = (await req.json()) as Record<string, unknown>
 
         if (data.slug && typeof data.slug === 'string') {
           // Update session and root agent slug
           getDb().prepare('UPDATE sessions SET slug = ? WHERE id = ?').run(data.slug, sessionId)
-          getDb().prepare('UPDATE agents SET slug = ? WHERE id = ? AND parent_agent_id IS NULL').run(data.slug, sessionId)
+          getDb()
+            .prepare('UPDATE agents SET slug = ? WHERE id = ? AND parent_agent_id IS NULL')
+            .run(data.slug, sessionId)
 
           if (LOG_LEVEL === 'debug') {
             console.log(`[METADATA] Session ${sessionId.slice(0, 8)} slug: ${data.slug}`)
@@ -237,7 +243,7 @@ const server = Bun.serve({
     if (agentMetadataMatch && req.method === 'POST') {
       try {
         const agentIdParam = decodeURIComponent(agentMetadataMatch[1])
-        const data = await req.json() as Record<string, unknown>
+        const data = (await req.json()) as Record<string, unknown>
 
         if (data.slug && typeof data.slug === 'string') {
           getDb().prepare('UPDATE agents SET slug = ? WHERE id = ?').run(data.slug, agentIdParam)

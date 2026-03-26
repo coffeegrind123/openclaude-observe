@@ -39,7 +39,7 @@ export function AgentLane({ agentName, events, isSubagent, color }: AgentLanePro
 
   const visibleEvents = useMemo(
     () => events.filter((e) => now - e.timestamp < rangeMs),
-    [events, now, rangeMs]
+    [events, now, rangeMs],
   )
 
   // Tick marks based on time range

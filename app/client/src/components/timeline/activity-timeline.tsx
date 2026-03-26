@@ -1,13 +1,13 @@
-import { useCallback, useRef, useMemo } from 'react';
-import { useUIStore } from '@/stores/ui-store';
-import { useEvents } from '@/hooks/use-events';
-import { useAgents } from '@/hooks/use-agents';
-import { useSessions } from '@/hooks/use-sessions';
-import { getAgentDisplayName } from '@/lib/agent-utils';
-import { AgentLane } from './agent-lane';
-import { Button } from '@/components/ui/button';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import type { Agent, ParsedEvent } from '@/types';
+import { useCallback, useRef, useMemo } from 'react'
+import { useUIStore } from '@/stores/ui-store'
+import { useEvents } from '@/hooks/use-events'
+import { useAgents } from '@/hooks/use-agents'
+import { useSessions } from '@/hooks/use-sessions'
+import { getAgentDisplayName } from '@/lib/agent-utils'
+import { AgentLane } from './agent-lane'
+import { Button } from '@/components/ui/button'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import type { Agent, ParsedEvent } from '@/types'
 
 const AGENT_COLORS = [
   'text-green-400',
@@ -18,10 +18,10 @@ const AGENT_COLORS = [
   'text-rose-400',
   'text-emerald-400',
   'text-orange-400',
-];
+]
 
 function getColor(idx: number): string {
-  return AGENT_COLORS[idx % AGENT_COLORS.length];
+  return AGENT_COLORS[idx % AGENT_COLORS.length]
 }
 
 export function ActivityTimeline() {
@@ -33,68 +33,68 @@ export function ActivityTimeline() {
     timeRange,
     setTimelineHeight,
     setTimeRange,
-  } = useUIStore();
+  } = useUIStore()
 
-  const { data: sessions } = useSessions(selectedProjectId);
-  const effectiveSessionId = selectedSessionId || sessions?.[0]?.id || null;
-  const { data: agents } = useAgents(effectiveSessionId);
-  const { data: events } = useEvents(effectiveSessionId);
-  const resizing = useRef(false);
-  const startY = useRef(0);
-  const startHeight = useRef(0);
+  const { data: sessions } = useSessions(selectedProjectId)
+  const effectiveSessionId = selectedSessionId || sessions?.[0]?.id || null
+  const { data: agents } = useAgents(effectiveSessionId)
+  const { data: events } = useEvents(effectiveSessionId)
+  const resizing = useRef(false)
+  const startY = useRef(0)
+  const startHeight = useRef(0)
 
   const flatAgents = useMemo(() => {
-    const result: { agent: Agent; isSubagent: boolean }[] = [];
+    const result: { agent: Agent; isSubagent: boolean }[] = []
     function collect(list: Agent[] | undefined, isSub: boolean) {
       list?.forEach((a) => {
         if (selectedAgentIds.length === 0 || selectedAgentIds.includes(a.id)) {
-          result.push({ agent: a, isSubagent: isSub });
+          result.push({ agent: a, isSubagent: isSub })
         }
-        if (a.children) collect(a.children, true);
-      });
+        if (a.children) collect(a.children, true)
+      })
     }
-    collect(agents, false);
-    return result;
-  }, [agents, selectedAgentIds]);
+    collect(agents, false)
+    return result
+  }, [agents, selectedAgentIds])
 
   const eventsByAgent = useMemo(() => {
-    const map = new Map<string, ParsedEvent[]>();
+    const map = new Map<string, ParsedEvent[]>()
     events?.forEach((e) => {
-      const list = map.get(e.agentId) || [];
-      list.push(e);
-      map.set(e.agentId, list);
-    });
-    return map;
-  }, [events]);
+      const list = map.get(e.agentId) || []
+      list.push(e)
+      map.set(e.agentId, list)
+    })
+    return map
+  }, [events])
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      e.preventDefault();
-      resizing.current = true;
-      startY.current = e.clientY;
-      startHeight.current = timelineHeight;
+      e.preventDefault()
+      resizing.current = true
+      startY.current = e.clientY
+      startHeight.current = timelineHeight
 
       const onMouseMove = (e: MouseEvent) => {
-        if (!resizing.current) return;
-        const delta = e.clientY - startY.current;
-        setTimelineHeight(Math.max(60, Math.min(400, startHeight.current + delta)));
-      };
+        if (!resizing.current) return
+        const delta = e.clientY - startY.current
+        setTimelineHeight(Math.max(60, Math.min(400, startHeight.current + delta)))
+      }
 
       const onMouseUp = () => {
-        resizing.current = false;
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-      };
+        resizing.current = false
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+      }
 
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
     },
-    [timelineHeight, setTimelineHeight]
-  );
+    [timelineHeight, setTimelineHeight],
+  )
 
-  if (!effectiveSessionId) return null;
+  if (!effectiveSessionId) return null
 
-  const ranges: Array<'1m' | '5m' | '10m'> = ['1m', '5m', '10m'];
+  const ranges: Array<'1m' | '5m' | '10m'> = ['1m', '5m', '10m']
 
   return (
     <TooltipProvider>
@@ -139,5 +139,5 @@ export function ActivityTimeline() {
         />
       </div>
     </TooltipProvider>
-  );
+  )
 }

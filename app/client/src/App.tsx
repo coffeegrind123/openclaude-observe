@@ -1,10 +1,10 @@
-import { ThemeProvider } from '@/components/theme-provider';
-import { Sidebar } from '@/components/sidebar/sidebar';
-import { MainPanel } from '@/components/main-panel/main-panel';
-import { useWebSocket } from '@/hooks/use-websocket';
+import { ThemeProvider } from '@/components/theme-provider'
+import { Sidebar } from '@/components/sidebar/sidebar'
+import { MainPanel } from '@/components/main-panel/main-panel'
+import { useWebSocket } from '@/hooks/use-websocket'
 
 export function App() {
-  const { connected } = useWebSocket();
+  const { connected } = useWebSocket()
 
   return (
     <ThemeProvider>
@@ -13,5 +13,5 @@ export function App() {
         <MainPanel />
       </div>
     </ThemeProvider>
-  );
+  )
 }
