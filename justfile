@@ -1,98 +1,107 @@
-# Multi-Agent Observability System
+# Claude Observe - Multi-Agent Observability
 # Usage: just <recipe>
 
 set dotenv-load
 set quiet
 
-server_port := env("SERVER_PORT", "4001")
-client_port := env("CLIENT_PORT", "5174")
+port := env("SERVER_PORT", "4001")
 project_root := justfile_directory()
 
 # List available recipes
 default:
     @just --list
 
-# ─── System ──────────────────────────────────────────────
+# ─── Docker ─────────────────────────────────────────────
 
-# Start the system (detached)
+# Start production containers (detached)
 start:
-    cd {{project_root}} && ./scripts/start-system.sh
+    @mkdir -p {{project_root}}/data
+    @docker compose down >/dev/null 2>&1 || true
+    docker compose up -d --build
+    @echo ""
+    @echo "Waiting for server..."
+    @for i in $(seq 1 15); do \
+      if curl -sf http://localhost:{{port}}/api/projects >/dev/null 2>&1; then \
+        echo "Ready: http://localhost:{{port}}"; \
+        break; \
+      fi; \
+      sleep 1; \
+    done
 
-# Stop the system and reset the database
+# Stop containers
 stop:
-    cd {{project_root}} && docker compose down
+    docker compose down
 
-# Restart the system
+# Restart containers
 restart: stop start
 
 # View container logs (follow)
 logs:
-    cd {{project_root}} && docker compose logs -f
+    docker compose logs -f
 
 # ─── Development ─────────────────────────────────────────
 
-# Start dev containers (source bind-mounted for hot reload)
+# Start server + client in dev mode (hot reload)
 dev:
-    cd {{project_root}} && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+    @echo "Starting dev server + client..."
+    @echo "Server: http://localhost:{{port}}"
+    @echo "Client: http://localhost:5174 (Vite dev)"
     @echo ""
-    @echo "Dashboard: http://localhost:{{client_port}}"
-    @echo "Server:    http://localhost:{{server_port}}"
-    @echo "Logs:      just logs"
+    cd {{project_root}}/app/server && npx tsx watch src/index.ts &
+    cd {{project_root}}/app/client && npm run dev &
+    @wait
 
-# Start server locally (no Docker)
+# Start only the server (dev mode with hot reload)
 dev-server:
-    cd {{project_root}}/app/server && bun src/index.ts
+    cd {{project_root}}/app/server && npx tsx watch src/index.ts
 
-# Start client locally (no Docker)
+# Start only the client (Vite dev server)
 dev-client:
     cd {{project_root}}/app/client && npm run dev
 
-# Start both locally (no Docker)
-dev-local:
-    @echo "Starting server and client..."
-    cd {{project_root}}/app/server && bun src/index.ts &
-    cd {{project_root}}/app/client && npm run dev &
-    @echo "Server: http://localhost:{{server_port}}"
-    @echo "Client: http://localhost:{{client_port}}"
-    wait
+# Build the client for production
+build:
+    cd {{project_root}}/app/client && npm run build
 
 # Run server tests
 test:
-    cd {{project_root}}/app/server && bun test
+    cd {{project_root}}/app/server && npx vitest run
+
+# Run server tests in watch mode
+test-watch:
+    cd {{project_root}}/app/server && npx vitest
 
 # ─── Database ────────────────────────────────────────────
 
-# Clear SQLite WAL files
-db-clean-wal:
-    rm -f {{project_root}}/data/events.db-wal {{project_root}}/data/events.db-shm
-    rm -f {{project_root}}/app/server/app2.db-wal {{project_root}}/app/server/app2.db-shm
-    @echo "WAL files removed"
-
-# Delete the entire events database
+# Delete the events database
 db-reset:
-    rm -f {{project_root}}/data/events.db {{project_root}}/data/events.db-wal {{project_root}}/data/events.db-shm
-    rm -f {{project_root}}/app/server/app2.db {{project_root}}/app/server/app2.db-wal {{project_root}}/app/server/app2.db-shm
+    rm -f {{project_root}}/data/observe.db {{project_root}}/data/observe.db-wal {{project_root}}/data/observe.db-shm
+    rm -f {{project_root}}/app/server/observe.db {{project_root}}/app/server/observe.db-wal {{project_root}}/app/server/observe.db-shm
     @echo "Database reset"
 
-# ─── Testing ─────────────────────────────────────────────
+# ─── Utilities ───────────────────────────────────────────
 
 # Send a test event to the server
 test-event:
-    echo '{"sessionId":"test-1234","slug":"test-dragon","type":"user","message":{"role":"user","content":"hello world"},"timestamp":"2026-01-01T00:00:00Z"}' \
-      | CLAUDE_OBSERVE_PROJECT_NAME=test-project CLAUDE_OBSERVE_PORT={{server_port}} node {{project_root}}/app/hooks/send_event.mjs
+    @echo '{"session_id":"test-1234","hook_event_name":"SessionStart","cwd":"/tmp","source":"new"}' \
+      | CLAUDE_OBSERVE_PROJECT_NAME=test-project CLAUDE_OBSERVE_PORT={{port}} node {{project_root}}/app/hooks/send_event.mjs
     @echo "Event sent"
 
-# Check server and client health
+# Check server health
 health:
-    @curl -sf http://localhost:{{server_port}}/api/projects > /dev/null 2>&1 \
-      && echo "Server: UP (port {{server_port}})" \
-      || echo "Server: DOWN (port {{server_port}})"
-    @curl -sf http://localhost:{{client_port}} > /dev/null 2>&1 \
-      && echo "Client: UP (port {{client_port}})" \
-      || echo "Client: DOWN (port {{client_port}})"
+    @curl -sf http://localhost:{{port}}/api/projects > /dev/null 2>&1 \
+      && echo "Server: UP (http://localhost:{{port}})" \
+      || echo "Server: DOWN (port {{port}})"
 
-# ─── Open ────────────────────────────────────────────────
-
-# Open the client dashboard in browser
+# Open the dashboard in browser
 open:
-    open http://localhost:{{client_port}}
+    open http://localhost:{{port}}
+
+# Format all source files
+fmt:
+    npx prettier --write "app/**/*.{ts,tsx,mjs}"
+
+# Install all dependencies
+install:
+    cd {{project_root}}/app/server && npm install
+    cd {{project_root}}/app/client && npm install
