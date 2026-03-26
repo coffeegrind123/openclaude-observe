@@ -105,7 +105,7 @@ function getStopSummary(event: ParsedEvent, allEvents?: ParsedEvent[]): string {
   if (prompt) parts.push(`Prompt: "${prompt}"`);
   if (lastMsg) parts.push(`Final: "${lastMsg}"`);
 
-  if (parts.length > 0) return parts.join(' → ');
+  if (parts.length > 0) return parts.join('\n');
   return 'Session stopped';
 }
 

@@ -111,7 +111,10 @@ export function EventRow({ event, allEvents, agentMap, showAgentLabel }: EventRo
               {event.toolName}
             </span>
           )}
-          <span className="text-xs text-muted-foreground truncate flex-1">
+          <span className={cn(
+            'text-xs text-muted-foreground flex-1 min-w-0',
+            displaySummary.includes('\n') ? 'whitespace-pre-line line-clamp-2' : 'truncate'
+          )}>
             {displaySummary}
           </span>
           <span className="text-[10px] text-muted-foreground/60 tabular-nums shrink-0">
