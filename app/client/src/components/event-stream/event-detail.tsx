@@ -50,7 +50,7 @@ export function EventDetail({ event }: EventDetailProps) {
   return (
     <div className="px-4 py-2 bg-muted/30 border-t border-border text-xs space-y-2">
       {/* Per-event-type rich detail */}
-      <ToolDetail event={event} payload={p} postPayload={postPayload} cwd={cwd} />
+      <ToolDetail event={event} payload={p} postPayload={postPayload} cwd={cwd} thread={thread} />
 
       {/* Conversation thread for UserPrompt / Stop / SubagentStop events */}
       {showThread && (
@@ -107,11 +107,13 @@ function ToolDetail({
   payload,
   postPayload,
   cwd,
+  thread,
 }: {
   event: ParsedEvent
   payload: Record<string, any>
   postPayload?: Record<string, any>
   cwd?: string
+  thread?: ParsedEvent[] | null
 }) {
   const ti = payload.tool_input || {}
   const toolResponse = postPayload?.tool_response
@@ -127,11 +129,34 @@ function ToolDetail({
   }
 
   if (event.subtype === 'Stop') {
+    // Find the prompt from the thread (if loaded) or payload
+    const promptFromThread = thread?.find((e) => e.subtype === 'UserPromptSubmit')
+    const promptText = promptFromThread
+      ? (promptFromThread.payload as any)?.prompt ||
+        (promptFromThread.payload as any)?.message?.content
+      : null
+
     return (
       <div className="space-y-1.5">
+        {promptText && <DetailCode label="Prompt" value={promptText} />}
         {payload.last_assistant_message && (
           <DetailCode label="Final" value={stripMarkdown(payload.last_assistant_message)} />
         )}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'SubagentStop') {
+    // Find the Agent tool call from the thread to get the command/prompt
+    const agentCall = thread?.find((e) => e.subtype === 'PreToolUse' && e.toolName === 'Agent')
+    const agentInput = agentCall ? (agentCall.payload as any)?.tool_input : null
+    const agentResult = payload.last_assistant_message
+
+    return (
+      <div className="space-y-1.5">
+        {agentInput?.description && <DetailRow label="Task" value={agentInput.description} />}
+        {agentInput?.prompt && <DetailCode label="Prompt" value={agentInput.prompt} />}
+        {agentResult && <DetailCode label="Result" value={stripMarkdown(agentResult)} />}
       </div>
     )
   }
@@ -307,6 +332,28 @@ function relPath(fp: string | undefined, cwd: string | undefined): string {
     return rel.startsWith('/') ? rel.slice(1) : rel
   }
   return fp
+}
+
+// ── Thread deduplication ──────────────────────────────────
+
+// Merge PostToolUse into PreToolUse by toolUseId (same as main stream).
+// Only show PreToolUse if there's no matching PostToolUse (failed tool).
+function dedupeThread(events: ParsedEvent[]): ParsedEvent[] {
+  const result: ParsedEvent[] = []
+  const toolUseMap = new Map<string, number>()
+
+  for (const e of events) {
+    if (e.subtype === 'PreToolUse' && e.toolUseId) {
+      toolUseMap.set(e.toolUseId, result.length)
+      result.push({ ...e })
+    } else if (e.subtype === 'PostToolUse' && e.toolUseId && toolUseMap.has(e.toolUseId)) {
+      const idx = toolUseMap.get(e.toolUseId)!
+      result[idx] = { ...result[idx], status: 'completed' }
+    } else {
+      result.push(e)
+    }
+  }
+  return result
 }
 
 // ── Thread event (for conversation view) ──────────────────
