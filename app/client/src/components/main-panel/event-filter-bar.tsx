@@ -4,7 +4,7 @@ import { useEvents } from '@/hooks/use-events'
 import { cn } from '@/lib/utils'
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { STATIC_FILTERS, getDynamicFilterNames } from '@/config/filters'
+import { STATIC_FILTERS, getDynamicFilterNames, getFiltersWithMatches } from '@/config/filters'
 
 export function EventFilterBar() {
   const {
@@ -21,13 +21,15 @@ export function EventFilterBar() {
 
   const { data: events } = useEvents(selectedSessionId)
 
-  const dynamicNames = useMemo(() => {
+  const agentFilteredEvents = useMemo(() => {
     if (!events) return []
-    const filtered = selectedAgentIds.length > 0
+    return selectedAgentIds.length > 0
       ? events.filter((e) => selectedAgentIds.includes(e.agentId))
       : events
-    return getDynamicFilterNames(filtered)
   }, [events, selectedAgentIds])
+
+  const dynamicNames = useMemo(() => getDynamicFilterNames(agentFilteredEvents), [agentFilteredEvents])
+  const filtersWithMatches = useMemo(() => getFiltersWithMatches(agentFilteredEvents), [agentFilteredEvents])
 
   const hasAnyFilter = activeStaticFilters.length > 0 || activeToolFilters.length > 0
 
@@ -36,6 +38,7 @@ export function EventFilterBar() {
       {/* Row 1: Static filters + search */}
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-xs text-muted-foreground">Filters:</span>
           <button
             className={cn(
               'rounded-full px-2.5 py-0.5 text-xs transition-colors',
@@ -47,20 +50,26 @@ export function EventFilterBar() {
           >
             All
           </button>
-          {STATIC_FILTERS.map((filter) => (
-            <button
-              key={filter.label}
-              className={cn(
-                'rounded-full px-2.5 py-0.5 text-xs transition-colors',
-                activeStaticFilters.includes(filter.label)
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-secondary text-secondary-foreground hover:bg-accent',
-              )}
-              onClick={() => toggleStaticFilter(filter.label)}
-            >
-              {filter.label}
-            </button>
-          ))}
+          {STATIC_FILTERS.map((filter) => {
+            const isActive = activeStaticFilters.includes(filter.label)
+            const hasMatches = filtersWithMatches.has(filter.label)
+            return (
+              <button
+                key={filter.label}
+                className={cn(
+                  'rounded-full px-2.5 py-0.5 text-xs transition-colors border',
+                  isActive
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : hasMatches
+                      ? 'bg-secondary text-secondary-foreground border-primary/40 hover:bg-accent'
+                      : 'bg-secondary text-muted-foreground/50 border-transparent hover:bg-accent hover:text-secondary-foreground',
+                )}
+                onClick={() => toggleStaticFilter(filter.label)}
+              >
+                {filter.label}
+              </button>
+            )
+          })}
         </div>
 
         <div className="flex-1" />

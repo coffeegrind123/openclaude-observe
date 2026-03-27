@@ -100,6 +100,9 @@ export function ScopeBar() {
                 )}
               />
               {getAgentDisplayName(agent)}
+              {agent.eventCount != null && (
+                <span className="text-[10px] text-muted-foreground/60">{agent.eventCount}</span>
+              )}
               {selectedAgentIds.length > 0 && (
                 <button
                   className="ml-0.5 hover:text-foreground"

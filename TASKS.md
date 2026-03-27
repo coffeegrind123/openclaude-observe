@@ -2,13 +2,20 @@
 
 ## QUEUED TASKS
 
-Client UI:
-
-- [x] Add summary & expanded summary for all 25 hooks in the UI
-- [x] Update the dynamic filter bar (row 2) when an agent is selected - e.g. make the filter bar show only the relevant dynamic filters for the selected agent(s)
+- [x] Add a "Filters:" label before the static filters - similar to "Agents:" and "Activity:" labels
+- [x] Add Tool "Agent" to the Agents static filter - i.e. shows SubAgentStart/Stop and Tool -> Agent so we can see how the agent was started
+- [x] If possible (easy?) add a highlight border color to static filters that match any of the events
+  - i.e. gives visual indication that the filter has matching events
+- [x] Show number of matching events in small font in agent chip
+- [ ] Add a Logs button to top right
+  - Opens a large modal and shows all of the raw events + payloads for the session
+  - No deduping or modification of events - just the raw data
+  - Logs rows should show the hook type + tool_name (if present) and then the raw payload json
 
 ## COMPLETED TASKS
 
+- [x] Add summary & expanded summary for all 25 hooks in the UI
+- [x] Update the dynamic filter bar (row 2) when an agent is selected
 - [x] Create a new file that maps hook names to filters, e.g.:
 - [x] In the filter bar, split the filters into two rows (static & dynamic)
 - [x] Add support for selecting multiple filters

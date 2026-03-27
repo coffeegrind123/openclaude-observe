@@ -21,7 +21,11 @@ export const STATIC_FILTERS: StaticFilter[] = [
       !!e.toolName &&
       !e.toolName.startsWith('mcp__'),
   },
-  { label: 'Agents', subtypes: ['SubagentStart', 'SubagentStop'] },
+  {
+    label: 'Agents',
+    subtypes: ['SubagentStart', 'SubagentStop'],
+    match: (e) => e.toolName === 'Agent',
+  },
   { label: 'Tasks', subtypes: ['TaskCreated', 'TaskCompleted'] },
   { label: 'Sessions', subtypes: ['SessionStart', 'SessionEnd'] },
   {
@@ -72,6 +76,19 @@ export function getDynamicFilterNames(events: ParsedEvent[]): string[] {
     }
   }
   return Array.from(names).sort()
+}
+
+// Returns the set of static filter labels that have at least one matching event.
+export function getFiltersWithMatches(events: ParsedEvent[]): Set<string> {
+  const matched = new Set<string>()
+  for (const filter of STATIC_FILTERS) {
+    if (matched.has(filter.label)) continue
+    for (const e of events) {
+      if (filter.match && filter.match(e)) { matched.add(filter.label); break }
+      if (filter.subtypes && e.subtype && filter.subtypes.includes(e.subtype)) { matched.add(filter.label); break }
+    }
+  }
+  return matched
 }
 
 // Check if an event matches any of the given active filters.
