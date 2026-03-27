@@ -2,6 +2,7 @@ import { useAgents } from '@/hooks/use-agents'
 import { useUIStore } from '@/stores/ui-store'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { LogsModal } from './logs-modal'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -123,6 +124,7 @@ export function ScopeBar() {
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
+        <LogsModal />
         <Button
           variant={autoFollow ? 'default' : 'ghost'}
           size="icon"
