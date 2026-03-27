@@ -160,6 +160,142 @@ function ToolDetail({
       <div className="space-y-1">
         <DetailRow label="Source" value={payload.source || 'new'} />
         {cwd && <DetailRow label="Working dir" value={cwd} />}
+        {payload.version && <DetailRow label="Version" value={payload.version} />}
+        {payload.permissionMode && <DetailRow label="Permissions" value={payload.permissionMode} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'SessionEnd') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Status" value="Session ended" />
+      </div>
+    )
+  }
+
+  if (event.subtype === 'StopFailure') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Error type" value={payload.error_type || 'unknown'} />
+        {payload.error_message && <DetailCode label="Error" value={payload.error_message} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'SubagentStart') {
+    return (
+      <div className="space-y-1">
+        {payload.agent_name && <DetailRow label="Agent" value={payload.agent_name} />}
+        {payload.description && <DetailRow label="Task" value={payload.description} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'PostToolUseFailure') {
+    const ti = payload.tool_input || {}
+    return (
+      <div className="space-y-1.5">
+        {event.toolName && <DetailRow label="Tool" value={event.toolName} />}
+        {ti.command && <DetailCode label="Command" value={ti.command} />}
+        {payload.error && <DetailCode label="Error" value={typeof payload.error === 'string' ? payload.error : JSON.stringify(payload.error, null, 2)} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'PermissionRequest') {
+    return (
+      <div className="space-y-1">
+        {payload.tool_name && <DetailRow label="Tool" value={payload.tool_name as string} />}
+        {payload.description && <DetailRow label="Description" value={payload.description as string} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'TaskCreated' || event.subtype === 'TaskCompleted') {
+    return (
+      <div className="space-y-1">
+        {payload.description && <DetailRow label="Task" value={payload.description as string} />}
+        {payload.task_description && <DetailRow label="Task" value={payload.task_description as string} />}
+        {payload.status && <DetailRow label="Status" value={payload.status as string} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'TeammateIdle') {
+    return (
+      <div className="space-y-1">
+        {payload.teammate_name && <DetailRow label="Teammate" value={payload.teammate_name as string} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'InstructionsLoaded') {
+    return (
+      <div className="space-y-1">
+        {payload.file_path && <DetailRow label="File" value={relPath(payload.file_path as string, cwd)} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'ConfigChange') {
+    return (
+      <div className="space-y-1">
+        {payload.file_path && <DetailRow label="File" value={relPath(payload.file_path as string, cwd)} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'CwdChanged') {
+    return (
+      <div className="space-y-1">
+        {payload.old_cwd && <DetailRow label="From" value={payload.old_cwd as string} />}
+        <DetailRow label="To" value={(payload.new_cwd || payload.cwd || '') as string} />
+      </div>
+    )
+  }
+
+  if (event.subtype === 'FileChanged') {
+    return (
+      <div className="space-y-1">
+        {payload.file_path && <DetailRow label="File" value={relPath(payload.file_path as string, cwd)} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'PreCompact' || event.subtype === 'PostCompact') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Status" value={event.subtype === 'PreCompact' ? 'Compacting...' : 'Compacted'} />
+        {payload.tokens_before && <DetailRow label="Tokens before" value={String(payload.tokens_before)} />}
+        {payload.tokens_after && <DetailRow label="Tokens after" value={String(payload.tokens_after)} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'Elicitation') {
+    return (
+      <div className="space-y-1.5">
+        {payload.message && <DetailCode label="Question" value={payload.message as string} />}
+        {payload.question && <DetailCode label="Question" value={payload.question as string} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'ElicitationResult') {
+    return (
+      <div className="space-y-1.5">
+        {payload.response && <DetailCode label="Response" value={payload.response as string} />}
+        {payload.result && <DetailCode label="Result" value={payload.result as string} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'WorktreeCreate' || event.subtype === 'WorktreeRemove') {
+    return (
+      <div className="space-y-1">
+        {payload.path && <DetailRow label="Path" value={payload.path as string} />}
+        {payload.branch && <DetailRow label="Branch" value={payload.branch as string} />}
       </div>
     )
   }
@@ -356,9 +492,13 @@ const LABEL_MAP: Record<string, string> = {
   UserPromptSubmit: 'Prompt',
   PreToolUse: 'Tool',
   PostToolUse: 'Tool',
+  PostToolUseFailure: 'ToolErr',
   stop_hook_summary: 'Stop',
+  StopFailure: 'Error',
+  SubagentStart: 'SubStart',
   SubagentStop: 'SubStop',
   SessionStart: 'Session',
+  SessionEnd: 'Session',
 }
 
 function ThreadEvent({ event, isCurrentEvent }: { event: ParsedEvent; isCurrentEvent: boolean }) {

@@ -54,15 +54,33 @@ export function EventRow({ event, allEvents, agentMap, showAgentLabel }: EventRo
   const colorClass = getAgentColor(event.agentId)
   const icon = getEventIcon(event.subtype, event.toolName)
 
-  const isTool = event.subtype === 'PreToolUse' || event.subtype === 'PostToolUse'
+  const isTool = event.subtype === 'PreToolUse' || event.subtype === 'PostToolUse' || event.subtype === 'PostToolUseFailure'
   const isCompleted = event.status === 'completed'
 
   // Friendly display labels for subtypes
   const LABEL_MAP: Record<string, string> = {
     UserPromptSubmit: 'Prompt',
     stop_hook_summary: 'Stop',
+    StopFailure: 'Error',
+    SubagentStart: 'SubStart',
     SubagentStop: 'SubStop',
     SessionStart: 'Session',
+    SessionEnd: 'Session',
+    PostToolUseFailure: 'ToolErr',
+    PermissionRequest: 'Permit',
+    TaskCreated: 'Task',
+    TaskCompleted: 'Task',
+    TeammateIdle: 'Team',
+    InstructionsLoaded: 'Config',
+    ConfigChange: 'Config',
+    CwdChanged: 'CwdChg',
+    FileChanged: 'FileChg',
+    PreCompact: 'Compact',
+    PostCompact: 'Compact',
+    Elicitation: 'MCP',
+    ElicitationResult: 'MCP',
+    WorktreeCreate: 'Worktree',
+    WorktreeRemove: 'Worktree',
   }
   const rawLabel = isTool ? 'Tool' : event.subtype || event.type
   const displayLabel = LABEL_MAP[rawLabel] || rawLabel

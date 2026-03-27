@@ -4,7 +4,8 @@
 
 Client UI:
 
-- [ ] Add summary & expanded summary for all 25 hooks in the UI
+- [x] Add summary & expanded summary for all 25 hooks in the UI
+- [ ] Update the dynamic filter bar (row 2) when an agent is selected - e.g. make the filter bar show only the relevant dynamic filters for the selected agent(s)
 
 ## COMPLETED TASKS
 
