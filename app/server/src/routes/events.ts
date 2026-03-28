@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import type { EventStore } from '../storage/types'
 import type { ParsedEvent } from '../types'
 import { parseRawEvent } from '../parser'
+import { resolveProject } from '../services/project-resolver'
 
 type Env = {
   Variables: {
@@ -52,30 +53,56 @@ router.post('/events', async (c) => {
   const broadcast = c.get('broadcast')
 
   try {
-    const raw = await c.req.json()
+    const body = await c.req.json()
+
+    // Support both envelope format and legacy flat format
+    let hookPayload: Record<string, unknown>
+    let meta: { env?: Record<string, string> } = {}
+
+    if (body.hook_payload) {
+      hookPayload = body.hook_payload as Record<string, unknown>
+      meta = (body.meta as typeof meta) || {}
+    } else {
+      hookPayload = body
+    }
 
     if (LOG_LEVEL === 'debug' || LOG_LEVEL === 'trace') {
-      const logKeys = Object.keys(raw).join(', ')
-      const payload = JSON.stringify(raw)
+      const logKeys = Object.keys(hookPayload).join(', ')
+      const payload = JSON.stringify(hookPayload)
       const logPayload =
         LOG_LEVEL === 'trace'
           ? `Payload: ${payload}`
           : `Keys: ${logKeys} \nPayload: ${payload.slice(0, 500)}`
 
-      if (raw.hook_event_name) {
-        const toolInfo = raw.tool_name ? `tool:${raw.tool_name} tool_use_id:${raw.tool_use_id}` : ''
-        console.log(`[HOOK:${raw.hook_event_name}] ${toolInfo} \n${logPayload}\n---`)
+      if (hookPayload.hook_event_name) {
+        const toolInfo = hookPayload.tool_name ? `tool:${hookPayload.tool_name} tool_use_id:${hookPayload.tool_use_id}` : ''
+        console.log(`[HOOK:${hookPayload.hook_event_name}] ${toolInfo} \n${logPayload}\n---`)
       } else {
         console.log('[EVENT]', logPayload)
       }
     }
 
-    const parsed = parseRawEvent(raw)
+    const parsed = parseRawEvent(hookPayload)
 
-    await store.upsertProject(parsed.projectName, parsed.projectName)
+    // Resolve project - only on first event for this session
+    const existingSession = await store.getSessionById(parsed.sessionId)
+    let effectiveProjectId: number
+
+    if (existingSession) {
+      effectiveProjectId = existingSession.project_id
+    } else {
+      const projectSlugOverride = meta.env?.CLAUDE_OBSERVE_PROJECT_SLUG || null
+      const resolved = await resolveProject(store, {
+        sessionId: parsed.sessionId,
+        slug: projectSlugOverride,
+        transcriptPath: parsed.transcriptPath,
+      })
+      effectiveProjectId = resolved.projectId
+    }
+
     await store.upsertSession(
       parsed.sessionId,
-      parsed.projectName,
+      effectiveProjectId,
       parsed.slug,
       Object.keys(parsed.metadata).length > 0 ? parsed.metadata : null,
       parsed.timestamp,
@@ -102,7 +129,7 @@ router.post('/events', async (c) => {
         pendingAgentNameQueue.set(parsed.sessionId, queue)
       }
       // Stash agent type from tool_input.subagent_type
-      const agentType = (raw as any)?.tool_input?.subagent_type
+      const agentType = (hookPayload as any)?.tool_input?.subagent_type
       if (agentType && parsed.toolUseId) {
         pendingAgentTypes.set(parsed.toolUseId, agentType)
       }
@@ -294,7 +321,20 @@ router.post('/events', async (c) => {
       })
     }
 
-    return c.json({ ok: true, id: eventId, ...(requests.length > 0 ? { requests } : {}) }, 201)
+    const responseBody: Record<string, unknown> = {
+      status: 'OK',
+      meta: {
+        event_id: eventId,
+        session_id: parsed.sessionId,
+        project_id: effectiveProjectId,
+      },
+    }
+
+    if (requests.length > 0) {
+      responseBody.requests = requests
+    }
+
+    return c.json(responseBody, 201)
   } catch (error) {
     console.error('Error processing event:', error)
     return c.json({ error: 'Invalid request' }, 400)

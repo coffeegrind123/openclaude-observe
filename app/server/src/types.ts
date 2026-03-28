@@ -44,9 +44,10 @@ export interface EventRow {
 // === API Response Types ===
 
 export interface Project {
-  id: string
+  id: number
+  slug: string
   name: string
-  displayName?: string | null
+  transcriptPath?: string | null
   createdAt: number
   sessionCount?: number
   activeAgentCount?: number
@@ -54,7 +55,7 @@ export interface Project {
 
 export interface Session {
   id: string
-  projectId: string
+  projectId: number
   slug: string | null
   status: string
   startedAt: number
@@ -97,3 +98,4 @@ export type WSMessage =
   | { type: 'event'; data: ParsedEvent }
   | { type: 'agent_update'; data: { id: string; status: string; sessionId: string } }
   | { type: 'session_update'; data: Session }
+  | { type: 'project_update'; data: { id: number; name: string } }
