@@ -6,14 +6,16 @@ import { getEventIcon } from '@/config/event-icons'
 import { getEventSummary } from '@/lib/event-summary'
 import { cn } from '@/lib/utils'
 import type { ParsedEvent } from '@/types'
+import type { SpawnInfo } from './event-row'
 
 interface EventDetailProps {
   event: ParsedEvent
+  spawnInfo?: SpawnInfo
 }
 
 const THREAD_SUBTYPES = ['UserPromptSubmit', 'Stop', 'SubagentStart', 'SubagentStop']
 
-export function EventDetail({ event }: EventDetailProps) {
+export function EventDetail({ event, spawnInfo }: EventDetailProps) {
   const [copied, setCopied] = useState(false)
   const [showPayload, setShowPayload] = useState(false)
   const [thread, setThread] = useState<ParsedEvent[] | null>(null)
@@ -45,7 +47,7 @@ export function EventDetail({ event }: EventDetailProps) {
   return (
     <div className="px-4 py-2 bg-muted/30 border-t border-border text-xs space-y-2">
       {/* Per-event-type rich detail */}
-      <ToolDetail event={event} payload={p} cwd={cwd} thread={thread} />
+      <ToolDetail event={event} payload={p} cwd={cwd} thread={thread} spawnInfo={spawnInfo} />
 
       {/* Conversation thread for UserPrompt / Stop / SubagentStop events */}
       {showThread && (
@@ -104,11 +106,13 @@ function ToolDetail({
   payload,
   cwd,
   thread,
+  spawnInfo,
 }: {
   event: ParsedEvent
   payload: Record<string, any>
   cwd?: string
   thread?: ParsedEvent[] | null
+  spawnInfo?: SpawnInfo
 }) {
   const ti = payload.tool_input || {}
   const result = extractResult(payload.tool_response)
@@ -141,15 +145,11 @@ function ToolDetail({
   }
 
   if (event.subtype === 'SubagentStop') {
-    // Find the Agent tool call from the thread to get the command/prompt
-    const agentCall = thread?.find((e) => e.subtype === 'PreToolUse' && e.toolName === 'Agent')
-    const agentInput = agentCall ? (agentCall.payload as any)?.tool_input : null
     const agentResult = payload.last_assistant_message
-
     return (
       <div className="space-y-1.5">
-        {agentInput?.description && <DetailRow label="Task" value={agentInput.description} />}
-        {agentInput?.prompt && <DetailCode label="Prompt" value={agentInput.prompt} />}
+        {spawnInfo?.description && <DetailRow label="Task" value={spawnInfo.description} />}
+        {spawnInfo?.prompt && <DetailCode label="Prompt" value={spawnInfo.prompt} />}
         {agentResult && <DetailCode label="Result" value={stripMarkdown(agentResult)} />}
       </div>
     )
@@ -184,15 +184,13 @@ function ToolDetail({
   }
 
   if (event.subtype === 'SubagentStart') {
-    const agentCall = thread?.find((e) => e.subtype === 'PreToolUse' && e.toolName === 'Agent')
-    const agentInput = agentCall ? (agentCall.payload as any)?.tool_input : null
     return (
       <div className="space-y-1.5">
         {payload.agent_name && <DetailRow label="Agent" value={payload.agent_name} />}
-        {(agentInput?.description || payload.description) && (
-          <DetailRow label="Task" value={agentInput?.description || payload.description} />
+        {(spawnInfo?.description || payload.description) && (
+          <DetailRow label="Task" value={spawnInfo?.description || payload.description} />
         )}
-        {agentInput?.prompt && <DetailCode label="Prompt" value={agentInput.prompt} />}
+        {spawnInfo?.prompt && <DetailCode label="Prompt" value={spawnInfo.prompt} />}
       </div>
     )
   }

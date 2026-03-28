@@ -7,10 +7,16 @@ import { useUIStore } from '@/stores/ui-store'
 import { EventDetail } from './event-detail'
 import type { ParsedEvent, Agent } from '@/types'
 
+export interface SpawnInfo {
+  description?: string
+  prompt?: string
+}
+
 interface EventRowProps {
   event: ParsedEvent
   agentMap: Map<string, Agent>
   showAgentLabel: boolean
+  spawnInfo?: SpawnInfo
 }
 
 function formatTime(ts: number): string {
@@ -67,7 +73,7 @@ const LABEL_MAP: Record<string, string> = {
   WorktreeRemove: 'Worktree',
 }
 
-export const EventRow = memo(function EventRow({ event, agentMap, showAgentLabel }: EventRowProps) {
+export const EventRow = memo(function EventRow({ event, agentMap, showAgentLabel, spawnInfo }: EventRowProps) {
   const { expandedEventIds, toggleExpandedEvent, scrollToEventId, setScrollToEventId } =
     useUIStore()
   const isExpanded = expandedEventIds.has(event.id)
@@ -157,7 +163,7 @@ export const EventRow = memo(function EventRow({ event, agentMap, showAgentLabel
         </div>
       </button>
 
-      {isExpanded && <EventDetail event={event} />}
+      {isExpanded && <EventDetail event={event} spawnInfo={spawnInfo} />}
     </div>
   )
 })

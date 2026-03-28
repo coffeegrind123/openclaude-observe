@@ -42,11 +42,17 @@ export function EventStream() {
   }, [agents])
 
   // Dedupe tool events + build spawn map (subagentId → toolUseId of Agent call)
-  const { deduped, spawnToolUseIds } = useMemo(() => {
-    if (!events) return { deduped: [], spawnToolUseIds: new Map<string, string>() }
+  // spawnInfo: subagentId → { description, prompt } from the Tool:Agent call
+  const { deduped, spawnToolUseIds, spawnInfo } = useMemo(() => {
+    if (!events) return {
+      deduped: [],
+      spawnToolUseIds: new Map<string, string>(),
+      spawnInfo: new Map<string, { description?: string; prompt?: string }>(),
+    }
     const result: ParsedEvent[] = []
     const toolUseMap = new Map<string, number>() // toolUseId -> index in result
     const spawns = new Map<string, string>() // subagentId -> toolUseId
+    const info = new Map<string, { description?: string; prompt?: string }>()
 
     for (const e of events) {
       if (e.subtype === 'PreToolUse' && e.toolUseId) {
@@ -54,17 +60,27 @@ export function EventStream() {
         result.push({ ...e }) // copy so we can mutate status
       } else if (e.subtype === 'PostToolUse' && e.toolUseId && toolUseMap.has(e.toolUseId)) {
         const idx = toolUseMap.get(e.toolUseId)!
+        const prePayload = result[idx].payload as any
         result[idx] = { ...result[idx], status: 'completed', payload: e.payload }
-        // Track Agent tool spawns: payload.tool_response.agentId → toolUseId
+        // Track Agent tool spawns + capture prompt from PreToolUse input
         if (e.toolName === 'Agent') {
           const agentId = (e.payload as any)?.tool_response?.agentId
-          if (agentId) spawns.set(agentId, e.toolUseId)
+          if (agentId) {
+            spawns.set(agentId, e.toolUseId)
+            const toolInput = prePayload?.tool_input
+            if (toolInput) {
+              info.set(agentId, {
+                description: toolInput.description,
+                prompt: toolInput.prompt,
+              })
+            }
+          }
         }
       } else {
         result.push(e)
       }
     }
-    return { deduped: result, spawnToolUseIds: spawns }
+    return { deduped: result, spawnToolUseIds: spawns, spawnInfo: info }
   }, [events])
 
   // Apply all client-side filters: agent selection + static/tool filters
@@ -153,6 +169,7 @@ export function EventStream() {
               event={event}
               agentMap={agentMap}
               showAgentLabel={showAgentLabel}
+              spawnInfo={spawnInfo.get(event.agentId)}
             />
           ))}
           <div className="h-8" />
