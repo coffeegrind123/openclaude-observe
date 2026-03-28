@@ -3,16 +3,13 @@ import { ScopeBar } from './scope-bar'
 import { EventFilterBar } from './event-filter-bar'
 import { ActivityTimeline } from '@/components/timeline/activity-timeline'
 import { EventStream } from '@/components/event-stream/event-stream'
+import { HomePage } from './home-page'
 
 export function MainPanel() {
   const { selectedProjectId, selectedSessionId } = useUIStore()
 
   if (!selectedProjectId) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground">
-        Select a project to get started
-      </div>
-    )
+    return <HomePage />
   }
 
   if (!selectedSessionId) {

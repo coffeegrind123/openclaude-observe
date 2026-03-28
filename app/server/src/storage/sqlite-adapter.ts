@@ -412,4 +412,26 @@ export class SqliteAdapter implements EventStore {
     this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId)
     this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId)
   }
+
+  async getRecentSessions(limit: number = 20): Promise<any[]> {
+    return this.db
+      .prepare(
+        `
+      SELECT s.*,
+        p.name as project_name,
+        COUNT(DISTINCT a.id) as agent_count,
+        COUNT(DISTINCT CASE WHEN a.status = 'active' THEN a.id END) as active_agent_count,
+        COUNT(DISTINCT e.id) as event_count,
+        MAX(e.timestamp) as last_activity
+      FROM sessions s
+      JOIN projects p ON p.id = s.project_id
+      LEFT JOIN agents a ON a.session_id = s.id
+      LEFT JOIN events e ON e.session_id = s.id
+      GROUP BY s.id
+      ORDER BY COALESCE(MAX(e.timestamp), s.started_at) DESC
+      LIMIT ?
+    `,
+      )
+      .all(limit)
+  }
 }

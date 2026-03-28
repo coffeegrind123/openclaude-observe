@@ -20,6 +20,18 @@ function updateHash(projectId: string | null, sessionId: string | null) {
   }
 }
 
+interface SessionFilterState {
+  activeStaticFilters: string[]
+  activeToolFilters: string[]
+  searchQuery: string
+}
+
+const DEFAULT_FILTER_STATE: SessionFilterState = {
+  activeStaticFilters: [],
+  activeToolFilters: [],
+  searchQuery: '',
+}
+
 interface UIState {
   sidebarCollapsed: boolean
   sidebarWidth: number
@@ -38,15 +50,16 @@ interface UIState {
   activeStaticFilters: string[] // labels from STATIC_FILTERS
   activeToolFilters: string[] // tool names from dynamic filters
   searchQuery: string
+  sessionFilterStates: Map<string, SessionFilterState> // per-session filter state
   toggleStaticFilter: (label: string) => void
   toggleToolFilter: (toolName: string) => void
   clearAllFilters: () => void
   setSearchQuery: (query: string) => void
 
   timelineHeight: number
-  timeRange: '1m' | '5m' | '10m'
+  timeRange: '1m' | '5m' | '10m' | '60m'
   setTimelineHeight: (height: number) => void
-  setTimeRange: (range: '1m' | '5m' | '10m') => void
+  setTimeRange: (range: '1m' | '5m' | '10m' | '60m') => void
 
   expandedEventIds: Set<number>
   scrollToEventId: number | null
@@ -74,12 +87,54 @@ export const useUIStore = create<UIState>((set, get) => ({
   selectedSessionId: initialSessionId,
   selectedAgentIds: [],
   setSelectedProjectId: (id) => {
-    set({ selectedProjectId: id, selectedSessionId: null, selectedAgentIds: [] })
+    const state = get()
+    const nextFilterStates = new Map(state.sessionFilterStates)
+
+    // Save current session's filter state before switching projects
+    if (state.selectedSessionId) {
+      nextFilterStates.set(state.selectedSessionId, {
+        activeStaticFilters: state.activeStaticFilters,
+        activeToolFilters: state.activeToolFilters,
+        searchQuery: state.searchQuery,
+      })
+    }
+
+    set({
+      selectedProjectId: id,
+      selectedSessionId: null,
+      selectedAgentIds: [],
+      sessionFilterStates: nextFilterStates,
+      activeStaticFilters: DEFAULT_FILTER_STATE.activeStaticFilters,
+      activeToolFilters: DEFAULT_FILTER_STATE.activeToolFilters,
+      searchQuery: DEFAULT_FILTER_STATE.searchQuery,
+    })
     updateHash(id, null)
   },
   setSelectedSessionId: (id) => {
-    set({ selectedSessionId: id, selectedAgentIds: [] })
-    updateHash(get().selectedProjectId, id)
+    const state = get()
+    const nextFilterStates = new Map(state.sessionFilterStates)
+
+    // Save current session's filter state before switching
+    if (state.selectedSessionId) {
+      nextFilterStates.set(state.selectedSessionId, {
+        activeStaticFilters: state.activeStaticFilters,
+        activeToolFilters: state.activeToolFilters,
+        searchQuery: state.searchQuery,
+      })
+    }
+
+    // Restore saved filter state for the new session, or default to "All"
+    const restored = id ? nextFilterStates.get(id) ?? DEFAULT_FILTER_STATE : DEFAULT_FILTER_STATE
+
+    set({
+      selectedSessionId: id,
+      selectedAgentIds: [],
+      sessionFilterStates: nextFilterStates,
+      activeStaticFilters: restored.activeStaticFilters,
+      activeToolFilters: restored.activeToolFilters,
+      searchQuery: restored.searchQuery,
+    })
+    updateHash(state.selectedProjectId, id)
   },
   setSelectedAgentIds: (ids) => set({ selectedAgentIds: ids }),
   toggleAgentId: (id) =>
@@ -94,6 +149,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   activeStaticFilters: [],
   activeToolFilters: [],
   searchQuery: '',
+  sessionFilterStates: new Map(),
   toggleStaticFilter: (label) =>
     set((s) => ({
       activeStaticFilters: s.activeStaticFilters.includes(label)

@@ -1,21 +1,23 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Copy, Check, ChevronDown, ChevronRight } from 'lucide-react'
+import { Copy, Check, ChevronDown, ChevronRight, Loader } from 'lucide-react'
 import { api } from '@/lib/api-client'
 import { getEventIcon } from '@/config/event-icons'
 import { getEventSummary } from '@/lib/event-summary'
 import { cn } from '@/lib/utils'
-import type { ParsedEvent } from '@/types'
+import { getAgentDisplayName } from '@/lib/agent-utils'
+import type { ParsedEvent, Agent } from '@/types'
 import type { SpawnInfo } from './event-row'
 
 interface EventDetailProps {
   event: ParsedEvent
+  agentMap: Map<string, Agent>
   spawnInfo?: SpawnInfo
 }
 
 const THREAD_SUBTYPES = ['UserPromptSubmit', 'Stop', 'SubagentStart', 'SubagentStop']
 
-export function EventDetail({ event, spawnInfo }: EventDetailProps) {
+export function EventDetail({ event, agentMap, spawnInfo }: EventDetailProps) {
   const [copied, setCopied] = useState(false)
   const [showPayload, setShowPayload] = useState(false)
   const [thread, setThread] = useState<ParsedEvent[] | null>(null)
@@ -47,13 +49,13 @@ export function EventDetail({ event, spawnInfo }: EventDetailProps) {
   return (
     <div className="px-4 py-2 bg-muted/30 border-t border-border text-xs space-y-2">
       {/* Per-event-type rich detail */}
-      <ToolDetail event={event} payload={p} cwd={cwd} thread={thread} spawnInfo={spawnInfo} />
+      <ToolDetail event={event} payload={p} cwd={cwd} thread={thread} agentMap={agentMap} spawnInfo={spawnInfo} />
 
       {/* Conversation thread for UserPrompt / Stop / SubagentStop events */}
       {showThread && (
         <div>
           <div className="text-muted-foreground mb-1.5 font-medium">Conversation thread:</div>
-          {loadingThread && <div className="text-muted-foreground/60 py-2">Loading thread...</div>}
+          {loadingThread && <div className="text-muted-foreground/80 dark:text-muted-foreground/60 py-2">Loading thread...</div>}
           {thread && thread.length > 0 && (
             <div className="space-y-0.5 rounded border border-border/50 bg-muted/20 p-1.5">
               {dedupeThread(thread).map((e) => (
@@ -62,7 +64,7 @@ export function EventDetail({ event, spawnInfo }: EventDetailProps) {
             </div>
           )}
           {thread && thread.length === 0 && (
-            <div className="text-muted-foreground/60 py-1">No thread events found</div>
+            <div className="text-muted-foreground/80 dark:text-muted-foreground/60 py-1">No thread events found</div>
           )}
         </div>
       )}
@@ -106,12 +108,14 @@ function ToolDetail({
   payload,
   cwd,
   thread,
+  agentMap,
   spawnInfo,
 }: {
   event: ParsedEvent
   payload: Record<string, any>
   cwd?: string
   thread?: ParsedEvent[] | null
+  agentMap: Map<string, Agent>
   spawnInfo?: SpawnInfo
 }) {
   const ti = payload.tool_input || {}
@@ -146,8 +150,12 @@ function ToolDetail({
 
   if (event.subtype === 'SubagentStop') {
     const agentResult = payload.last_assistant_message
+    const subAgent = agentMap.get(event.agentId)
+    const assignedName = subAgent ? getAgentDisplayName(subAgent) : null
+    const rawName = payload.agent_name as string | undefined
     return (
       <div className="space-y-1.5">
+        <AgentIdentity assignedName={assignedName} rawName={rawName} agentId={event.agentId} />
         {spawnInfo?.description && <DetailRow label="Task" value={spawnInfo.description} />}
         {spawnInfo?.prompt && <DetailCode label="Prompt" value={spawnInfo.prompt} />}
         {agentResult && <DetailCode label="Result" value={stripMarkdown(agentResult)} />}
@@ -184,9 +192,12 @@ function ToolDetail({
   }
 
   if (event.subtype === 'SubagentStart') {
+    const subAgent = agentMap.get(event.agentId)
+    const assignedName = subAgent ? getAgentDisplayName(subAgent) : null
+    const rawName = payload.agent_name as string | undefined
     return (
       <div className="space-y-1.5">
-        {payload.agent_name && <DetailRow label="Agent" value={payload.agent_name} />}
+        <AgentIdentity assignedName={assignedName} rawName={rawName} agentId={event.agentId} />
         {(spawnInfo?.description || payload.description) && (
           <DetailRow label="Task" value={spawnInfo?.description || payload.description} />
         )}
@@ -360,14 +371,19 @@ function ToolDetail({
           {result && <DetailCode label="Result" value={formatResult(result)} />}
         </div>
       )
-    case 'Agent':
+    case 'Agent': {
+      const spawnedAgentId = payload.tool_response?.agentId as string | undefined
+      const spawnedAgent = spawnedAgentId ? agentMap.get(spawnedAgentId) : undefined
+      const agentAssignedName = spawnedAgent ? getAgentDisplayName(spawnedAgent) : null
+      const agentRawName = ti.name as string | undefined
       return (
         <div className="space-y-1.5">
+          <AgentIdentity assignedName={agentAssignedName} rawName={agentRawName} agentId={spawnedAgentId} />
           {ti.description && <DetailRow label="Task" value={ti.description} />}
           {ti.prompt && <DetailCode label="Prompt" value={ti.prompt} />}
-          {result && <DetailCode label="Result" value={formatResult(result)} />}
         </div>
       )
+    }
     default:
       return (
         <div className="space-y-1.5">
@@ -379,6 +395,42 @@ function ToolDetail({
 }
 
 // ── Helper components ──────────────────────────────────────
+
+function AgentIdentity({
+  assignedName,
+  rawName,
+  agentId,
+}: {
+  assignedName?: string | null
+  rawName?: string | null
+  agentId?: string | null
+}) {
+  const displayName = assignedName || rawName || null
+  const showRawName = rawName && assignedName && rawName !== assignedName
+  const showId = agentId && agentId !== displayName
+
+  return (
+    <>
+      {displayName && (
+        <div className="flex gap-2">
+          <span className="text-muted-foreground shrink-0 w-20 text-right">Agent:</span>
+          <span className="truncate">
+            {displayName}
+            {showRawName && (
+              <span className="text-muted-foreground/80 dark:text-muted-foreground/60 ml-1.5">({rawName})</span>
+            )}
+          </span>
+        </div>
+      )}
+      {showId && (
+        <div className="flex gap-2">
+          <span className="text-muted-foreground shrink-0 w-20 text-right">Agent ID:</span>
+          <span className="truncate font-mono text-muted-foreground/80 dark:text-muted-foreground/60">{agentId}</span>
+        </div>
+      )}
+    </>
+  )
+}
 
 function DetailRow({ label, value }: { label: string; value?: string }) {
   if (!value) return null
@@ -505,7 +557,7 @@ const LABEL_MAP: Record<string, string> = {
 }
 
 function ThreadEvent({ event, isCurrentEvent }: { event: ParsedEvent; isCurrentEvent: boolean }) {
-  const icon = getEventIcon(event.subtype, event.toolName)
+  const Icon = getEventIcon(event.subtype, event.toolName)
   const isTool = event.subtype === 'PreToolUse' || event.subtype === 'PostToolUse'
   const isCompleted = event.status === 'completed'
   const rawLabel = event.subtype || event.type
@@ -519,23 +571,25 @@ function ThreadEvent({ event, isCurrentEvent }: { event: ParsedEvent; isCurrentE
         isCurrentEvent ? 'bg-primary/10 font-medium' : 'text-muted-foreground',
       )}
     >
-      <span className="text-xs shrink-0">{icon}</span>
+      <span className="shrink-0 text-muted-foreground">
+        <Icon className="h-3.5 w-3.5" />
+      </span>
       <span className="w-14 shrink-0 truncate">{displayLabel}</span>
       {isTool && (
         <span
           className={cn(
-            'text-[10px] shrink-0 w-3',
-            isCompleted ? 'text-green-500' : 'text-yellow-500/70',
+            'shrink-0',
+            isCompleted ? 'text-green-600 dark:text-green-500' : 'text-yellow-600 dark:text-yellow-500/70',
           )}
         >
-          {isCompleted ? '✓' : '…'}
+          {isCompleted ? <Check className="h-3 w-3" /> : <Loader className="h-3 w-3" />}
         </span>
       )}
       {isTool && event.toolName && (
-        <span className="text-xs font-medium text-blue-400 shrink-0">{event.toolName}</span>
+        <span className="text-xs font-medium text-blue-700 dark:text-blue-400 shrink-0">{event.toolName}</span>
       )}
       <span className="truncate flex-1 text-[10px]">{summary}</span>
-      <span className="text-[9px] text-muted-foreground/50 tabular-nums shrink-0">
+      <span className="text-[9px] text-muted-foreground/70 dark:text-muted-foreground/50 tabular-nums shrink-0">
         {new Date(event.timestamp).toLocaleTimeString('en-US', {
           hour12: false,
           hour: '2-digit',

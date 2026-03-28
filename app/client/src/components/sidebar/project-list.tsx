@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useProjects } from '@/hooks/use-projects'
 import { useSessions } from '@/hooks/use-sessions'
 import { useUIStore } from '@/stores/ui-store'
@@ -5,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { ChevronDown, ChevronRight, Folder } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import type { Session } from '@/types'
 
 interface ProjectListProps {
   collapsed: boolean
@@ -18,6 +20,73 @@ function formatRelativeTime(ts: number): string {
   const hours = Math.floor(mins / 60)
   if (hours < 24) return `${hours}h ago`
   return `${Math.floor(hours / 24)}d ago`
+}
+
+function getDateGroupLabel(ts: number): string {
+  const now = new Date()
+  const date = new Date(ts)
+
+  // Start of today (midnight)
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfYesterday = new Date(startOfToday)
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1)
+
+  // Start of this week (Monday)
+  const startOfThisWeek = new Date(startOfToday)
+  const dayOfWeek = startOfToday.getDay()
+  // getDay(): 0=Sun, 1=Mon ... 6=Sat. We want Monday as start of week.
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+  startOfThisWeek.setDate(startOfThisWeek.getDate() - daysToMonday)
+
+  const startOfLastWeek = new Date(startOfThisWeek)
+  startOfLastWeek.setDate(startOfLastWeek.getDate() - 7)
+
+  if (date >= startOfToday) {
+    return 'Today'
+  }
+  if (date >= startOfYesterday) {
+    return 'Yesterday'
+  }
+  if (date >= startOfThisWeek) {
+    return 'This Week'
+  }
+  if (date >= startOfLastWeek) {
+    return 'Last Week'
+  }
+  // Older: group by month
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ]
+  return `${monthNames[date.getMonth()]} ${date.getFullYear()}`
+}
+
+interface SessionGroup {
+  label: string
+  sessions: Session[]
+}
+
+function groupSessionsByDate(sessions: Session[]): SessionGroup[] {
+  const groups: SessionGroup[] = []
+  let currentLabel: string | null = null
+  let currentGroup: Session[] = []
+
+  for (const session of sessions) {
+    const label = getDateGroupLabel(session.startedAt)
+    if (label !== currentLabel) {
+      if (currentLabel !== null && currentGroup.length > 0) {
+        groups.push({ label: currentLabel, sessions: currentGroup })
+      }
+      currentLabel = label
+      currentGroup = [session]
+    } else {
+      currentGroup.push(session)
+    }
+  }
+  if (currentLabel !== null && currentGroup.length > 0) {
+    groups.push({ label: currentLabel, sessions: currentGroup })
+  }
+  return groups
 }
 
 export function ProjectList({ collapsed }: ProjectListProps) {
@@ -102,66 +171,83 @@ function SessionList({ projectId }: { projectId: string }) {
   const { data: sessions } = useSessions(projectId)
   const { selectedSessionId, setSelectedSessionId } = useUIStore()
 
+  const groups = useMemo(() => {
+    if (!sessions?.length) return []
+    return groupSessionsByDate(sessions)
+  }, [sessions])
+
   if (!sessions?.length) {
     return <div className="text-xs text-muted-foreground pl-6 py-1">No sessions</div>
   }
 
   return (
     <div className="ml-4 mt-1 space-y-0.5">
-      {sessions.map((session) => {
-        const isSelected = selectedSessionId === session.id
-        const label = session.slug || session.id.slice(0, 8)
-        const cwd = typeof session.metadata?.cwd === 'string' ? session.metadata.cwd : null
-        const activeAgents = session.activeAgentCount ?? 0
+      {groups.map((group) => (
+        <div key={group.label}>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 dark:text-muted-foreground/60 px-2 pt-2 pb-0.5 select-none">
+            {group.label}
+          </div>
+          {group.sessions.map((session) => {
+            const isSelected = selectedSessionId === session.id
+            const label = session.slug || session.id.slice(0, 8)
+            const cwd = typeof session.metadata?.cwd === 'string' ? session.metadata.cwd : null
+            const activeAgents = session.activeAgentCount ?? 0
 
-        const tooltipLines = [cwd, activeAgents > 0 ? `${activeAgents} active agent${activeAgents !== 1 ? 's' : ''}` : null].filter(Boolean)
+            const statusLabel = session.status === 'active' ? 'Active' : 'Ended'
+            const tooltipLines = [
+              statusLabel,
+              cwd,
+              activeAgents > 0 ? `${activeAgents} active agent${activeAgents !== 1 ? 's' : ''}` : null,
+            ].filter(Boolean)
 
-        return (
-          <Tooltip key={session.id}>
-            <TooltipTrigger asChild>
-              <div>
-                <button
-                  className={cn(
-                    'flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-xs transition-colors',
-                    isSelected
-                      ? 'bg-accent text-accent-foreground'
-                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-                  )}
-                  onClick={() => setSelectedSessionId(isSelected ? null : session.id)}
-                >
-                  <span
-                    className={cn(
-                      'h-2 w-2 shrink-0 rounded-full',
-                      session.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/40',
+            return (
+              <Tooltip key={session.id}>
+                <TooltipTrigger asChild>
+                  <div>
+                    <button
+                      className={cn(
+                        'flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-xs transition-colors',
+                        isSelected
+                          ? 'bg-accent text-accent-foreground'
+                          : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                      )}
+                      onClick={() => setSelectedSessionId(isSelected ? null : session.id)}
+                    >
+                      <span
+                        className={cn(
+                          'h-2 w-2 shrink-0 rounded-full',
+                          session.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/60 dark:bg-muted-foreground/40',
+                        )}
+                      />
+                      <span className="truncate">{label}</span>
+                      <span className="text-[10px] text-muted-foreground/80 dark:text-muted-foreground/60 ml-auto shrink-0">
+                        {formatRelativeTime(session.startedAt)}
+                      </span>
+                      {session.eventCount != null && (
+                        <Badge variant="outline" className="text-[9px] h-3.5 px-1 shrink-0">
+                          {session.eventCount}
+                        </Badge>
+                      )}
+                    </button>
+                    {cwd && (
+                      <div className="px-2 pb-0.5 text-[10px] text-muted-foreground/70 dark:text-muted-foreground/50 truncate">
+                        {shortenCwd(cwd)}
+                      </div>
                     )}
-                  />
-                  <span className="truncate">{label}</span>
-                  <span className="text-[10px] text-muted-foreground/60 ml-auto shrink-0">
-                    {formatRelativeTime(session.startedAt)}
-                  </span>
-                  {session.eventCount != null && (
-                    <Badge variant="outline" className="text-[9px] h-3.5 px-1 shrink-0">
-                      {session.eventCount}
-                    </Badge>
-                  )}
-                </button>
-                {cwd && (
-                  <div className="px-2 pb-0.5 text-[10px] text-muted-foreground/50 truncate">
-                    {shortenCwd(cwd)}
                   </div>
+                </TooltipTrigger>
+                {tooltipLines.length > 0 && (
+                  <TooltipContent side="right" className="text-xs">
+                    {tooltipLines.map((line, i) => (
+                      <div key={i}>{line}</div>
+                    ))}
+                  </TooltipContent>
                 )}
-              </div>
-            </TooltipTrigger>
-            {tooltipLines.length > 0 && (
-              <TooltipContent side="right" className="text-xs">
-                {tooltipLines.map((line, i) => (
-                  <div key={i}>{line}</div>
-                ))}
-              </TooltipContent>
-            )}
-          </Tooltip>
-        )
-      })}
+              </Tooltip>
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
 }

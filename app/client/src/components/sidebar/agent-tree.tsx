@@ -43,11 +43,11 @@ function AgentNode({ agent, depth }: { agent: Agent; depth: number }) {
         style={{ paddingLeft: `${8 + depth * 12}px` }}
         onClick={() => toggleAgentId(agent.id)}
       >
-        {isSubagent && <CornerDownRight className="h-3 w-3 shrink-0 text-muted-foreground/50" />}
+        {isSubagent && <CornerDownRight className="h-3 w-3 shrink-0 text-muted-foreground/70 dark:text-muted-foreground/50" />}
         <span
           className={cn(
             'h-2 w-2 shrink-0 rounded-full',
-            agent.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/40',
+            agent.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/60 dark:bg-muted-foreground/40',
           )}
         />
         <span className="truncate">{displayName}</span>

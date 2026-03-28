@@ -97,12 +97,12 @@ export function ScopeBar() {
               <span
                 className={cn(
                   'h-1.5 w-1.5 rounded-full',
-                  agent.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/40',
+                  agent.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/60 dark:bg-muted-foreground/40',
                 )}
               />
               {getAgentDisplayName(agent)}
               {agent.eventCount != null && (
-                <span className="text-[10px] text-muted-foreground/60">{agent.eventCount}</span>
+                <span className="text-[10px] text-muted-foreground/80 dark:text-muted-foreground/60">{agent.eventCount}</span>
               )}
               {selectedAgentIds.length > 0 && (
                 <button
@@ -119,7 +119,7 @@ export function ScopeBar() {
           )
         })}
         {sortedAgents.length === 0 && (
-          <span className="text-xs text-muted-foreground/60">No agents</span>
+          <span className="text-xs text-muted-foreground/80 dark:text-muted-foreground/60">No agents</span>
         )}
       </div>
 

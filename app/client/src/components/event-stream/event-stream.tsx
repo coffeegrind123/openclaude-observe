@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect, useDeferredValue } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useEvents } from '@/hooks/use-events'
 import { useAgents } from '@/hooks/use-agents'
 import { useUIStore } from '@/stores/ui-store'
@@ -23,11 +24,23 @@ export function EventStream() {
   const deferredStaticFilters = useDeferredValue(activeStaticFilters)
   const deferredToolFilters = useDeferredValue(activeToolFilters)
 
+  const queryClient = useQueryClient()
+
   const { data: events } = useEvents(selectedSessionId, {
     search: searchQuery || undefined,
   })
 
   const { data: agents } = useAgents(selectedSessionId)
+
+  // When events load, check if the session has ended — if so, refetch sessions
+  // so the sidebar status dot updates (server lazily patches the DB)
+  useEffect(() => {
+    if (!events || events.length === 0) return
+    const last = events[events.length - 1]
+    if (last.subtype === 'SessionEnd' || last.subtype === 'Stop' || last.subtype === 'stop_hook_summary') {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+    }
+  }, [events, queryClient])
 
   const agentMap = useMemo(() => {
     const map = new Map<string, Agent>()
@@ -152,11 +165,11 @@ export function EventStream() {
         <span className="text-xs text-muted-foreground">
           Events: <span className="text-foreground">{filteredEvents.length}</span>
           {showRawCount && (
-            <span className="text-muted-foreground/50"> / {rawCount} raw</span>
+            <span className="text-muted-foreground/70 dark:text-muted-foreground/50"> / {rawCount} raw</span>
           )}
         </span>
         {firstTs && lastTs && (
-          <span className="text-[10px] text-muted-foreground/50">
+          <span className="text-[10px] text-muted-foreground/70 dark:text-muted-foreground/50">
             {format(firstTs)} — {format(lastTs)}
           </span>
         )}

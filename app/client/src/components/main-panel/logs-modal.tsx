@@ -1,10 +1,11 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useTransition } from 'react'
 import { useEvents } from '@/hooks/use-events'
 import { useUIStore } from '@/stores/ui-store'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogTrigger, DialogContent, DialogClose, DialogTitle } from '@/components/ui/dialog'
-import { ScrollText, Copy, Check, ArrowDownToLine, ClipboardCopy, X } from 'lucide-react'
+import { ScrollText, Copy, Check, ArrowDownToLine, ClipboardCopy, X, LoaderCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { ParsedEvent } from '@/types'
 
 export function LogsModal() {
   const { selectedSessionId } = useUIStore()
@@ -12,8 +13,27 @@ export function LogsModal() {
   const [copiedId, setCopiedId] = useState<number | null>(null)
   const [copiedAll, setCopiedAll] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  const [readyEvents, setReadyEvents] = useState<ParsedEvent[] | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  // When the dialog opens, defer the heavy event list into a transition
+  // so the modal shell (with spinner) paints immediately.
+  useEffect(() => {
+    if (open && events) {
+      startTransition(() => {
+        setReadyEvents(events)
+      })
+    }
+    if (!open) {
+      // Reset when closed so next open starts fresh with spinner
+      setReadyEvents(null)
+    }
+  }, [open, events])
 
   if (!selectedSessionId) return null
+
+  const loading = open && (isPending || readyEvents === null)
 
   const handleCopy = (id: number, payload: Record<string, unknown>) => {
     navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
@@ -34,7 +54,7 @@ export function LogsModal() {
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
           variant="ghost"
@@ -58,6 +78,7 @@ export function LogsModal() {
               className="h-7 gap-1.5 text-xs"
               onClick={handleCopyAll}
               title="Copy all logs"
+              disabled={loading}
             >
               {copiedAll ? <Check className="h-3 w-3 text-green-500" /> : <ClipboardCopy className="h-3 w-3" />}
               {copiedAll ? 'Copied' : 'Copy all'}
@@ -68,6 +89,7 @@ export function LogsModal() {
               className="h-7 w-7"
               onClick={scrollToBottom}
               title="Jump to bottom"
+              disabled={loading}
             >
               <ArrowDownToLine className="h-3.5 w-3.5" />
             </Button>
@@ -79,9 +101,14 @@ export function LogsModal() {
           </div>
         </div>
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          {events && events.length > 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+              <LoaderCircle className="h-6 w-6 animate-spin" />
+              <span className="text-sm">Loading events...</span>
+            </div>
+          ) : readyEvents && readyEvents.length > 0 ? (
             <div className="divide-y divide-border/30">
-              {events.map((event) => {
+              {readyEvents.map((event) => {
                 const hookName = event.subtype || event.type
                 const toolName = event.toolName
                 return (
@@ -91,11 +118,11 @@ export function LogsModal() {
                         {hookName}
                       </span>
                       {toolName && (
-                        <span className="text-xs font-mono text-blue-400">
+                        <span className="text-xs font-mono text-blue-700 dark:text-blue-400">
                           {toolName}
                         </span>
                       )}
-                      <span className="text-[10px] text-muted-foreground/50 tabular-nums ml-auto">
+                      <span className="text-[10px] text-muted-foreground/70 dark:text-muted-foreground/50 tabular-nums ml-auto">
                         {new Date(event.timestamp).toLocaleTimeString('en-US', {
                           hour12: false,
                           hour: '2-digit',
@@ -104,7 +131,7 @@ export function LogsModal() {
                         })}
                       </span>
                       <button
-                        className="text-muted-foreground/50 hover:text-foreground transition-colors"
+                        className="text-muted-foreground/70 dark:text-muted-foreground/50 hover:text-foreground transition-colors"
                         onClick={() => handleCopy(event.id, event.payload)}
                         title="Copy payload"
                       >

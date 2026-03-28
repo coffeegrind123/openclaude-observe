@@ -49,16 +49,23 @@ export function Sidebar({ connected }: SidebarProps) {
       style={sidebarCollapsed ? undefined : { width: sidebarWidth }}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 p-3 h-12">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
-          O
-        </div>
+      <div
+        className={cn(
+          'flex items-center h-12',
+          sidebarCollapsed ? 'flex-col justify-center gap-1 p-1' : 'gap-2 p-3',
+        )}
+      >
+        {!sidebarCollapsed && (
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
+            O
+          </div>
+        )}
         {!sidebarCollapsed && <span className="text-sm font-semibold truncate">Observe</span>}
-        <div className="flex-1" />
+        {!sidebarCollapsed && <div className="flex-1" />}
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7"
+          className="h-7 w-7 shrink-0"
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
         >
           {sidebarCollapsed ? (

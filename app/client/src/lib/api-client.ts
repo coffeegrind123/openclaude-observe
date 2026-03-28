@@ -1,5 +1,5 @@
 import { API_BASE } from '@/config/api';
-import type { Project, Session, Agent, ParsedEvent } from '@/types';
+import type { Project, Session, RecentSession, Agent, ParsedEvent } from '@/types';
 
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`);
@@ -9,6 +9,8 @@ async function fetchJson<T>(path: string): Promise<T> {
 
 export const api = {
   getProjects: () => fetchJson<Project[]>('/projects'),
+  getRecentSessions: (limit?: number) =>
+    fetchJson<RecentSession[]>(`/sessions/recent${limit ? `?limit=${limit}` : ''}`),
   getSessions: (projectId: string) =>
     fetchJson<Session[]>(`/projects/${encodeURIComponent(projectId)}/sessions`),
   getSession: (sessionId: string) =>

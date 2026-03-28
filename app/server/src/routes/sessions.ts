@@ -14,6 +14,28 @@ const LOG_LEVEL = process.env.SERVER_LOG_LEVEL || 'debug'
 
 const router = new Hono<Env>()
 
+// GET /sessions/recent
+router.get('/sessions/recent', async (c) => {
+  const store = c.get('store')
+  const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : 20
+  const rows = await store.getRecentSessions(limit)
+  const sessions = rows.map((r: any) => ({
+    id: r.id,
+    projectId: r.project_id,
+    projectName: r.project_name,
+    slug: r.slug,
+    status: r.status,
+    startedAt: r.started_at,
+    stoppedAt: r.stopped_at,
+    metadata: r.metadata ? JSON.parse(r.metadata) : null,
+    agentCount: r.agent_count,
+    activeAgentCount: r.active_agent_count,
+    eventCount: r.event_count,
+    lastActivity: r.last_activity,
+  }))
+  return c.json(sessions)
+})
+
 // GET /sessions/:id
 router.get('/sessions/:id', async (c) => {
   const store = c.get('store')
@@ -90,6 +112,20 @@ router.get('/sessions/:id/events', async (c) => {
     timestamp: r.timestamp,
     payload: JSON.parse(r.payload),
   }))
+
+  // Lazy status correction: if the last event is a session-ending event
+  // but the session is still marked active, patch the DB
+  if (events.length > 0) {
+    const lastEvent = events[events.length - 1]
+    const isEnded = lastEvent.subtype === 'SessionEnd' || lastEvent.subtype === 'Stop' || lastEvent.subtype === 'stop_hook_summary'
+    if (isEnded) {
+      const session = await store.getSessionById(sessionId)
+      if (session && session.status === 'active') {
+        await store.updateSessionStatus(sessionId, 'stopped')
+      }
+    }
+  }
+
   return c.json(events)
 })
 

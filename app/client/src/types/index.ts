@@ -45,6 +45,21 @@ export interface ParsedEvent {
   payload: Record<string, unknown>
 }
 
+export interface RecentSession {
+  id: string
+  projectId: string
+  projectName: string
+  slug: string | null
+  status: string
+  startedAt: number
+  stoppedAt: number | null
+  metadata: Record<string, unknown> | null
+  agentCount?: number
+  activeAgentCount?: number
+  eventCount?: number
+  lastActivity: number | null
+}
+
 export type WSMessage =
   | { type: 'event'; data: ParsedEvent }
   | { type: 'agent_update'; data: { id: string; status: string; sessionId: string } }

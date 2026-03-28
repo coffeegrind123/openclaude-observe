@@ -62,7 +62,7 @@ export function EventFilterBar() {
                     ? 'bg-primary text-primary-foreground border-primary'
                     : hasMatches
                       ? 'bg-secondary text-secondary-foreground border-primary/40 hover:bg-accent'
-                      : 'bg-secondary text-muted-foreground/50 border-transparent hover:bg-accent hover:text-secondary-foreground',
+                      : 'bg-secondary text-muted-foreground/70 dark:text-muted-foreground/50 border-transparent hover:bg-accent hover:text-secondary-foreground',
                 )}
                 onClick={() => toggleStaticFilter(filter.label)}
               >
@@ -94,7 +94,7 @@ export function EventFilterBar() {
               className={cn(
                 'rounded-full px-2.5 py-0.5 text-xs transition-colors border',
                 activeToolFilters.includes(name)
-                  ? 'border-blue-500 bg-blue-500/15 text-blue-400'
+                  ? 'border-blue-500 bg-blue-500/15 text-blue-700 dark:text-blue-400'
                   : 'border-border text-muted-foreground hover:border-blue-500/50 hover:text-foreground',
               )}
               onClick={() => toggleToolFilter(name)}

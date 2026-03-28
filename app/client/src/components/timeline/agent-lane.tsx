@@ -1,6 +1,6 @@
 import { useRef, useEffect, useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { getEventIcon } from '@/config/event-icons'
+import { getEventIcon, getEventColor } from '@/config/event-icons'
 import { getEventSummary } from '@/lib/event-summary'
 import { useUIStore } from '@/stores/ui-store'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -31,7 +31,7 @@ export function AgentLane({ agentName, events, isSubagent, color }: AgentLanePro
   const containerRef = useRef<HTMLDivElement>(null)
 
   const rangeMs = useMemo(() => {
-    const ranges = { '1m': 60_000, '5m': 300_000, '10m': 600_000 }
+    const ranges = { '1m': 60_000, '5m': 300_000, '10m': 600_000, '60m': 3_600_000 }
     return ranges[timeRange]
   }, [timeRange])
 
@@ -45,7 +45,7 @@ export function AgentLane({ agentName, events, isSubagent, color }: AgentLanePro
   // Tick marks based on time range
   const ticks = useMemo(() => {
     const rangeSec = rangeMs / 1000
-    const count = { '1m': 6, '5m': 5, '10m': 5 }[timeRange]
+    const count = { '1m': 6, '5m': 5, '10m': 5, '60m': 6 }[timeRange]
     const stepSec = rangeSec / count
     const result: { pct: number; label: string }[] = []
     for (let i = 0; i <= count; i++) {
@@ -76,8 +76,7 @@ export function AgentLane({ agentName, events, isSubagent, color }: AgentLanePro
   return (
     <div className="flex items-center h-8 border-b border-border/30">
       <div
-        className={cn('w-28 shrink-0 text-[10px] truncate px-2', color)}
-        style={{ opacity: isSubagent ? 0.5 : 0.7 }}
+        className={cn('w-28 shrink-0 text-[10px] truncate px-2', color, isSubagent ? 'opacity-80 dark:opacity-50' : 'opacity-100 dark:opacity-70')}
         title={agentName}
       >
         {isSubagent ? '↳ ' : ''}
@@ -90,23 +89,26 @@ export function AgentLane({ agentName, events, isSubagent, color }: AgentLanePro
           const position = 100 - (age / rangeMs) * 100
           if (position < 0 || position > 100) return null
 
-          const icon = getEventIcon(event.subtype, event.toolName)
+          const Icon = getEventIcon(event.subtype, event.toolName)
+          const { dotColor } = getEventColor(event.subtype, event.toolName)
           const summary = getEventSummary(event)
 
           return (
             <Tooltip key={event.id}>
               <TooltipTrigger asChild>
                 <button
-                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 text-sm cursor-pointer hover:scale-125 transition-transform"
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 cursor-pointer hover:scale-125 transition-transform"
                   style={{ left: `${position}%` }}
                   onClick={() => setScrollToEventId(event.id)}
                 >
-                  {icon}
+                  <span className={cn('flex items-center justify-center h-5 w-5 rounded-full', dotColor)}>
+                    <Icon className="h-3 w-3 text-white" />
+                  </span>
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs max-w-64">
                 <div className="font-medium">{tooltipLabel(event)}</div>
-                {summary && <div className="text-muted-foreground truncate">{summary}</div>}
+                {summary && <div className="opacity-80 truncate">{summary}</div>}
               </TooltipContent>
             </Tooltip>
           )
@@ -120,7 +122,7 @@ export function AgentLane({ agentName, events, isSubagent, color }: AgentLanePro
             style={{ left: `${pct}%` }}
           >
             <div className="w-px h-full border-l border-border/20" />
-            <div className="absolute bottom-0 text-[7px] text-muted-foreground/40 -translate-x-1/2 leading-none">
+            <div className="absolute bottom-0 text-[7px] text-muted-foreground/70 dark:text-muted-foreground/40 -translate-x-1/2 leading-none">
               {label}
             </div>
           </div>

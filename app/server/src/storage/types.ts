@@ -70,4 +70,5 @@ export interface EventStore {
   deleteSession(sessionId: string): Promise<void>
   clearAllData(): Promise<void>
   clearSessionEvents(sessionId: string): Promise<void>
+  getRecentSessions(limit?: number): Promise<any[]>
 }

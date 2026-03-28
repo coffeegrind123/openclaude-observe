@@ -10,14 +10,14 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import type { Agent, ParsedEvent } from '@/types'
 
 const AGENT_COLORS = [
-  'text-green-400',
-  'text-blue-400',
-  'text-purple-400',
-  'text-amber-400',
-  'text-cyan-400',
-  'text-rose-400',
-  'text-emerald-400',
-  'text-orange-400',
+  'text-green-700 dark:text-green-400',
+  'text-blue-700 dark:text-blue-400',
+  'text-purple-700 dark:text-purple-400',
+  'text-amber-700 dark:text-amber-400',
+  'text-cyan-700 dark:text-cyan-400',
+  'text-rose-700 dark:text-rose-400',
+  'text-emerald-700 dark:text-emerald-400',
+  'text-orange-700 dark:text-orange-400',
 ]
 
 function getColor(idx: number): string {
@@ -94,7 +94,7 @@ export function ActivityTimeline() {
 
   if (!effectiveSessionId) return null
 
-  const ranges: Array<'1m' | '5m' | '10m'> = ['1m', '5m', '10m']
+  const ranges: Array<'1m' | '5m' | '10m' | '60m'> = ['1m', '5m', '10m', '60m']
 
   return (
     <TooltipProvider>

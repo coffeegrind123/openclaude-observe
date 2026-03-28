@@ -2,26 +2,31 @@
 
 ## QUEUED TASKS
 
+- [ ] For the Tool:Agent expanded summary, show the Agent ID and Agent Name instead of the results json
+  - Results json doesn't really add much value, but we really want to know the name (our assigned name) and ID of the agent if different from the name we assigned it
+  - For the agent name, show the name we assigned it and then (dimmed out) the tool_input.name if different from the assigned name
 - [ ] Fix the expand sidebar button in collapsed mode - it's currently overlapping with "Filters:"
   - use devtools to debug - discuss options if shadcn doesn't already offer a standard UX pattern for solving this
 - [ ] Add a loader (spinner) element to the Logs modal - it should immediately open and then show loading state
   - Currently, there's a lot of lag when the Logs modal is opened in a session with 1000+ events
-- [ ] Add a settings gear icon in bottom of sidebar
-  - Opens modal that lists all projects and has delete buttons to delete all logs per project
-  - Also have a button to delete all logs
-  - Confirmation modal should be used for the delete buttons
 - [ ] Filter state should reset to All when switching sessions or should be preserved per session
   - Currently, the filter state is preserved while switch but each session has different events, leading to possible user confusion
 - [ ] Review & fix sub-agent naming code
-  - The "Review client query perf" and "Review server query perf" sub-agents were both named "Review server query perf" for some reason
+  - The "Review client query perf" and "Review server query perf" sub-agents were both named "Review server query perf" for some reason - see agents table in database
   - the user prompt that triggered the creation of the two sub-agents: "yes, dive deep into the lag issue. use agent teams to do the review if appropriate"
-- [x] Add the corresponding Tool: Agent to the stream when filtering by agent chip
-  - Spawn map links subagentId → toolUseId, included in agent chip filter
-  - SubagentStart expanded view now shows the Agent tool prompt from the thread
+  - test by creating an agent team that spawns multiple sub-agents at the same time?
 - [ ] Add a 60m option to the Activity Timeline
+- [ ] In sidebar, group sessions by their most recent relative date: Today, Yesterday, This Week, Last Week, then by month if older than last week
+  - Show a small date header for each grouping
+- [ ] Add a "home" page (root path with no project or session selected) in the right panel
+  - Show the most recent sessions across projects - let the user click on a session to load it
+- [ ] Switch from emojis to lucide react icons in the UI - better visual consistency & ability to color code
+- [ ] Improve the light mode colors - currently, a lot of the text and labels are very difficult to read in light mode
+  - use devtools to debug & fix color contrast issues
 
 ## COMPLETED TASKS
 
+- [x] Add the corresponding Tool: Agent to the stream when filtering by agent chip
 - [x] Debug why filter buttons are super lagging in some cases (2215ms → 500ms)
   - Root cause: 700+ EventRow components re-rendered on every filter toggle
   - Fix: React.memo on EventRow, useDeferredValue for filter state, removed allEvents prop
@@ -61,7 +66,17 @@
 
 Don't implement these yet. They're here for future reference.
 
-- [ ] Improve the light mode colors - currently, a lot of the text and labels are very difficult to read in light mode
+- [ ] Add a settings gear icon in bottom of sidebar
+  - Opens modal that lists all projects and has delete buttons to delete each project
+  - Also have a button to delete all logs
+  - Confirmation modal should be used for the delete buttons
+  - Make sure all project related data gets properly deleted - add tests
+- [ ] Change agent chips to a custom dropdown menu
+  - Show list with: name (what we assigned it), status dot (active or not), tool_input.name, description, start date/time and total runtime (etc. - clarify this first)
+  - List should be dynamically sorted by most recent activity at the top - only sort when menu is opened, not while it's open
+  - Allow mulitple agents to be selected (checkbox or selecting the row?)
+  - Add a "Show All Agents" option at the top
+  - Main agent should always be under "Show All Agents" - e.g. pinned to the top
 - [ ] Track token & context window usage per session and agent
   - On Stop hook, use two-way pattern: hook reads transcript JSONL, sums `usage` fields from all assistant messages, posts totals to `/api/sessions/:id/usage` callback
   - Subagent usage already available in PostToolUse:Agent `tool_response` (totalTokens, totalDurationMs, usage breakdown) — just need to surface in UI
