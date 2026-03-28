@@ -15,25 +15,35 @@ export function LogsModal() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [readyEvents, setReadyEvents] = useState<ParsedEvent[] | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
+  const hasInitiallyLoaded = useRef(false)
 
-  // When the dialog opens, defer the heavy event list into a transition
-  // so the modal shell (with spinner) paints immediately.
+  // On first open, defer the heavy event list into a transition so
+  // the modal shell (with spinner) paints immediately.
+  // After initial load, update events silently without showing spinner.
   useEffect(() => {
-    if (open && events) {
-      startTransition(() => {
-        setReadyEvents(events)
-      })
-    }
     if (!open) {
-      // Reset when closed so next open starts fresh with spinner
+      hasInitiallyLoaded.current = false
       setReadyEvents(null)
+      return
+    }
+    if (open && events) {
+      if (!hasInitiallyLoaded.current) {
+        // First load: use transition so spinner shows while rendering
+        startTransition(() => {
+          setReadyEvents(events)
+          hasInitiallyLoaded.current = true
+        })
+      } else {
+        // Subsequent updates: apply silently, no spinner
+        setReadyEvents(events)
+      }
     }
   }, [open, events])
 
   if (!selectedSessionId) return null
 
-  const loading = open && (isPending || readyEvents === null)
+  const loading = open && readyEvents === null
 
   const handleCopy = (id: number, payload: Record<string, unknown>) => {
     navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
