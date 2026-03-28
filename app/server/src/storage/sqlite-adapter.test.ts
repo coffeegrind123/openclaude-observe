@@ -7,75 +7,73 @@ beforeEach(() => {
   store = new SqliteAdapter(':memory:')
 })
 
-describe('SqliteAdapter', () => {
+// ---------------------------------------------------------------------------
+// Helper: seed a minimal project + session + agent
+// ---------------------------------------------------------------------------
+async function seedBasic() {
+  await store.upsertProject('proj1', 'Project 1')
+  await store.upsertSession('sess1', 'proj1', 'my-session', null, 1000)
+  await store.upsertAgent('sess1', 'sess1', null, 'my-session', null, 1000)
+  return { projectId: 'proj1', sessionId: 'sess1', rootAgentId: 'sess1' }
+}
+
+// ---------------------------------------------------------------------------
+// Projects
+// ---------------------------------------------------------------------------
+describe('SqliteAdapter — projects', () => {
   test('upsert project and query', async () => {
     await store.upsertProject('test-proj', 'Test Project')
     const projects = await store.getProjects()
     expect(projects).toHaveLength(1)
     expect(projects[0].id).toBe('test-proj')
+    expect(projects[0].name).toBe('Test Project')
   })
 
-  test('upsert session with agents and events', async () => {
+  test('upsert same project twice does not duplicate', async () => {
     await store.upsertProject('proj1', 'Project 1')
-    await store.upsertSession('sess1', 'proj1', 'twinkly-dragon', null, Date.now())
-    await store.upsertAgent('agent1', 'sess1', null, 'twinkly-dragon', null, Date.now())
-    await store.upsertAgent('agent2', 'sess1', 'agent1', null, 'ls-subagent', Date.now())
-
-    const eventId = await store.insertEvent({
-      agentId: 'agent1',
-      sessionId: 'sess1',
-      type: 'user',
-      subtype: 'UserPromptSubmit',
-      toolName: null,
-      summary: null,
-      timestamp: Date.now(),
-      payload: { test: true },
-    })
-    expect(eventId).toBeGreaterThan(0)
-
-    const agents = await store.getAgentsForSession('sess1')
-    expect(agents).toHaveLength(2)
-
-    const events = await store.getEventsForSession('sess1')
-    expect(events).toHaveLength(1)
+    await store.upsertProject('proj1', 'Project 1 Updated')
+    const projects = await store.getProjects()
+    expect(projects).toHaveLength(1)
+    // ON CONFLICT DO NOTHING — name stays original
+    expect(projects[0].name).toBe('Project 1')
   })
 
-  test('event filtering by agent', async () => {
+  test('getProjects returns session_count', async () => {
     await store.upsertProject('proj1', 'Project 1')
-    await store.upsertSession('sess1', 'proj1', null, null, Date.now())
-    await store.upsertAgent('a1', 'sess1', null, null, null, Date.now())
-    await store.upsertAgent('a2', 'sess1', null, null, null, Date.now())
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertSession('sess2', 'proj1', null, null, 2000)
+    const projects = await store.getProjects()
+    expect(projects[0].session_count).toBe(2)
+  })
+})
 
-    await store.insertEvent({
-      agentId: 'a1',
-      sessionId: 'sess1',
-      type: 'user',
-      subtype: 'UserPromptSubmit',
-      toolName: null,
-      summary: null,
-      timestamp: Date.now(),
-      payload: {},
-    })
-    await store.insertEvent({
-      agentId: 'a2',
-      sessionId: 'sess1',
-      type: 'tool',
-      subtype: 'PreToolUse',
-      toolName: 'Bash',
-      summary: null,
-      timestamp: Date.now(),
-      payload: {},
-    })
-
-    const filtered = await store.getEventsForSession('sess1', { agentIds: ['a1'] })
-    expect(filtered).toHaveLength(1)
-    expect(filtered[0].agent_id).toBe('a1')
+// ---------------------------------------------------------------------------
+// Sessions
+// ---------------------------------------------------------------------------
+describe('SqliteAdapter — sessions', () => {
+  test('upsert session with slug and metadata', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', 'twinkly-dragon', { version: '2.1' }, 1000)
+    const session = await store.getSessionById('sess1')
+    expect(session).not.toBeNull()
+    expect(session.slug).toBe('twinkly-dragon')
+    expect(JSON.parse(session.metadata)).toEqual({ version: '2.1' })
+    expect(session.status).toBe('active')
   })
 
-  test('clearAllData empties all tables', async () => {
+  test('upsert session updates slug via COALESCE', async () => {
     await store.upsertProject('proj1', 'Project 1')
-    await store.upsertSession('sess1', 'proj1', null, null, Date.now())
-    await store.upsertAgent('a1', 'sess1', null, null, null, Date.now())
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertSession('sess1', 'proj1', 'new-slug', null, 1000)
+    const session = await store.getSessionById('sess1')
+    expect(session.slug).toBe('new-slug')
+  })
+
+  test('getSessionsForProject returns aggregated counts', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
+    await store.upsertAgent('a2', 'sess1', 'a1', null, 'sub', 1000)
     await store.insertEvent({
       agentId: 'a1',
       sessionId: 'sess1',
@@ -83,88 +81,152 @@ describe('SqliteAdapter', () => {
       subtype: null,
       toolName: null,
       summary: null,
-      timestamp: Date.now(),
+      timestamp: 1000,
       payload: {},
     })
-
-    await store.clearAllData()
-    const projects = await store.getProjects()
-    expect(projects).toHaveLength(0)
-  })
-
-  test('deleteSession removes session, agents, and events', async () => {
-    await store.upsertProject('proj1', 'Project 1')
-    await store.upsertSession('sess1', 'proj1', null, null, Date.now())
-    await store.upsertAgent('a1', 'sess1', null, null, null, Date.now())
-    await store.upsertAgent('a2', 'sess1', 'a1', null, 'sub', Date.now())
-    await store.insertEvent({
-      agentId: 'a1',
-      sessionId: 'sess1',
-      type: 'user',
-      subtype: 'UserPromptSubmit',
-      toolName: null,
-      summary: null,
-      timestamp: Date.now(),
-      payload: {},
-    })
-
-    await store.deleteSession('sess1')
 
     const sessions = await store.getSessionsForProject('proj1')
-    expect(sessions).toHaveLength(0)
-    const agents = await store.getAgentsForSession('sess1')
-    expect(agents).toHaveLength(0)
-    const events = await store.getEventsForSession('sess1')
-    expect(events).toHaveLength(0)
-    // Project should still exist
-    const projects = await store.getProjects()
-    expect(projects).toHaveLength(1)
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].agent_count).toBe(2)
+    expect(sessions[0].event_count).toBe(1)
   })
 
-  test('clearSessionEvents removes events and agents but keeps the session', async () => {
+  test('getSessionById returns null for non-existent session', async () => {
+    const session = await store.getSessionById('no-such-session')
+    expect(session).toBeNull()
+  })
+
+  test('updateSessionStatus sets status and stopped_at for "stopped"', async () => {
     await store.upsertProject('proj1', 'Project 1')
-    await store.upsertSession('sess1', 'proj1', 'my-session', null, Date.now())
-    await store.upsertAgent('a1', 'sess1', null, null, null, Date.now())
-    await store.upsertAgent('a2', 'sess1', 'a1', null, 'sub', Date.now())
-    await store.insertEvent({
-      agentId: 'a1',
-      sessionId: 'sess1',
-      type: 'user',
-      subtype: 'UserPromptSubmit',
-      toolName: null,
-      summary: null,
-      timestamp: Date.now(),
-      payload: {},
-    })
-    await store.insertEvent({
-      agentId: 'a2',
-      sessionId: 'sess1',
-      type: 'tool',
-      subtype: 'PreToolUse',
-      toolName: 'Bash',
-      summary: null,
-      timestamp: Date.now(),
-      payload: {},
-    })
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
 
-    await store.clearSessionEvents('sess1')
-
-    // Session should remain
+    await store.updateSessionStatus('sess1', 'stopped')
     const session = await store.getSessionById('sess1')
-    expect(session).not.toBeNull()
-    // Events should be gone
-    const events = await store.getEventsForSession('sess1')
-    expect(events).toHaveLength(0)
-    // Agents should also be gone
-    const agents = await store.getAgentsForSession('sess1')
-    expect(agents).toHaveLength(0)
+    expect(session.status).toBe('stopped')
+    expect(session.stopped_at).toBeGreaterThan(0)
   })
 
-  test('getEventsSince returns events after timestamp', async () => {
+  test('updateSessionStatus with non-stopped status sets stopped_at to null', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+
+    await store.updateSessionStatus('sess1', 'active')
+    const session = await store.getSessionById('sess1')
+    expect(session.status).toBe('active')
+    expect(session.stopped_at).toBeNull()
+  })
+
+  test('updateSessionSlug', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', 'old-slug', null, 1000)
+
+    await store.updateSessionSlug('sess1', 'new-slug')
+    const session = await store.getSessionById('sess1')
+    expect(session.slug).toBe('new-slug')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Agents
+// ---------------------------------------------------------------------------
+describe('SqliteAdapter — agents', () => {
+  test('upsert agent with parent and name', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, 'root-slug', null, 1000)
+    await store.upsertAgent('a2', 'sess1', 'a1', null, 'ls-subagent', 1000)
+
+    const agents = await store.getAgentsForSession('sess1')
+    expect(agents).toHaveLength(2)
+    const sub = agents.find((a: any) => a.id === 'a2')
+    expect(sub.parent_agent_id).toBe('a1')
+    expect(sub.name).toBe('ls-subagent')
+  })
+
+  test('upsertAgent with agentType', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000, 'code-writer')
+
+    const agent = await store.getAgentById('a1')
+    expect(agent).not.toBeNull()
+    expect(agent.agent_type).toBe('code-writer')
+  })
+
+  test('upsertAgent updates agent_type via COALESCE on conflict', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
+    expect((await store.getAgentById('a1')).agent_type).toBeNull()
+
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000, 'researcher')
+    expect((await store.getAgentById('a1')).agent_type).toBe('researcher')
+  })
+
+  test('getAgentById returns null for non-existent agent', async () => {
+    const agent = await store.getAgentById('no-such-agent')
+    expect(agent).toBeNull()
+  })
+
+  test('getAgentById returns a single agent', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, 'my-slug', 'my-agent', 1000)
+
+    const agent = await store.getAgentById('a1')
+    expect(agent.id).toBe('a1')
+    expect(agent.session_id).toBe('sess1')
+    expect(agent.slug).toBe('my-slug')
+    expect(agent.name).toBe('my-agent')
+    expect(agent.status).toBe('active')
+  })
+
+  test('updateAgentStatus sets status and stopped_at for "stopped"', async () => {
     await store.upsertProject('proj1', 'Project 1')
     await store.upsertSession('sess1', 'proj1', null, null, 1000)
     await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
 
+    await store.updateAgentStatus('a1', 'stopped')
+    const agent = await store.getAgentById('a1')
+    expect(agent.status).toBe('stopped')
+    expect(agent.stopped_at).toBeGreaterThan(0)
+  })
+
+  test('updateAgentStatus with non-stopped status sets stopped_at to null', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
+
+    await store.updateAgentStatus('a1', 'active')
+    const agent = await store.getAgentById('a1')
+    expect(agent.status).toBe('active')
+    expect(agent.stopped_at).toBeNull()
+  })
+
+  test('updateAgentSlug', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, 'old-slug', null, 1000)
+
+    await store.updateAgentSlug('a1', 'new-slug')
+    const agent = await store.getAgentById('a1')
+    expect(agent.slug).toBe('new-slug')
+  })
+
+  test('updateAgentType', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
+
+    await store.updateAgentType('a1', 'debugger')
+    const agent = await store.getAgentById('a1')
+    expect(agent.agent_type).toBe('debugger')
+  })
+
+  test('getAgentsForSession includes event_count', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
     await store.insertEvent({
       agentId: 'a1',
       sessionId: 'sess1',
@@ -186,8 +248,758 @@ describe('SqliteAdapter', () => {
       payload: {},
     })
 
-    const since = await store.getEventsSince('sess1', 1500)
+    const agents = await store.getAgentsForSession('sess1')
+    expect(agents).toHaveLength(1)
+    expect(agents[0].event_count).toBe(2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Events — insert and query
+// ---------------------------------------------------------------------------
+describe('SqliteAdapter — events', () => {
+  test('insertEvent returns auto-incremented id', async () => {
+    const { sessionId, rootAgentId } = await seedBasic()
+    const id1 = await store.insertEvent({
+      agentId: rootAgentId,
+      sessionId,
+      type: 'user',
+      subtype: 'UserPromptSubmit',
+      toolName: null,
+      summary: null,
+      timestamp: 1000,
+      payload: { text: 'hello' },
+    })
+    const id2 = await store.insertEvent({
+      agentId: rootAgentId,
+      sessionId,
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      summary: null,
+      timestamp: 2000,
+      payload: {},
+    })
+    expect(id1).toBeGreaterThan(0)
+    expect(id2).toBe(id1 + 1)
+  })
+
+  test('insertEvent with toolUseId and status', async () => {
+    const { sessionId, rootAgentId } = await seedBasic()
+    await store.insertEvent({
+      agentId: rootAgentId,
+      sessionId,
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Read',
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+      toolUseId: 'toolu_abc123',
+      status: 'success',
+    })
+
+    const events = await store.getEventsForSession(sessionId)
+    expect(events).toHaveLength(1)
+    expect(events[0].tool_use_id).toBe('toolu_abc123')
+    expect(events[0].status).toBe('success')
+  })
+
+  test('insertEvent defaults status to "pending"', async () => {
+    const { sessionId, rootAgentId } = await seedBasic()
+    await store.insertEvent({
+      agentId: rootAgentId,
+      sessionId,
+      type: 'user',
+      subtype: null,
+      toolName: null,
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+
+    const events = await store.getEventsForSession(sessionId)
+    expect(events[0].status).toBe('pending')
+  })
+
+  test('getEventsForAgent returns only that agent events', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
+    await store.upsertAgent('a2', 'sess1', 'a1', null, 'sub', 1000)
+
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'user',
+      subtype: null,
+      toolName: null,
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+    await store.insertEvent({
+      agentId: 'a2',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      summary: null,
+      timestamp: 2000,
+      payload: {},
+    })
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'system',
+      subtype: 'Stop',
+      toolName: null,
+      summary: null,
+      timestamp: 3000,
+      payload: {},
+    })
+
+    const a1Events = await store.getEventsForAgent('a1')
+    expect(a1Events).toHaveLength(2)
+    expect(a1Events.every((e) => e.agent_id === 'a1')).toBe(true)
+    // Ordered by timestamp ASC
+    expect(a1Events[0].timestamp).toBeLessThanOrEqual(a1Events[1].timestamp)
+
+    const a2Events = await store.getEventsForAgent('a2')
+    expect(a2Events).toHaveLength(1)
+    expect(a2Events[0].agent_id).toBe('a2')
+  })
+
+  test('getEventsSince returns events after timestamp', async () => {
+    const { sessionId, rootAgentId } = await seedBasic()
+    await store.insertEvent({
+      agentId: rootAgentId,
+      sessionId,
+      type: 'user',
+      subtype: null,
+      toolName: null,
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+    await store.insertEvent({
+      agentId: rootAgentId,
+      sessionId,
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      summary: null,
+      timestamp: 2000,
+      payload: {},
+    })
+
+    const since = await store.getEventsSince(sessionId, 1500)
     expect(since).toHaveLength(1)
     expect(since[0].timestamp).toBe(2000)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Event filtering (getEventsForSession)
+// ---------------------------------------------------------------------------
+describe('SqliteAdapter — event filtering', () => {
+  async function seedWithMixedEvents() {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
+    await store.upsertAgent('a2', 'sess1', 'a1', null, 'sub', 1000)
+
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'user',
+      subtype: 'UserPromptSubmit',
+      toolName: null,
+      summary: 'User asked a question',
+      timestamp: 1000,
+      payload: { text: 'hello world' },
+    })
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      summary: 'Running ls command',
+      timestamp: 2000,
+      payload: { command: 'ls -la' },
+    })
+    await store.insertEvent({
+      agentId: 'a2',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PostToolUse',
+      toolName: 'Read',
+      summary: 'Read file contents',
+      timestamp: 3000,
+      payload: { file: '/tmp/test.txt' },
+    })
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'system',
+      subtype: 'Stop',
+      toolName: null,
+      summary: null,
+      timestamp: 4000,
+      payload: {},
+    })
+  }
+
+  test('filter by agentIds', async () => {
+    await seedWithMixedEvents()
+    const filtered = await store.getEventsForSession('sess1', { agentIds: ['a1'] })
+    expect(filtered).toHaveLength(3)
+    expect(filtered.every((e) => e.agent_id === 'a1')).toBe(true)
+  })
+
+  test('filter by multiple agentIds', async () => {
+    await seedWithMixedEvents()
+    const filtered = await store.getEventsForSession('sess1', { agentIds: ['a1', 'a2'] })
+    expect(filtered).toHaveLength(4)
+  })
+
+  test('filter by type', async () => {
+    await seedWithMixedEvents()
+    const filtered = await store.getEventsForSession('sess1', { type: 'tool' })
+    expect(filtered).toHaveLength(2)
+    expect(filtered.every((e) => e.type === 'tool')).toBe(true)
+  })
+
+  test('filter by subtype', async () => {
+    await seedWithMixedEvents()
+    const filtered = await store.getEventsForSession('sess1', { subtype: 'PreToolUse' })
+    expect(filtered).toHaveLength(1)
+    expect(filtered[0].subtype).toBe('PreToolUse')
+  })
+
+  test('filter by search (matches summary)', async () => {
+    await seedWithMixedEvents()
+    const filtered = await store.getEventsForSession('sess1', { search: 'question' })
+    expect(filtered).toHaveLength(1)
+    expect(filtered[0].summary).toContain('question')
+  })
+
+  test('filter by search (matches payload)', async () => {
+    await seedWithMixedEvents()
+    const filtered = await store.getEventsForSession('sess1', { search: 'hello world' })
+    expect(filtered).toHaveLength(1)
+    expect(filtered[0].type).toBe('user')
+  })
+
+  test('filter with limit', async () => {
+    await seedWithMixedEvents()
+    const filtered = await store.getEventsForSession('sess1', { limit: 2 })
+    expect(filtered).toHaveLength(2)
+    // Should be first 2 by timestamp ASC
+    expect(filtered[0].timestamp).toBe(1000)
+    expect(filtered[1].timestamp).toBe(2000)
+  })
+
+  test('filter with limit and offset', async () => {
+    await seedWithMixedEvents()
+    const filtered = await store.getEventsForSession('sess1', { limit: 2, offset: 1 })
+    expect(filtered).toHaveLength(2)
+    // Skips first, takes next 2
+    expect(filtered[0].timestamp).toBe(2000)
+    expect(filtered[1].timestamp).toBe(3000)
+  })
+
+  test('combined filters: type + agentIds', async () => {
+    await seedWithMixedEvents()
+    const filtered = await store.getEventsForSession('sess1', {
+      type: 'tool',
+      agentIds: ['a1'],
+    })
+    expect(filtered).toHaveLength(1)
+    expect(filtered[0].tool_name).toBe('Bash')
+  })
+
+  test('offset without limit is ignored (no OFFSET without LIMIT)', async () => {
+    await seedWithMixedEvents()
+    // offset alone should not crash; code only adds OFFSET if limit is set
+    const filtered = await store.getEventsForSession('sess1', { offset: 2 })
+    expect(filtered).toHaveLength(4) // all events returned
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getThreadForEvent
+// ---------------------------------------------------------------------------
+describe('SqliteAdapter — getThreadForEvent', () => {
+  test('returns empty array for non-existent event', async () => {
+    const thread = await store.getThreadForEvent(999)
+    expect(thread).toEqual([])
+  })
+
+  test('subagent event: returns all events for that agent', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    // Root agent has same id as session
+    await store.upsertAgent('sess1', 'sess1', null, null, null, 1000)
+    await store.upsertAgent('sub1', 'sess1', 'sess1', null, 'sub', 1000)
+
+    await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'user',
+      subtype: 'UserPromptSubmit',
+      toolName: null,
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+    const subEvent1Id = await store.insertEvent({
+      agentId: 'sub1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      summary: null,
+      timestamp: 2000,
+      payload: {},
+    })
+    await store.insertEvent({
+      agentId: 'sub1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PostToolUse',
+      toolName: 'Bash',
+      summary: null,
+      timestamp: 3000,
+      payload: {},
+    })
+    await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'system',
+      subtype: 'Stop',
+      toolName: null,
+      summary: null,
+      timestamp: 4000,
+      payload: {},
+    })
+
+    // Query thread for a subagent event — should get all sub1 events only
+    const thread = await store.getThreadForEvent(subEvent1Id)
+    expect(thread).toHaveLength(2)
+    expect(thread.every((e) => e.agent_id === 'sub1')).toBe(true)
+  })
+
+  test('SubagentStop event: returns all events for that agent', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('sess1', 'sess1', null, null, null, 1000)
+    await store.upsertAgent('sub1', 'sess1', 'sess1', null, 'sub', 1000)
+
+    await store.insertEvent({
+      agentId: 'sub1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+    // SubagentStop is on root agent but tagged with SubagentStop subtype
+    const stopId = await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'system',
+      subtype: 'SubagentStop',
+      toolName: null,
+      summary: null,
+      timestamp: 2000,
+      payload: {},
+    })
+
+    // SubagentStop on root agent — code checks subtype === 'SubagentStop' first
+    // agentId === sessionId so isSubagent is false, but SubagentStop branch triggers
+    // returns all events for that agent (sess1)
+    const thread = await store.getThreadForEvent(stopId)
+    // agent_id is 'sess1' which equals session_id, so isSubagent = false
+    // But subtype is 'SubagentStop', so it takes the subagent branch
+    // Returns all events where agent_id = 'sess1'
+    expect(thread).toHaveLength(1) // only the SubagentStop event itself belongs to agent sess1
+    expect(thread[0].subtype).toBe('SubagentStop')
+  })
+
+  test('root agent event: returns turn between UserPromptSubmit and Stop', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('sess1', 'sess1', null, null, null, 1000)
+
+    // Turn 1
+    await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'user',
+      subtype: 'UserPromptSubmit',
+      toolName: null,
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+    const toolEventId = await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      summary: null,
+      timestamp: 2000,
+      payload: {},
+    })
+    await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'system',
+      subtype: 'Stop',
+      toolName: null,
+      summary: null,
+      timestamp: 3000,
+      payload: {},
+    })
+
+    // Turn 2
+    await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'user',
+      subtype: 'UserPromptSubmit',
+      toolName: null,
+      summary: null,
+      timestamp: 4000,
+      payload: {},
+    })
+    await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'system',
+      subtype: 'Stop',
+      toolName: null,
+      summary: null,
+      timestamp: 5000,
+      payload: {},
+    })
+
+    // Query thread for the tool event in turn 1
+    const thread = await store.getThreadForEvent(toolEventId)
+    // Turn boundary: from UserPromptSubmit(1000) through Stop(3000)
+    expect(thread.length).toBeGreaterThanOrEqual(2)
+    expect(thread.length).toBeLessThanOrEqual(3) // Prompt, Tool, Stop
+    // All events should be within turn 1 timestamps
+    for (const e of thread) {
+      expect(e.timestamp).toBeGreaterThanOrEqual(1000)
+      expect(e.timestamp).toBeLessThanOrEqual(3000)
+    }
+  })
+
+  test('root agent event with no subsequent boundary returns all remaining events', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('sess1', 'sess1', null, null, null, 1000)
+
+    await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'user',
+      subtype: 'UserPromptSubmit',
+      toolName: null,
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+    const toolId = await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Read',
+      summary: null,
+      timestamp: 2000,
+      payload: {},
+    })
+    await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PostToolUse',
+      toolName: 'Read',
+      summary: null,
+      timestamp: 3000,
+      payload: {},
+    })
+    // No Stop event — session still active
+
+    const thread = await store.getThreadForEvent(toolId)
+    // endTs is Infinity path: returns all events from startTs onward
+    expect(thread).toHaveLength(3)
+  })
+
+  test('root agent event with no preceding UserPromptSubmit uses startTs=0', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 500)
+    await store.upsertAgent('sess1', 'sess1', null, null, null, 500)
+
+    // No UserPromptSubmit, just a tool event
+    const toolId = await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+    await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'system',
+      subtype: 'Stop',
+      toolName: null,
+      summary: null,
+      timestamp: 2000,
+      payload: {},
+    })
+
+    const thread = await store.getThreadForEvent(toolId)
+    // startTs = 0 (no previous prompt), endTs = 2000 (Stop)
+    expect(thread).toHaveLength(2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getRecentSessions
+// ---------------------------------------------------------------------------
+describe('SqliteAdapter — getRecentSessions', () => {
+  test('returns sessions ordered by last activity descending', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', 'first', null, 1000)
+    await store.upsertSession('sess2', 'proj1', 'second', null, 2000)
+
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
+    await store.upsertAgent('a2', 'sess2', null, null, null, 2000)
+
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'user',
+      subtype: null,
+      toolName: null,
+      summary: null,
+      timestamp: 5000, // more recent activity
+      payload: {},
+    })
+    await store.insertEvent({
+      agentId: 'a2',
+      sessionId: 'sess2',
+      type: 'user',
+      subtype: null,
+      toolName: null,
+      summary: null,
+      timestamp: 3000,
+      payload: {},
+    })
+
+    const recent = await store.getRecentSessions(10)
+    expect(recent).toHaveLength(2)
+    // sess1 has more recent last_activity (5000)
+    expect(recent[0].id).toBe('sess1')
+    expect(recent[1].id).toBe('sess2')
+    expect(recent[0].project_name).toBe('Project 1')
+    expect(recent[0].last_activity).toBe(5000)
+  })
+
+  test('respects limit parameter', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertSession('sess2', 'proj1', null, null, 2000)
+    await store.upsertSession('sess3', 'proj1', null, null, 3000)
+
+    const recent = await store.getRecentSessions(2)
+    expect(recent).toHaveLength(2)
+  })
+
+  test('returns aggregated counts', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
+    await store.upsertAgent('a2', 'sess1', 'a1', null, 'sub', 1000)
+
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'user',
+      subtype: null,
+      toolName: null,
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+
+    const recent = await store.getRecentSessions()
+    expect(recent).toHaveLength(1)
+    expect(recent[0].agent_count).toBe(2)
+    expect(recent[0].event_count).toBe(1)
+  })
+
+  test('session without events uses started_at for ordering', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess-no-events', 'proj1', null, null, 9000)
+    await store.upsertSession('sess-with-events', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess-with-events', null, null, null, 1000)
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess-with-events',
+      type: 'user',
+      subtype: null,
+      toolName: null,
+      summary: null,
+      timestamp: 5000,
+      payload: {},
+    })
+
+    const recent = await store.getRecentSessions()
+    expect(recent).toHaveLength(2)
+    // sess-no-events has COALESCE(NULL, 9000) = 9000
+    // sess-with-events has COALESCE(5000, 1000) = 5000
+    expect(recent[0].id).toBe('sess-no-events')
+    expect(recent[1].id).toBe('sess-with-events')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Deletion
+// ---------------------------------------------------------------------------
+describe('SqliteAdapter — deletion', () => {
+  test('deleteSession removes session, agents, and events but keeps project', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
+    await store.upsertAgent('a2', 'sess1', 'a1', null, 'sub', 1000)
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'user',
+      subtype: 'UserPromptSubmit',
+      toolName: null,
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+
+    await store.deleteSession('sess1')
+
+    const sessions = await store.getSessionsForProject('proj1')
+    expect(sessions).toHaveLength(0)
+    const agents = await store.getAgentsForSession('sess1')
+    expect(agents).toHaveLength(0)
+    const events = await store.getEventsForSession('sess1')
+    expect(events).toHaveLength(0)
+    const projects = await store.getProjects()
+    expect(projects).toHaveLength(1)
+  })
+
+  test('deleteProject cascades through sessions, agents, and events', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertSession('sess2', 'proj1', null, null, 2000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
+    await store.upsertAgent('a2', 'sess2', null, null, null, 2000)
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'user',
+      subtype: null,
+      toolName: null,
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+    await store.insertEvent({
+      agentId: 'a2',
+      sessionId: 'sess2',
+      type: 'user',
+      subtype: null,
+      toolName: null,
+      summary: null,
+      timestamp: 2000,
+      payload: {},
+    })
+
+    await store.deleteProject('proj1')
+
+    const projects = await store.getProjects()
+    expect(projects).toHaveLength(0)
+    const sessions = await store.getSessionsForProject('proj1')
+    expect(sessions).toHaveLength(0)
+    const events1 = await store.getEventsForSession('sess1')
+    expect(events1).toHaveLength(0)
+    const events2 = await store.getEventsForSession('sess2')
+    expect(events2).toHaveLength(0)
+    const agents1 = await store.getAgentsForSession('sess1')
+    expect(agents1).toHaveLength(0)
+    const agents2 = await store.getAgentsForSession('sess2')
+    expect(agents2).toHaveLength(0)
+  })
+
+  test('deleteProject with no sessions is a no-op beyond removing the project', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.deleteProject('proj1')
+    const projects = await store.getProjects()
+    expect(projects).toHaveLength(0)
+  })
+
+  test('clearAllData empties all tables', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'user',
+      subtype: null,
+      toolName: null,
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+
+    await store.clearAllData()
+    const projects = await store.getProjects()
+    expect(projects).toHaveLength(0)
+  })
+
+  test('clearSessionEvents removes events and agents but keeps the session', async () => {
+    await store.upsertProject('proj1', 'Project 1')
+    await store.upsertSession('sess1', 'proj1', 'my-session', null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null, 1000)
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'user',
+      subtype: null,
+      toolName: null,
+      summary: null,
+      timestamp: 1000,
+      payload: {},
+    })
+
+    await store.clearSessionEvents('sess1')
+
+    const session = await store.getSessionById('sess1')
+    expect(session).not.toBeNull()
+    const events = await store.getEventsForSession('sess1')
+    expect(events).toHaveLength(0)
+    const agents = await store.getAgentsForSession('sess1')
+    expect(agents).toHaveLength(0)
   })
 })
