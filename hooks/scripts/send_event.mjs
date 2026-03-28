@@ -5,11 +5,7 @@
 import { request } from 'node:http'
 import { readFileSync } from 'node:fs'
 
-const projectName = process.env.CLAUDE_OBSERVE_PROJECT_NAME
-if (!projectName) {
-  console.warn('[claude-observe] CLAUDE_OBSERVE_PROJECT_NAME not set — skipping event')
-  process.exit(0)
-}
+const projectNameOverride = process.env.CLAUDE_OBSERVE_PROJECT_NAME
 
 const eventsEndpoint =
   process.env.CLAUDE_OBSERVE_EVENTS_ENDPOINT || 'http://127.0.0.1:4981/api/events'
@@ -106,6 +102,23 @@ async function handleRequests(requests) {
   }
 }
 
+// ── Project name ─────────────────────────────────────────
+
+function deriveProjectName(payload) {
+  // 1. Env var override (backward compat with standalone mode)
+  if (projectNameOverride) return projectNameOverride
+
+  // 2. Derive from cwd in event payload
+  const cwd = payload.cwd
+  if (cwd) {
+    // Use directory basename as project name
+    const parts = cwd.replace(/\/+$/, '').split('/')
+    return parts[parts.length - 1] || 'unknown'
+  }
+
+  return 'unknown'
+}
+
 // ── Main ──────────────────────────────────────────────────
 
 let input = ''
@@ -123,7 +136,7 @@ process.stdin.on('end', async () => {
     process.exit(0)
   }
 
-  payload.project_name = projectName
+  payload.project_name = deriveProjectName(payload)
 
   const response = await postJson(eventsEndpoint, payload)
 
