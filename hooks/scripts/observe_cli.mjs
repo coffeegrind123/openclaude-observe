@@ -7,38 +7,19 @@ import { request as httpsRequest } from 'node:https'
 import { readFileSync } from 'node:fs'
 import { execFile } from 'node:child_process'
 
-// -- Config -------------------------------------------------------
-
-function parseArgs(args) {
-  const parsed = { commands: [], baseUrl: null, projectSlug: null }
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--base-url' && args[i + 1]) {
-      parsed.baseUrl = args[i + 1]
-      i++
-    } else if (args[i] === '--project-slug' && args[i + 1]) {
-      parsed.projectSlug = args[i + 1]
-      i++
-    } else if (!args[i].startsWith('-')) {
-      parsed.commands.push(args[i])
-    }
-  }
-  return parsed
-}
+// -- CLI Args -----------------------------------------------------
 
 const cliArgs = parseArgs(process.argv.slice(2))
 const command = cliArgs.commands[0] || 'hook'
 const subCommand = cliArgs.commands[1] || null
 
+// -- Set Vars -----------------------------------------------------
+
 const serverPort = process.env.CLAUDE_OBSERVE_SERVER_PORT || '4981'
 const apiBaseUrl =
-  cliArgs.baseUrl ||
-  process.env.CLAUDE_OBSERVE_API_BASE_URL ||
-  `http://127.0.0.1:${serverPort}/api`
+  cliArgs.baseUrl || process.env.CLAUDE_OBSERVE_API_BASE_URL || `http://127.0.0.1:${serverPort}/api`
 const baseOrigin = new URL(apiBaseUrl).origin
-
-const projectSlugOverride =
-  cliArgs.projectSlug || process.env.CLAUDE_OBSERVE_PROJECT_SLUG || null
-
+const projectSlugOverride = cliArgs.projectSlug || process.env.CLAUDE_OBSERVE_PROJECT_SLUG || null
 const allowedCallbacks = (() => {
   const val = (process.env.CLAUDE_OBSERVE_ALLOW_LOCAL_CALLBACKS || 'all').trim().toLowerCase()
   if (val === 'all') return null // null means allow all
@@ -50,10 +31,10 @@ const allowedCallbacks = (() => {
   )
 })()
 
-// -- Docker config ------------------------------------------------
-
+// Docker Config
 const containerName = process.env.CLAUDE_OBSERVE_DOCKER_CONTAINER_NAME || 'claude-observe'
-const dockerImage = process.env.CLAUDE_OBSERVE_DOCKER_IMAGE || 'ghcr.io/simple10/claude-observe:v0.5.0'
+const dockerImage =
+  process.env.CLAUDE_OBSERVE_DOCKER_IMAGE || 'ghcr.io/simple10/claude-observe:v0.5.0'
 const port = new URL(baseOrigin).port || '4981'
 const dataDir = process.env.CLAUDE_OBSERVE_DATA_DIR || `${process.env.HOME}/.claude-observe/data`
 
@@ -115,21 +96,6 @@ function postJson(url, data) {
 
 function getJson(url) {
   return httpRequest(url, { method: 'GET' }, null)
-}
-
-// -- Shell helpers ------------------------------------------------
-
-function run(cmd, args) {
-  return new Promise((resolve) => {
-    execFile(cmd, args, { timeout: 30000 }, (err, stdout, stderr) => {
-      resolve({
-        ok: !err,
-        code: err?.code ?? 0,
-        stdout: stdout?.trim() || '',
-        stderr: stderr?.trim() || '',
-      })
-    })
-  })
 }
 
 // -- Callback handlers --------------------------------------------
@@ -272,14 +238,22 @@ async function serverStartCommand() {
   }
 
   const runResult = await run('docker', [
-    'run', '-d',
-    '--name', containerName,
-    '-p', `${port}:${port}`,
-    '-e', `CLAUDE_OBSERVE_SERVER_PORT=${port}`,
-    '-e', `CLAUDE_OBSERVE_DB_PATH=/data/observe.db`,
-    '-e', `CLAUDE_OBSERVE_CLIENT_DIST_PATH=/app/client/dist`,
-    '-e', `CLAUDE_OBSERVE_WEBSOCKET=true`,
-    '-v', `${dataDir}:/data`,
+    'run',
+    '-d',
+    '--name',
+    containerName,
+    '-p',
+    `${port}:${port}`,
+    '-e',
+    `CLAUDE_OBSERVE_SERVER_PORT=${port}`,
+    '-e',
+    `CLAUDE_OBSERVE_DB_PATH=/data/observe.db`,
+    '-e',
+    `CLAUDE_OBSERVE_CLIENT_DIST_PATH=/app/client/dist`,
+    '-e',
+    `CLAUDE_OBSERVE_WEBSOCKET=true`,
+    '-v',
+    `${dataDir}:/data`,
     dockerImage,
   ])
 
@@ -316,9 +290,12 @@ async function serverStopCommand() {
 async function serverStatusCommand() {
   // Container status
   const psResult = await run('docker', [
-    'ps', '-a',
-    '--filter', `name=${containerName}`,
-    '--format', 'Name: {{.Names}}\nStatus: {{.Status}}\nPorts: {{.Ports}}',
+    'ps',
+    '-a',
+    '--filter',
+    `name=${containerName}`,
+    '--format',
+    'Name: {{.Names}}\nStatus: {{.Status}}\nPorts: {{.Ports}}',
   ])
 
   if (psResult.stdout) {
@@ -342,6 +319,38 @@ async function serverStatusCommand() {
     console.log(`Server: error (${JSON.stringify(h.body)})`)
   }
   process.exit(h.status === 200 ? 0 : 1)
+}
+
+// -- Helpers ------------------------------------------------------
+
+function parseArgs(args) {
+  const parsed = { commands: [], baseUrl: null, projectSlug: null }
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--base-url' && args[i + 1]) {
+      parsed.baseUrl = args[i + 1]
+      i++
+    } else if (args[i] === '--project-slug' && args[i + 1]) {
+      parsed.projectSlug = args[i + 1]
+      i++
+    } else if (!args[i].startsWith('-')) {
+      parsed.commands.push(args[i])
+    }
+  }
+  return parsed
+}
+
+/* Run shell commands */
+function run(cmd, args) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout: 30000 }, (err, stdout, stderr) => {
+      resolve({
+        ok: !err,
+        code: err?.code ?? 0,
+        stdout: stdout?.trim() || '',
+        stderr: stderr?.trim() || '',
+      })
+    })
+  })
 }
 
 // -- Main ---------------------------------------------------------
