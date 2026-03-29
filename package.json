@@ -8,6 +8,7 @@
   "private": true,
   "scripts": {
     "test": "cd app/server && npm test && cd ../client && npm test",
-    "test:watch": "cd app/server && npm run test:watch & cd app/client && npm run test:watch & wait"
+    "test:server:watch": "cd app/server && npm run test:watch",
+    "test:client:watch": "cd app/server && npm run test:watch"
   }
 }

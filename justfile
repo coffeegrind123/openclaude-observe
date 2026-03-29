@@ -86,10 +86,6 @@ dev-client-build:
 test:
     npm test
 
-# Run all tests in watch mode
-test-watch:
-    npm run test:watch
-
 # Send a test event to the server
 test-event:
     @echo '{"session_id":"test-1234","hook_event_name":"SessionStart","cwd":"/tmp","source":"new"}' \
@@ -108,13 +104,13 @@ db-reset:
 # Generate hooks config for a project's .claude/settings.json
 setup-hooks project_slug:
     #!/usr/bin/env bash
-    hook_script="{{project_root}}/hooks/scripts/observe_cli.mjs"
-    endpoint="http://127.0.0.1:{{port}}/api/events"
+    hook_script="{{ project_root }}/hooks/scripts/observe_cli.mjs"
+    endpoint="http://127.0.0.1:{{ port }}/api/events"
     sed \
-      -e "s|__PROJECT_SLUG__|{{project_slug}}|g" \
+      -e "s|__PROJECT_SLUG__|{{ project_slug }}|g" \
       -e "s|__EVENTS_ENDPOINT__|${endpoint}|g" \
       -e "s|__HOOK_SCRIPT__|${hook_script}|g" \
-      "{{project_root}}/settings.template.json"
+      "{{ project_root }}/settings.template.json"
     echo ""
     echo "Copy the above JSON into your project's .claude/settings.json"
 
