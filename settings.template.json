@@ -1,7 +1,6 @@
 {
   "env": {
-    "CLAUDE_OBSERVE_PROJECT_SLUG": "__PROJECT_SLUG__",
-    "CLAUDE_OBSERVE_EVENTS_ENDPOINT": "__EVENTS_ENDPOINT__"
+    "CLAUDE_OBSERVE_PROJECT_SLUG": "__PROJECT_SLUG__"
   },
   "hooks": {
     "SessionStart": [

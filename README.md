@@ -116,7 +116,7 @@ This prints a JSON snippet with all paths pre-filled. Copy it into your Claude C
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CLAUDE_OBSERVE_PROJECT_SLUG` | (auto-detected) | Project slug shown in the dashboard URL. If not set, derived from the session transcript path. |
-| `CLAUDE_OBSERVE_EVENTS_ENDPOINT` | `http://127.0.0.1:4981/api/events` | Full URL for the events endpoint |
+| `CLAUDE_OBSERVE_API_BASE_URL` | `http://127.0.0.1:4981/api` | Full URL for the events endpoint |
 
 ### 3. Verify it works
 

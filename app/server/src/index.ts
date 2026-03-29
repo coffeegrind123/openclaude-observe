@@ -6,7 +6,7 @@ import { createStore } from './storage'
 import { attachWebSocket, broadcast } from './websocket'
 
 const store = createStore()
-const PORT = parseInt(process.env.CLAUDE_OBSERVE_PORT || '4981', 10)
+const PORT = parseInt(process.env.CLAUDE_OBSERVE_SERVER_PORT || '4981', 10)
 const WS_ENABLED = process.env.CLAUDE_OBSERVE_WEBSOCKET !== 'false'
 
 const app = createApp(store, broadcast)

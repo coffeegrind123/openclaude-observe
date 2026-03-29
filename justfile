@@ -1,7 +1,7 @@
 # Claude Observe
 # Usage: just <recipe>
 #
-# CLAUDE_OBSERVE_PORT & CLAUDE_OBSERVE_CLIENT_PORT are read from .env
+# CLAUDE_OBSERVE_SERVER_PORT & CLAUDE_OBSERVE_CLIENT_PORT are read from .env
 # Allows for overriding the default ports
 # Server port is used for both local dev & docker starts
 # Client port is only for local dev
@@ -9,7 +9,7 @@
 set dotenv-load := true
 set quiet := true
 
-port := env("CLAUDE_OBSERVE_PORT", "4981")
+port := env("CLAUDE_OBSERVE_SERVER_PORT", "4981")
 client_port := env("CLAUDE_OBSERVE_CLIENT_PORT", "5174")
 project_root := justfile_directory()
 server := project_root / "app" / "server"
@@ -89,7 +89,7 @@ test:
 # Send a test event to the server
 test-event:
     @echo '{"session_id":"test-1234","hook_event_name":"SessionStart","cwd":"/tmp","source":"new"}' \
-      | CLAUDE_OBSERVE_PROJECT_NAME=test-project CLAUDE_OBSERVE_EVENTS_ENDPOINT=http://127.0.0.1:{{ port }}/api/events node {{ project_root }}/hooks/scripts/observe_cli.mjs
+      | CLAUDE_OBSERVE_PROJECT_NAME=test-project node {{ project_root }}/hooks/scripts/observe_cli.mjs
     @echo "Event sent"
 
 # ─── Database ────────────────────────────────────────────
@@ -105,10 +105,8 @@ db-reset:
 setup-hooks project_slug:
     #!/usr/bin/env bash
     hook_script="{{ project_root }}/hooks/scripts/observe_cli.mjs"
-    endpoint="http://127.0.0.1:{{ port }}/api/events"
     sed \
       -e "s|__PROJECT_SLUG__|{{ project_slug }}|g" \
-      -e "s|__EVENTS_ENDPOINT__|${endpoint}|g" \
       -e "s|__HOOK_SCRIPT__|${hook_script}|g" \
       "{{ project_root }}/settings.template.json"
     echo ""

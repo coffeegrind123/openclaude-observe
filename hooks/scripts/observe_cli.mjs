@@ -29,14 +29,12 @@ const cliArgs = parseArgs(process.argv.slice(2))
 const command = cliArgs.commands[0] || 'hook'
 const subCommand = cliArgs.commands[1] || null
 
-const baseUrl =
+const serverPort = process.env.CLAUDE_OBSERVE_SERVER_PORT || '4981'
+const apiBaseUrl =
   cliArgs.baseUrl ||
-  process.env.CLAUDE_OBSERVE_BASE_URL ||
-  (() => {
-    const endpoint =
-      process.env.CLAUDE_OBSERVE_EVENTS_ENDPOINT || 'http://127.0.0.1:4981/api/events'
-    return new URL(endpoint).origin
-  })()
+  process.env.CLAUDE_OBSERVE_API_BASE_URL ||
+  `http://127.0.0.1:${serverPort}/api`
+const baseOrigin = new URL(apiBaseUrl).origin
 
 const projectSlugOverride =
   cliArgs.projectSlug || process.env.CLAUDE_OBSERVE_PROJECT_SLUG || null
@@ -54,12 +52,9 @@ const allowedCallbacks = (() => {
 
 // -- Docker config ------------------------------------------------
 
-const containerName = process.env.CLAUDE_OBSERVE_CONTAINER || 'claude-observe'
-const dockerImage = process.env.CLAUDE_OBSERVE_IMAGE || 'ghcr.io/simple10/claude-observe:v0.5.0'
-const port = (() => {
-  const url = new URL(baseUrl)
-  return url.port || '4981'
-})()
+const containerName = process.env.CLAUDE_OBSERVE_DOCKER_CONTAINER_NAME || 'claude-observe'
+const dockerImage = process.env.CLAUDE_OBSERVE_DOCKER_IMAGE || 'ghcr.io/simple10/claude-observe:v0.5.0'
+const port = new URL(baseOrigin).port || '4981'
 const dataDir = process.env.CLAUDE_OBSERVE_DATA_DIR || `${process.env.HOME}/.claude-observe/data`
 
 // -- HTTP helpers -------------------------------------------------
@@ -178,7 +173,7 @@ async function handleRequests(requests) {
     if (!handler) continue
     const result = handler(req.args || {})
     if (result && req.callback) {
-      await postJson(`${baseUrl}${req.callback}`, result)
+      await postJson(`${baseOrigin}${req.callback}`, result)
     }
   }
 }
@@ -212,10 +207,10 @@ async function hookCommand() {
       envelope.meta.env.CLAUDE_OBSERVE_PROJECT_SLUG = projectSlugOverride
     }
 
-    const result = await postJson(`${baseUrl}/api/events`, envelope)
+    const result = await postJson(`${apiBaseUrl}/events`, envelope)
 
     if (result.status === 0) {
-      console.warn(`[claude-observe] Server unreachable at ${baseUrl}: ${result.error}`)
+      console.warn(`[claude-observe] Server unreachable at ${baseOrigin}: ${result.error}`)
       process.exit(0)
     }
 
@@ -228,12 +223,12 @@ async function hookCommand() {
 }
 
 async function healthCommand() {
-  const result = await getJson(`${baseUrl}/api/health`)
+  const result = await getJson(`${apiBaseUrl}/health`)
   if (result.status === 200 && result.body?.ok) {
-    console.log(`Claude Observe is running. Dashboard: ${baseUrl}`)
+    console.log(`Claude Observe is running. Dashboard: ${baseOrigin}`)
     process.exit(0)
   } else if (result.status === 0) {
-    console.log(`Claude Observe server is not running at ${baseUrl}`)
+    console.log(`Claude Observe server is not running at ${baseOrigin}`)
     process.exit(1)
   } else {
     console.log(`Claude Observe server error: ${JSON.stringify(result.body)}`)
@@ -251,9 +246,9 @@ async function serverStartCommand() {
   }
 
   // Check if already healthy
-  const healthResult = await getJson(`${baseUrl}/api/health`)
+  const healthResult = await getJson(`${apiBaseUrl}/health`)
   if (healthResult.status === 200 && healthResult.body?.ok) {
-    console.log(`Server already running. Dashboard: ${baseUrl}`)
+    console.log(`Server already running. Dashboard: ${baseOrigin}`)
     process.exit(0)
   }
 
@@ -280,7 +275,7 @@ async function serverStartCommand() {
     'run', '-d',
     '--name', containerName,
     '-p', `${port}:${port}`,
-    '-e', `CLAUDE_OBSERVE_PORT=${port}`,
+    '-e', `CLAUDE_OBSERVE_SERVER_PORT=${port}`,
     '-e', `CLAUDE_OBSERVE_DB_PATH=/data/observe.db`,
     '-e', `CLAUDE_OBSERVE_CLIENT_DIST_PATH=/app/client/dist`,
     '-e', `CLAUDE_OBSERVE_WEBSOCKET=true`,
@@ -296,10 +291,10 @@ async function serverStartCommand() {
   // Wait for health
   console.error('[claude-observe] Waiting for server to start...')
   for (let i = 0; i < 15; i++) {
-    const h = await getJson(`${baseUrl}/api/health`)
+    const h = await getJson(`${apiBaseUrl}/health`)
     if (h.status === 200 && h.body?.ok) {
       console.error('[claude-observe] Server started successfully')
-      console.log(`Dashboard: ${baseUrl}`)
+      console.log(`Dashboard: ${baseOrigin}`)
       process.exit(0)
     }
     await new Promise((r) => setTimeout(r, 1000))
@@ -337,10 +332,10 @@ async function serverStatusCommand() {
   // Health check
   console.log('')
   console.log('=== Health ===')
-  const h = await getJson(`${baseUrl}/api/health`)
+  const h = await getJson(`${apiBaseUrl}/health`)
   if (h.status === 200 && h.body?.ok) {
     console.log(`Server: healthy`)
-    console.log(`Dashboard: ${baseUrl}`)
+    console.log(`Dashboard: ${baseOrigin}`)
   } else if (h.status === 0) {
     console.log('Server: not responding')
   } else {
