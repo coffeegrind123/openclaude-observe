@@ -6,5 +6,6 @@ export function useSessions(projectId: number | null) {
     queryKey: ['sessions', projectId],
     queryFn: () => api.getSessions(projectId!),
     enabled: !!projectId,
+    refetchInterval: 30_000,
   })
 }

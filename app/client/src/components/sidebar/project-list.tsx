@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import { useProjects } from '@/hooks/use-projects'
 import { useSessions } from '@/hooks/use-sessions'
+import { useEvents } from '@/hooks/use-events'
 import { useUIStore } from '@/stores/ui-store'
 import { cn } from '@/lib/utils'
 import { ChevronDown, ChevronRight, Folder, Pencil } from 'lucide-react'
@@ -236,6 +237,7 @@ function SessionList({ projectId }: { projectId: number }) {
   const { data: sessions } = useSessions(projectId)
   const { selectedSessionId, setSelectedSessionId } = useUIStore()
   const queryClient = useQueryClient()
+  const { data: currentEvents } = useEvents(selectedSessionId)
 
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -351,9 +353,9 @@ function SessionList({ projectId }: { projectId: number }) {
                           {formatRelativeTime(session.startedAt)}
                         </span>
                       )}
-                      {!isEditing && session.eventCount != null && (
+                      {!isEditing && (session.eventCount != null || (session.id === selectedSessionId && currentEvents)) && (
                         <Badge variant="outline" className="text-[9px] h-3.5 px-1 shrink-0">
-                          {session.eventCount}
+                          {session.id === selectedSessionId && currentEvents ? currentEvents.length : session.eventCount}
                         </Badge>
                       )}
                     </button>

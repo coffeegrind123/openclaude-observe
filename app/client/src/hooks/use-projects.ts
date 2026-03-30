@@ -5,5 +5,6 @@ export function useProjects() {
   return useQuery({
     queryKey: ['projects'],
     queryFn: api.getProjects,
+    refetchInterval: 60_000,
   })
 }
