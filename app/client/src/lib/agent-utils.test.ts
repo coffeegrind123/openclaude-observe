@@ -12,7 +12,7 @@ function makeAgent(overrides: Partial<Agent>): Agent {
     id: 'agent-1',
     sessionId: 'sess-1',
     parentAgentId: null,
-    slug: null,
+    description: null,
     name: null,
     status: 'active',
     eventCount: 0,
@@ -36,21 +36,21 @@ describe('getAgentDisplayName', () => {
     expect(getAgentDisplayName(agent)).toBe('code-reviewer')
   })
 
-  it('should fall back to slug for subagent without name', () => {
+  it('should fall back to description for subagent without name', () => {
     const agent = makeAgent({
       parentAgentId: 'parent-1',
       name: null,
-      slug: 'review-agent',
+      description: 'Review the code for issues',
     })
-    expect(getAgentDisplayName(agent)).toBe('review-agent')
+    expect(getAgentDisplayName(agent)).toBe('Review the code for issues')
   })
 
-  it('should fall back to truncated ID for subagent without name or slug', () => {
+  it('should fall back to truncated ID for subagent without name or description', () => {
     const agent = makeAgent({
       id: 'abcdefgh-1234-5678',
       parentAgentId: 'parent-1',
       name: null,
-      slug: null,
+      description: null,
     })
     expect(getAgentDisplayName(agent)).toBe('abcdefgh')
   })

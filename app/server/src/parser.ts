@@ -17,6 +17,7 @@ export interface ParsedRawEvent {
   // The subagent being spawned/stopped (from Agent tool response or SubagentStop)
   subAgentId: string | null
   subAgentName: string | null
+  subAgentDescription: string | null
   metadata: Record<string, unknown>
   raw: Record<string, unknown>
 }
@@ -36,6 +37,7 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
   let toolName: string | null = null
   let subAgentId: string | null = null
   let subAgentName: string | null = null
+  let subAgentDescription: string | null = null
 
   const hookEventName = raw.hook_event_name as string | undefined
 
@@ -58,7 +60,8 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
         subtype = 'PreToolUse'
         toolName = hookToolName || null
         if (toolName === 'Agent') {
-          subAgentName = (toolInput?.description as string) || null
+          subAgentName = (toolInput?.name as string) || null
+          subAgentDescription = (toolInput?.description as string) || null
         }
         break
       case 'PostToolUse':
@@ -70,7 +73,8 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
           const toolResponse = raw.tool_response as Record<string, unknown> | undefined
           if (toolResponse) {
             subAgentId = (toolResponse.agentId as string) || null
-            subAgentName = (toolInput?.description as string) || null
+            subAgentName = (toolInput?.name as string) || null
+            subAgentDescription = (toolInput?.description as string) || null
           }
         }
         break
@@ -149,7 +153,8 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
           toolName = (toolUse.name as string) || null
           if (toolName === 'Agent') {
             const input = toolUse.input as Record<string, unknown> | undefined
-            subAgentName = (input?.description as string) || null
+            subAgentName = (input?.name as string) || null
+            subAgentDescription = (input?.description as string) || null
           }
         }
       }
@@ -186,6 +191,7 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
     ownerAgentId,
     subAgentId,
     subAgentName,
+    subAgentDescription,
     metadata,
     raw,
   }

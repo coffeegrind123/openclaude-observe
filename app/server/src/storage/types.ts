@@ -54,14 +54,14 @@ export interface EventStore {
     id: string,
     sessionId: string,
     parentAgentId: string | null,
-    slug: string | null,
     name: string | null,
+    description: string | null,
     agentType?: string | null,
   ): Promise<void>
   updateAgentType(id: string, agentType: string): Promise<void>
   updateSessionStatus(id: string, status: string): Promise<void>
   updateSessionSlug(sessionId: string, slug: string): Promise<void>
-  updateAgentSlug(agentId: string, slug: string): Promise<void>
+  updateAgentName(agentId: string, name: string): Promise<void>
   insertEvent(params: InsertEventParams): Promise<number>
   getProjects(): Promise<any[]>
   getSessionsForProject(projectId: number): Promise<any[]>

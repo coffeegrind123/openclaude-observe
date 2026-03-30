@@ -25,8 +25,8 @@ export interface ServerAgent {
   id: string
   sessionId: string
   parentAgentId: string | null
-  slug: string | null
   name: string | null
+  description: string | null
   agentType?: string | null
 }
 

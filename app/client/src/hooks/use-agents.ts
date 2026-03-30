@@ -30,13 +30,15 @@ export function useAgents(sessionId: string | null, events: ParsedEvent[] | unde
       eventCount: number
       firstEventAt: number
       lastEventAt: number
-      hasStopped: boolean
+      lastStoppedAt: number // timestamp of last stop signal, 0 if never
     }>()
+
+    const stopSubtypes = new Set(['Stop', 'SessionEnd', 'stop_hook_summary'])
 
     for (const e of events) {
       let stats = agentStats.get(e.agentId)
       if (!stats) {
-        stats = { eventCount: 0, firstEventAt: e.timestamp, lastEventAt: e.timestamp, hasStopped: false }
+        stats = { eventCount: 0, firstEventAt: e.timestamp, lastEventAt: e.timestamp, lastStoppedAt: 0 }
         agentStats.set(e.agentId, stats)
       }
       stats.eventCount++
@@ -44,8 +46,8 @@ export function useAgents(sessionId: string | null, events: ParsedEvent[] | unde
       if (e.timestamp > stats.lastEventAt) stats.lastEventAt = e.timestamp
 
       // Stop signals for this agent's own events
-      if (e.subtype === 'Stop' || e.subtype === 'SessionEnd' || e.subtype === 'stop_hook_summary') {
-        stats.hasStopped = true
+      if (stopSubtypes.has(e.subtype ?? '')) {
+        stats.lastStoppedAt = Math.max(stats.lastStoppedAt, e.timestamp)
       }
 
       // SubagentStop targets the agent ID in the payload, not the event's agentId
@@ -53,7 +55,9 @@ export function useAgents(sessionId: string | null, events: ParsedEvent[] | unde
         const targetId = (e.payload as any)?.agent_id
         if (targetId) {
           const targetStats = agentStats.get(targetId)
-          if (targetStats) targetStats.hasStopped = true
+          if (targetStats) {
+            targetStats.lastStoppedAt = Math.max(targetStats.lastStoppedAt, e.timestamp)
+          }
         }
       }
     }
@@ -88,10 +92,11 @@ export function useAgents(sessionId: string | null, events: ParsedEvent[] | unde
         id: agentId,
         sessionId: sessionId || '',
         parentAgentId: server?.parentAgentId ?? null,
-        slug: server?.slug ?? null,
+        description: server?.description ?? null,
         name: server?.name ?? null,
         agentType: server?.agentType ?? null,
-        status: stats.hasStopped ? 'stopped' : 'active',
+        // Agent is stopped if the last stop signal came after or at the last activity
+        status: stats.lastStoppedAt >= stats.lastEventAt ? 'stopped' : 'active',
         eventCount: stats.eventCount,
         firstEventAt: stats.firstEventAt,
         lastEventAt: stats.lastEventAt,

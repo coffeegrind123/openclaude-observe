@@ -48,8 +48,8 @@ export class SqliteAdapter implements EventStore {
         id TEXT PRIMARY KEY,
         session_id TEXT NOT NULL,
         parent_agent_id TEXT,
-        slug TEXT,
         name TEXT,
+        description TEXT,
         agent_type TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -145,24 +145,24 @@ export class SqliteAdapter implements EventStore {
     id: string,
     sessionId: string,
     parentAgentId: string | null,
-    slug: string | null,
     name: string | null,
+    description: string | null,
     agentType?: string | null,
   ): Promise<void> {
     const now = Date.now()
     this.db
       .prepare(
         `
-      INSERT INTO agents (id, session_id, parent_agent_id, slug, name, agent_type, created_at, updated_at)
+      INSERT INTO agents (id, session_id, parent_agent_id, name, description, agent_type, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
-        slug = COALESCE(excluded.slug, agents.slug),
         name = COALESCE(excluded.name, agents.name),
+        description = COALESCE(excluded.description, agents.description),
         agent_type = COALESCE(excluded.agent_type, agents.agent_type),
         updated_at = ?
     `,
       )
-      .run(id, sessionId, parentAgentId, slug, name, agentType ?? null, now, now, now)
+      .run(id, sessionId, parentAgentId, name, description, agentType ?? null, now, now, now)
   }
 
   async updateAgentType(id: string, agentType: string): Promise<void> {
@@ -189,8 +189,8 @@ export class SqliteAdapter implements EventStore {
       .run(slug, sessionId)
   }
 
-  async updateAgentSlug(agentId: string, slug: string): Promise<void> {
-    this.db.prepare('UPDATE agents SET slug = ?, updated_at = ? WHERE id = ?').run(slug, Date.now(), agentId)
+  async updateAgentName(agentId: string, name: string): Promise<void> {
+    this.db.prepare('UPDATE agents SET name = ?, updated_at = ? WHERE id = ?').run(name, Date.now(), agentId)
   }
 
   async insertEvent(params: InsertEventParams): Promise<number> {

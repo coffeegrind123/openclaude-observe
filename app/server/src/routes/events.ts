@@ -20,28 +20,28 @@ const LOG_LEVEL = process.env.CLAUDE_OBSERVE_LOG_LEVEL || 'debug'
 // Track root agent IDs per session (sessionId -> agentId)
 const sessionRootAgents = new Map<string, string>()
 
-// Track pending Agent tool descriptions so we can name subagents early.
-// When PreToolUse:Agent fires, we store the description keyed by tool_use_id
-// and also push it onto a per-session FIFO queue. The queue is necessary because
+// Track pending Agent tool metadata so we can name subagents early.
+// When PreToolUse:Agent fires, we store name+description keyed by tool_use_id
+// and also push onto a per-session FIFO queue. The queue is necessary because
 // subagent events carry only agent_id (not the parent tool_use_id), so we can't
 // directly look up by tool_use_id when a new subagent first appears.
 //
 // When multiple Agent tools are invoked concurrently (e.g. two subagents spawned
 // in the same turn), each gets its own queue entry so names are assigned 1:1.
-const pendingAgentNames = new Map<string, string>() // toolUseId -> description
+interface PendingAgentMeta { name: string | null; description: string | null }
+const pendingAgentMeta = new Map<string, PendingAgentMeta>() // toolUseId -> { name, description }
 const pendingAgentTypes = new Map<string, string>() // toolUseId -> subagent_type
-const pendingAgentNameQueue = new Map<string, string[]>() // sessionId -> FIFO queue of descriptions
+const pendingAgentMetaQueue = new Map<string, PendingAgentMeta[]>() // sessionId -> FIFO queue
 const namedAgents = new Map<string, Set<string>>() // sessionId -> set of agent IDs already named via queue
 
 async function ensureRootAgent(
   store: EventStore,
   sessionId: string,
-  slug: string | null,
 ): Promise<string> {
   let rootId = sessionRootAgents.get(sessionId)
   if (!rootId) {
     rootId = sessionId
-    await store.upsertAgent(rootId, sessionId, null, slug, null)
+    await store.upsertAgent(rootId, sessionId, null, null, null)
     sessionRootAgents.set(sessionId, rootId)
   }
   return rootId
@@ -109,20 +109,21 @@ router.post('/events', async (c) => {
       parsed.timestamp,
     )
 
-    const rootAgentId = await ensureRootAgent(store, parsed.sessionId, parsed.slug)
+    const rootAgentId = await ensureRootAgent(store, parsed.sessionId)
 
-    // When PreToolUse:Agent fires, stash the description for early naming.
+    // When PreToolUse:Agent fires, stash name + description for early naming.
     // We store it both by toolUseId (for definitive lookup at PostToolUse) and
     // in a per-session FIFO queue (for early naming when subagent events arrive
     // before PostToolUse, since those events don't carry the parent tool_use_id).
     if (parsed.subtype === 'PreToolUse' && parsed.toolName === 'Agent') {
-      if (parsed.subAgentName) {
+      const meta: PendingAgentMeta = { name: parsed.subAgentName, description: parsed.subAgentDescription }
+      if (meta.name || meta.description) {
         if (parsed.toolUseId) {
-          pendingAgentNames.set(parsed.toolUseId, parsed.subAgentName)
+          pendingAgentMeta.set(parsed.toolUseId, meta)
         }
-        const queue = pendingAgentNameQueue.get(parsed.sessionId) || []
-        queue.push(parsed.subAgentName)
-        pendingAgentNameQueue.set(parsed.sessionId, queue)
+        const queue = pendingAgentMetaQueue.get(parsed.sessionId) || []
+        queue.push(meta)
+        pendingAgentMetaQueue.set(parsed.sessionId, queue)
       }
       // Stash agent type from tool_input.subagent_type
       const agentType = (hookPayload as any)?.tool_input?.subagent_type
@@ -135,23 +136,19 @@ router.post('/events', async (c) => {
     // belongs to that agent. Ensure the agent record exists.
     if (parsed.ownerAgentId && parsed.ownerAgentId !== rootAgentId) {
       // Only consume a queue entry for agents we haven't named yet.
-      // This prevents subsequent events from the same agent re-consuming names
-      // that belong to other agents.
       const sessionNamed = namedAgents.get(parsed.sessionId)
       const alreadyNamed = sessionNamed?.has(parsed.ownerAgentId) ?? false
-      let pendingName: string | null = null
+      let pending: PendingAgentMeta | null = null
 
       if (!alreadyNamed) {
-        // Consume the next name from the FIFO queue for this session
-        const queue = pendingAgentNameQueue.get(parsed.sessionId)
+        const queue = pendingAgentMetaQueue.get(parsed.sessionId)
         if (queue && queue.length > 0) {
-          pendingName = queue.shift()!
+          pending = queue.shift()!
           if (queue.length === 0) {
-            pendingAgentNameQueue.delete(parsed.sessionId)
+            pendingAgentMetaQueue.delete(parsed.sessionId)
           }
         }
-        // Track that we've named this agent via the queue
-        if (pendingName) {
+        if (pending) {
           if (!sessionNamed) {
             namedAgents.set(parsed.sessionId, new Set([parsed.ownerAgentId]))
           } else {
@@ -164,24 +161,23 @@ router.post('/events', async (c) => {
         parsed.ownerAgentId,
         parsed.sessionId,
         rootAgentId,
-        null,
-        pendingName,
+        pending?.name ?? null,
+        pending?.description ?? null,
       )
     }
     let agentId = parsed.ownerAgentId || rootAgentId
 
     // Create/update subagent records (from Agent tool PostToolUse or SubagentStop)
     if (parsed.subAgentId) {
-      // For PostToolUse:Agent, prefer the name from the toolUseId-keyed map
-      // (set at PreToolUse time) since parsed.subAgentName comes from the same
-      // tool_input. Also clean up the pending map entry.
       let subAgentName = parsed.subAgentName
+      let subAgentDescription = parsed.subAgentDescription
       let subAgentType: string | null = null
       if (parsed.subtype === 'PostToolUse' && parsed.toolName === 'Agent' && parsed.toolUseId) {
-        const nameFromPre = pendingAgentNames.get(parsed.toolUseId)
-        if (nameFromPre) {
-          subAgentName = subAgentName || nameFromPre
-          pendingAgentNames.delete(parsed.toolUseId)
+        const metaFromPre = pendingAgentMeta.get(parsed.toolUseId)
+        if (metaFromPre) {
+          subAgentName = subAgentName || metaFromPre.name
+          subAgentDescription = subAgentDescription || metaFromPre.description
+          pendingAgentMeta.delete(parsed.toolUseId)
         }
         subAgentType = pendingAgentTypes.get(parsed.toolUseId) ?? null
         pendingAgentTypes.delete(parsed.toolUseId)
@@ -191,8 +187,8 @@ router.post('/events', async (c) => {
         parsed.subAgentId,
         parsed.sessionId,
         rootAgentId,
-        null,
         subAgentName,
+        subAgentDescription,
         subAgentType,
       )
 
@@ -324,17 +320,15 @@ router.get('/events/:id/thread', async (c) => {
 /** Remove a single session from the in-memory root agent cache */
 export function removeSessionRootAgent(sessionId: string): void {
   sessionRootAgents.delete(sessionId)
-  pendingAgentNameQueue.delete(sessionId)
+  pendingAgentMetaQueue.delete(sessionId)
   namedAgents.delete(sessionId)
-  // pendingAgentNames is keyed by toolUseId, not sessionId, so we can't
-  // selectively clean it here — entries are cleaned up at PostToolUse time.
 }
 
 /** Clear all in-memory session state */
 export function clearSessionRootAgents(): void {
   sessionRootAgents.clear()
-  pendingAgentNames.clear()
-  pendingAgentNameQueue.clear()
+  pendingAgentMeta.clear()
+  pendingAgentMetaQueue.clear()
   namedAgents.clear()
 }
 

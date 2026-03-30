@@ -67,8 +67,8 @@ router.get('/sessions/:id/agents', async (c) => {
     id: r.id,
     sessionId: r.session_id,
     parentAgentId: r.parent_agent_id,
-    slug: r.slug,
     name: r.name,
+    description: r.description,
     agentType: r.agent_type || null,
   }))
   return c.json(agents)
@@ -133,7 +133,6 @@ router.post('/sessions/:id/metadata', async (c) => {
 
     if (data.slug && typeof data.slug === 'string') {
       await store.updateSessionSlug(sessionId, data.slug)
-      await store.updateAgentSlug(sessionId, data.slug)
 
       if (LOG_LEVEL === 'debug') {
         console.log(`[METADATA] Session ${sessionId.slice(0, 8)} slug: ${data.slug}`)

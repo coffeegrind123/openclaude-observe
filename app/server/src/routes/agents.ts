@@ -39,8 +39,8 @@ router.get('/agents/:id', async (c) => {
     id: row.id,
     sessionId: row.session_id,
     parentAgentId: row.parent_agent_id,
-    slug: row.slug,
     name: row.name,
+    description: row.description,
     agentType: row.agent_type || null,
   })
 })
@@ -53,11 +53,11 @@ router.post('/agents/:id/metadata', async (c) => {
     const agentIdParam = decodeURIComponent(c.req.param('id'))
     const data = (await c.req.json()) as Record<string, unknown>
 
-    if (data.slug && typeof data.slug === 'string') {
-      await store.updateAgentSlug(agentIdParam, data.slug)
+    if (data.name && typeof data.name === 'string') {
+      await store.updateAgentName(agentIdParam, data.name)
 
       if (LOG_LEVEL === 'debug') {
-        console.log(`[METADATA] Agent ${agentIdParam.slice(0, 8)} slug: ${data.slug}`)
+        console.log(`[METADATA] Agent ${agentIdParam.slice(0, 8)} name: ${data.name}`)
       }
     }
 

@@ -56,7 +56,8 @@ describe('parseRawEvent — transcript JSONL format', () => {
     const result = parseRawEvent(raw)
     expect(result.type).toBe('assistant')
     expect(result.toolName).toBe('Agent')
-    expect(result.subAgentName).toBe('List current directory')
+    expect(result.subAgentName).toBeNull()
+    expect(result.subAgentDescription).toBe('List current directory')
   })
 
   test('parses assistant tool_use for non-Agent tool (no subAgentName)', () => {
@@ -311,13 +312,13 @@ describe('parseRawEvent — hook format', () => {
     expect(result.subAgentName).toBeNull()
   })
 
-  test('PreToolUse with Agent tool extracts subAgentName from tool_input.description', () => {
+  test('PreToolUse with Agent tool extracts name and description from tool_input', () => {
     const raw = {
       hook_event_name: 'PreToolUse',
       project_name: 'hook-proj',
       session_id: 'hook-sess-1',
       tool_name: 'Agent',
-      tool_input: { description: 'Run ls in the repo', prompt: 'List files' },
+      tool_input: { name: 'ls-agent', description: 'Run ls in the repo', prompt: 'List files' },
       timestamp: 1711411202000,
     }
 
@@ -325,8 +326,8 @@ describe('parseRawEvent — hook format', () => {
     expect(result.type).toBe('tool')
     expect(result.subtype).toBe('PreToolUse')
     expect(result.toolName).toBe('Agent')
-    expect(result.subAgentName).toBe('Run ls in the repo')
-    // PreToolUse does not set subAgentId
+    expect(result.subAgentName).toBe('ls-agent')
+    expect(result.subAgentDescription).toBe('Run ls in the repo')
     expect(result.subAgentId).toBeNull()
   })
 
@@ -349,13 +350,13 @@ describe('parseRawEvent — hook format', () => {
     expect(result.subAgentName).toBeNull()
   })
 
-  test('PostToolUse with Agent tool extracts subAgentId and subAgentName', () => {
+  test('PostToolUse with Agent tool extracts subAgentId, name, and description', () => {
     const raw = {
       hook_event_name: 'PostToolUse',
       project_name: 'hook-proj',
       session_id: 'hook-sess-1',
       tool_name: 'Agent',
-      tool_input: { description: 'Search for files', prompt: 'Find all .ts files' },
+      tool_input: { name: 'file-searcher', description: 'Search for files', prompt: 'Find all .ts files' },
       tool_response: { agentId: 'sub-agent-abc', result: 'done' },
       timestamp: 1711411203000,
     }
@@ -365,7 +366,8 @@ describe('parseRawEvent — hook format', () => {
     expect(result.subtype).toBe('PostToolUse')
     expect(result.toolName).toBe('Agent')
     expect(result.subAgentId).toBe('sub-agent-abc')
-    expect(result.subAgentName).toBe('Search for files')
+    expect(result.subAgentName).toBe('file-searcher')
+    expect(result.subAgentDescription).toBe('Search for files')
   })
 
   test('PostToolUse:Agent without tool_response does not set subAgentId', () => {

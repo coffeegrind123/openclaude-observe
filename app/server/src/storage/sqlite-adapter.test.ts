@@ -196,17 +196,18 @@ describe('SqliteAdapter — sessions', () => {
 // Agents
 // ---------------------------------------------------------------------------
 describe('SqliteAdapter — agents', () => {
-  test('upsert agent with parent and name', async () => {
+  test('upsert agent with parent, name, and description', async () => {
     const projId = await store.createProject('proj1', 'Project 1', null)
     await store.upsertSession('sess1', projId, null, null, 1000)
-    await store.upsertAgent('a1', 'sess1', null, 'root-slug', null)
-    await store.upsertAgent('a2', 'sess1', 'a1', null, 'ls-subagent')
+    await store.upsertAgent('a1', 'sess1', null, 'root', null)
+    await store.upsertAgent('a2', 'sess1', 'a1', 'ls-agent', 'List files in directory')
 
     const agents = await store.getAgentsForSession('sess1')
     expect(agents).toHaveLength(2)
     const sub = agents.find((a: any) => a.id === 'a2')
     expect(sub.parent_agent_id).toBe('a1')
-    expect(sub.name).toBe('ls-subagent')
+    expect(sub.name).toBe('ls-agent')
+    expect(sub.description).toBe('List files in directory')
   })
 
   test('upsertAgent with agentType', async () => {
@@ -237,23 +238,23 @@ describe('SqliteAdapter — agents', () => {
   test('getAgentById returns a single agent', async () => {
     const projId = await store.createProject('proj1', 'Project 1', null)
     await store.upsertSession('sess1', projId, null, null, 1000)
-    await store.upsertAgent('a1', 'sess1', null, 'my-slug', 'my-agent')
+    await store.upsertAgent('a1', 'sess1', null, 'my-agent', 'my-description')
 
     const agent = await store.getAgentById('a1')
     expect(agent.id).toBe('a1')
     expect(agent.session_id).toBe('sess1')
-    expect(agent.slug).toBe('my-slug')
     expect(agent.name).toBe('my-agent')
+    expect(agent.description).toBe('my-description')
   })
 
-  test('updateAgentSlug', async () => {
+  test('updateAgentName', async () => {
     const projId = await store.createProject('proj1', 'Project 1', null)
     await store.upsertSession('sess1', projId, null, null, 1000)
-    await store.upsertAgent('a1', 'sess1', null, 'old-slug', null)
+    await store.upsertAgent('a1', 'sess1', null, 'old-name', null)
 
-    await store.updateAgentSlug('a1', 'new-slug')
+    await store.updateAgentName('a1', 'new-name')
     const agent = await store.getAgentById('a1')
-    expect(agent.slug).toBe('new-slug')
+    expect(agent.name).toBe('new-name')
   })
 
   test('updateAgentType', async () => {
