@@ -18,7 +18,6 @@ htmlcov/
 
 # Docker data directory
 data/
-data-bak/
 
 # Security
 .env
@@ -36,3 +35,5 @@ credentials/
 
 # Backup & temp
 bak/
+
+.justfile.swp

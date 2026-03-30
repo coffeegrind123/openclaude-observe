@@ -10,7 +10,7 @@ set dotenv-load := true
 set quiet := true
 
 port := env("CLAUDE_OBSERVE_SERVER_PORT", "4981")
-client_port := env("CLAUDE_OBSERVE_CLIENT_PORT", "5174")
+dev_client_port := env("CLAUDE_OBSERVE_CLIENT_PORT", "5174")
 project_root := justfile_directory()
 server := project_root / "app" / "server"
 client := project_root / "app" / "client"
@@ -39,6 +39,7 @@ start:
       fi; \
       sleep 1; \
     done
+    @just open
 
 # Stop containers
 stop:
@@ -58,14 +59,15 @@ dev:
     #!/usr/bin/env bash
     echo "Starting dev server + client..."
     echo "Server: http://localhost:{{ port }}"
-    echo "Client: http://localhost:{{ client_port }} (Vite dev)"
+    echo "Client: http://localhost:{{ dev_client_port }} (Vite dev)"
     echo ""
     cd {{ server }} && npm run dev &
     pid1=$!
     cd {{ client }} && npm run dev &
     pid2=$!
     trap 'kill $pid1 $pid2 2>/dev/null; wait $pid1 $pid2 2>/dev/null; exit 0' INT TERM
-    echo "let's do this!"
+    @sleep 1
+    @just open {{ dev_client_port }}
     wait
 
 # Start only the server (dev mode with hot reload)
@@ -119,7 +121,7 @@ health:
       || echo "Server: DOWN (port {{ port }})"
 
 # Open the dashboard in browser
-open:
+open port=port:
     open http://localhost:{{ port }}
 
 # Format all source files
