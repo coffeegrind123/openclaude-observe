@@ -3,12 +3,7 @@ import type { Server } from 'http'
 
 const clients = new Set<WebSocket>()
 
-export function attachWebSocket(server: Server, enabled: boolean) {
-  if (!enabled) {
-    console.log('[WS] WebSocket disabled')
-    return
-  }
-
+export function attachWebSocket(server: Server) {
   const wss = new WebSocketServer({ server, path: '/api/events/stream' })
 
   wss.on('connection', (ws) => {
