@@ -18,6 +18,7 @@ router.get('/health', async (c) => {
       id: config.apiId,
       version: config.version,
       logLevel: config.logLevel,
+      runtime: config.runtime,
       dbPath: config.dbPath,
       ...(result.error ? { error: result.error } : {}),
     },

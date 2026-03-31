@@ -109,16 +109,33 @@ function hookCommand() {
 }
 
 async function healthCommand() {
-  const result = await getJson(`${config.apiBaseUrl}/health`)
+  const healthUrl = `${config.apiBaseUrl}/health`
+  const result = await getJson(healthUrl)
   if (result.status === 200 && result.body?.ok) {
-    const ver = result.body.version ? ` (v${result.body.version})` : ''
-    console.log(`Agents Observe is running${ver}. Dashboard: ${config.baseOrigin}`)
+    const b = result.body
+    const isDocker = b.runtime === 'docker'
+    const runtime = isDocker ? 'Docker container' : 'local process'
+    console.log(`Agents Observe v${b.version || 'unknown'} is running as a ${runtime}.`)
+    console.log(`  Dashboard: ${config.baseOrigin}`)
+    console.log(`  Health API: ${healthUrl}`)
+    if (isDocker) {
+      console.log(`  Data dir: ${config.dataDir}`)
+    } else {
+      console.log(`  Database: ${b.dbPath || 'unknown'}`)
+    }
+    console.log(`  Log level: ${b.logLevel || 'unknown'}`)
+    console.log('')
+    console.log(`Raw health response:`)
+    console.log(JSON.stringify(b, null, 2))
     process.exit(0)
   } else if (result.status === 0) {
-    console.log(`Agents Observe server is not running at ${config.baseOrigin}`)
+    console.log(`Agents Observe server is not running.`)
+    console.log(`  Checked: ${healthUrl}`)
+    console.log(`  Error: ${result.error || 'connection refused'}`)
     process.exit(1)
   } else {
-    console.log(`Agents Observe server error: ${JSON.stringify(result.body)}`)
+    console.log(`Agents Observe server error (HTTP ${result.status}):`)
+    console.log(JSON.stringify(result.body, null, 2))
     process.exit(1)
   }
 }

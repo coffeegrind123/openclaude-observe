@@ -2,10 +2,17 @@
 // Central config for the server. All env var reads happen here.
 
 import { resolve, dirname } from 'path'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 
 const logLevel = (process.env.AGENTS_OBSERVE_LOG_LEVEL || 'debug').toLowerCase()
+
+function detectRuntime(): 'docker' | 'local' {
+  const explicit = process.env.AGENTS_OBSERVE_RUNTIME
+  if (explicit === 'docker' || explicit === 'local') return explicit
+  if (existsSync('/.dockerenv')) return 'docker'
+  return 'local'
+}
 
 function readVersion(): string {
   const dir = dirname(fileURLToPath(import.meta.url))
@@ -26,6 +33,7 @@ function readVersion(): string {
 
 export const config = {
   apiId: 'agents-observe',
+  runtime: detectRuntime(),
   version: readVersion(),
   port: parseInt(process.env.AGENTS_OBSERVE_SERVER_PORT || '4981', 10),
   logLevel,

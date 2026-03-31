@@ -99,6 +99,7 @@ export async function startServer(config) {
     '-e', `AGENTS_OBSERVE_SERVER_PORT=${containerPort}`,
     '-e', 'AGENTS_OBSERVE_DB_PATH=/data/observe.db',
     '-e', 'AGENTS_OBSERVE_CLIENT_DIST_PATH=/app/client/dist',
+    '-e', 'AGENTS_OBSERVE_RUNTIME=docker',
     '-v', `${config.dataDir}:/data`,
     config.dockerImage,
   ])
@@ -115,7 +116,8 @@ export async function startServer(config) {
       '-e', `AGENTS_OBSERVE_SERVER_PORT=${containerPort}`,
       '-e', 'AGENTS_OBSERVE_DB_PATH=/data/observe.db',
       '-e', 'AGENTS_OBSERVE_CLIENT_DIST_PATH=/app/client/dist',
-        '-v', `${config.dataDir}:/data`,
+      '-e', 'AGENTS_OBSERVE_RUNTIME=docker',
+      '-v', `${config.dataDir}:/data`,
       config.dockerImage,
     ])
 

@@ -4,7 +4,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ProjectsTab } from './projects-tab'
 import { IconSettings } from './icon-settings'
 import { API_BASE } from '@/config/api'
-import { Database } from 'lucide-react'
+import { Database, Container, Monitor } from 'lucide-react'
+
+interface ServerInfo {
+  dbPath: string
+  runtime: 'docker' | 'local'
+}
 
 interface SettingsModalProps {
   open: boolean
@@ -13,16 +18,18 @@ interface SettingsModalProps {
 
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState('projects')
-  const [dbPath, setDbPath] = useState<string | null>(null)
+  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null)
 
   useEffect(() => {
-    if (open && !dbPath) {
+    if (open && !serverInfo) {
       fetch(`${API_BASE}/health`)
         .then((r) => r.json())
-        .then((data) => { if (data.dbPath) setDbPath(data.dbPath) })
+        .then((data) => {
+          if (data.dbPath) setServerInfo({ dbPath: data.dbPath, runtime: data.runtime || 'local' })
+        })
         .catch(() => {})
     }
-  }, [open, dbPath])
+  }, [open, serverInfo])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -44,10 +51,19 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             <IconSettings />
           </TabsContent>
         </Tabs>
-        {dbPath && (
+        {serverInfo && (
           <div className="px-6 py-3 border-t text-[11px] text-muted-foreground/60 flex items-center gap-1.5">
+            {serverInfo.runtime === 'docker' ? (
+              <Container className="h-3 w-3 shrink-0" />
+            ) : (
+              <Monitor className="h-3 w-3 shrink-0" />
+            )}
+            <span className="shrink-0">
+              {serverInfo.runtime === 'docker' ? 'Docker' : 'Local'}
+            </span>
+            <span className="text-muted-foreground/30">|</span>
             <Database className="h-3 w-3 shrink-0" />
-            <span className="truncate">{dbPath}</span>
+            <span className="truncate">{serverInfo.dbPath}</span>
           </div>
         )}
       </DialogContent>
