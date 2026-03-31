@@ -5,6 +5,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import path from 'path'
 import fs from 'fs'
 import type { EventStore } from './storage/types'
+import { config } from './config'
 
 import eventsRouter from './routes/events'
 import projectsRouter from './routes/projects'
@@ -45,8 +46,8 @@ export function createApp(
   app.route('/api', adminRouter)
   app.route('/api', healthRouter)
 
-  // Serve built client static files when AGENTS_OBSERVE_CLIENT_DIST_PATH is set
-  const clientDistPath = process.env.AGENTS_OBSERVE_CLIENT_DIST_PATH
+  // Serve built client static files when clientDistPath is configured
+  const clientDistPath = config.clientDistPath
   if (clientDistPath && fs.existsSync(clientDistPath)) {
     app.use('/*', serveStatic({ root: path.relative(process.cwd(), clientDistPath) }))
 

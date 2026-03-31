@@ -2,10 +2,11 @@
 import { Hono } from 'hono'
 import type { EventStore } from '../storage/types'
 import type { ParsedEvent } from '../types'
+import { config } from '../config'
 
 type Env = { Variables: { store: EventStore } }
 
-const LOG_LEVEL = process.env.AGENTS_OBSERVE_LOG_LEVEL || 'debug'
+const LOG_LEVEL = config.logLevel
 
 const router = new Hono<Env>()
 

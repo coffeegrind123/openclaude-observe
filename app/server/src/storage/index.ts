@@ -2,17 +2,14 @@
 
 import { SqliteAdapter } from './sqlite-adapter'
 import type { EventStore } from './types'
+import { config } from '../config'
 
 export function createStore(): EventStore {
-  const adapter = process.env.AGENTS_OBSERVE_STORAGE_ADAPTER || 'sqlite'
-
-  switch (adapter) {
-    case 'sqlite': {
-      const dbPath = process.env.AGENTS_OBSERVE_DB_PATH || '../../data/observe.db'
-      return new SqliteAdapter(dbPath)
-    }
+  switch (config.storageAdapter) {
+    case 'sqlite':
+      return new SqliteAdapter(config.dbPath)
     default:
-      throw new Error(`Unknown storage adapter: ${adapter}`)
+      throw new Error(`Unknown storage adapter: ${config.storageAdapter}`)
   }
 }
 

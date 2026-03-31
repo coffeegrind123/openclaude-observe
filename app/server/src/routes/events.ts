@@ -4,6 +4,7 @@ import type { EventStore } from '../storage/types'
 import type { ParsedEvent } from '../types'
 import { parseRawEvent } from '../parser'
 import { resolveProject } from '../services/project-resolver'
+import { config } from '../config'
 
 type Env = {
   Variables: {
@@ -15,7 +16,7 @@ type Env = {
 
 const router = new Hono<Env>()
 
-const LOG_LEVEL = process.env.AGENTS_OBSERVE_LOG_LEVEL || 'debug'
+const LOG_LEVEL = config.logLevel
 
 // Track root agent IDs per session (sessionId -> agentId)
 const sessionRootAgents = new Map<string, string>()
@@ -157,12 +158,16 @@ router.post('/events', async (c) => {
         }
       }
 
+      // Extract agent_type from the hook payload — every subagent event carries it
+      const ownerAgentType: string | null = (hookPayload as any)?.agent_type ?? null
+
       await store.upsertAgent(
         parsed.ownerAgentId,
         parsed.sessionId,
         rootAgentId,
         pending?.name ?? null,
         pending?.description ?? null,
+        ownerAgentType,
       )
     }
     let agentId = parsed.ownerAgentId || rootAgentId
@@ -171,7 +176,7 @@ router.post('/events', async (c) => {
     if (parsed.subAgentId) {
       let subAgentName = parsed.subAgentName
       let subAgentDescription = parsed.subAgentDescription
-      let subAgentType: string | null = null
+      let subAgentType: string | null = (hookPayload as any)?.agent_type ?? null
       if (parsed.subtype === 'PostToolUse' && parsed.toolName === 'Agent' && parsed.toolUseId) {
         const metaFromPre = pendingAgentMeta.get(parsed.toolUseId)
         if (metaFromPre) {
@@ -179,7 +184,13 @@ router.post('/events', async (c) => {
           subAgentDescription = subAgentDescription || metaFromPre.description
           pendingAgentMeta.delete(parsed.toolUseId)
         }
-        subAgentType = pendingAgentTypes.get(parsed.toolUseId) ?? null
+        // Agent type: prefer stashed value from PreToolUse, then tool_input/tool_response
+        const toolResponse = (hookPayload as any)?.tool_response
+        subAgentType = pendingAgentTypes.get(parsed.toolUseId)
+          ?? (hookPayload as any)?.tool_input?.subagent_type
+          ?? toolResponse?.agentType
+          ?? toolResponse?.subagent_type
+          ?? subAgentType
         pendingAgentTypes.delete(parsed.toolUseId)
       }
 

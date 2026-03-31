@@ -1,8 +1,9 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import type { Server } from 'http'
 import type { WSClientMessage } from './types'
+import { config } from './config'
 
-const LOG_LEVEL = (process.env.AGENTS_OBSERVE_LOG_LEVEL || 'debug').toLowerCase()
+const LOG_LEVEL = config.logLevel
 
 // Track which session each client is subscribed to
 const clientSessions = new Map<WebSocket, string>()

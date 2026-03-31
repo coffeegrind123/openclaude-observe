@@ -135,10 +135,10 @@ export function AgentCombobox() {
                       key={agent.id}
                       value={agent.id}
                       onSelect={() => toggleAgentId(agent.id)}
-                      className="text-xs gap-2"
+                      className="text-xs gap-2 items-start"
                     >
                       <div className={cn(
-                        'flex items-center justify-center h-4 w-4 rounded border shrink-0',
+                        'flex items-center justify-center h-4 w-4 rounded border shrink-0 mt-0.5',
                         isSelected
                           ? 'bg-primary border-primary text-primary-foreground'
                           : 'border-muted-foreground/30',
@@ -147,7 +147,7 @@ export function AgentCombobox() {
                       </div>
                       <span
                         className={cn(
-                          'h-2 w-2 shrink-0 rounded-full',
+                          'h-2 w-2 shrink-0 rounded-full mt-1.5',
                           agent.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/40',
                         )}
                       />
@@ -157,12 +157,18 @@ export function AgentCombobox() {
                           disableTooltip
                           className={cn('truncate', isMain && 'font-medium', agentColor.textOnly)}
                         />
-                        {!isMain && (
-                          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50">
-                            {agent.agentType && <span className="font-mono">{agent.agentType}</span>}
-                            {agent.description && <span className="truncate">{agent.description}</span>}
-                          </div>
-                        )}
+                        {!isMain && (() => {
+                          const showDesc = agent.description && agent.description !== getAgentDisplayName(agent)
+                          const showType = !!agent.agentType
+                          return (
+                            <div className="flex items-center gap-0 text-[10px] text-muted-foreground/50 min-w-0">
+                              {showDesc && <span className="truncate">{agent.description}</span>}
+                              {showDesc && showType && <span className="shrink-0 mx-1">-</span>}
+                              {showType && <span className="font-mono shrink-0">{agent.agentType}</span>}
+                              {!showDesc && !showType && <span>&nbsp;</span>}
+                            </div>
+                          )
+                        })()}
                       </div>
                       <div className="flex items-center gap-2 shrink-0 text-[10px] text-muted-foreground">
                         <span>{formatStartTime(agent.firstEventAt ?? 0)}</span>

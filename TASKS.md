@@ -2,9 +2,12 @@
 
 ## QUEUED TASKS
 
-(none)
+
 
 ## COMPLETED TASKS
+
+- [x] In Agent Label tooltip, don't show the description if it's the same as the name
+  - Also in agents combo box - skip description line if it matches the agent display name
 
 - [x] Add an edit icon to change session slug name in sidebar — inline pencil icon, Enter/blur saves, Escape cancels
 - [x] Add an edit icon in sidebar to change project name — added display_name column, POST /projects/:id/metadata endpoint, inline edit UI

@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ProjectsTab } from './projects-tab'
 import { IconSettings } from './icon-settings'
+import { API_BASE } from '@/config/api'
+import { Database } from 'lucide-react'
 
 interface SettingsModalProps {
   open: boolean
@@ -11,6 +13,16 @@ interface SettingsModalProps {
 
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState('projects')
+  const [dbPath, setDbPath] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (open && !dbPath) {
+      fetch(`${API_BASE}/health`)
+        .then((r) => r.json())
+        .then((data) => { if (data.dbPath) setDbPath(data.dbPath) })
+        .catch(() => {})
+    }
+  }, [open, dbPath])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -32,6 +44,12 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             <IconSettings />
           </TabsContent>
         </Tabs>
+        {dbPath && (
+          <div className="px-6 py-3 border-t text-[11px] text-muted-foreground/60 flex items-center gap-1.5">
+            <Database className="h-3 w-3 shrink-0" />
+            <span className="truncate">{dbPath}</span>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

@@ -4,9 +4,10 @@ import { serve } from '@hono/node-server'
 import { createApp } from './app'
 import { createStore } from './storage'
 import { attachWebSocket, broadcastToSession, broadcastToAll } from './websocket'
+import { config } from './config'
 
 const store = createStore()
-const PORT = parseInt(process.env.AGENTS_OBSERVE_SERVER_PORT || '4981', 10)
+const PORT = config.port
 
 const app = createApp(store, broadcastToSession, broadcastToAll)
 

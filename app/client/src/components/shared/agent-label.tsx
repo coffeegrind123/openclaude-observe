@@ -32,7 +32,7 @@ export function AgentLabel({ agent, parentAgent, className, disableTooltip, chil
       </TooltipTrigger>
       <TooltipContent side="bottom" className="max-w-xs">
         <div className="flex flex-col gap-0.5 text-left">
-          {agent.description && (
+          {agent.description && agent.description !== displayName && (
             <span>{agent.description}</span>
           )}
           <span className="font-medium">{displayName}</span>
