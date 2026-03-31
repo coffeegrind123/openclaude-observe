@@ -14,11 +14,11 @@ export function extractProjectDir(transcriptPath: string): string {
 /**
  * Derives slug candidates from a Claude project directory path.
  * The directory name is a dash-joined encoding of the absolute path,
- * e.g. "-Users-joe-Development-opik-agent-super-spy-claude-observe"
+ * e.g. "-Users-joe-Development-opik-agent-super-spy-agents-observe"
  *
  * Returns candidates in order of preference:
- *   1. Last two segments (e.g. "claude-observe")
- *   2. Last three segments (e.g. "spy-claude-observe")
+ *   1. Last two segments (e.g. "agents-observe")
+ *   2. Last three segments (e.g. "spy-agents-observe")
  *   3. etc.
  *
  * Caller should check each candidate for availability.
@@ -33,7 +33,10 @@ export function deriveSlugCandidates(pathOrDir: string): string[] {
   const candidates: string[] = []
   const minParts = Math.min(2, parts.length)
   for (let i = minParts; i <= parts.length; i++) {
-    const slug = parts.slice(parts.length - i).join('-').toLowerCase()
+    const slug = parts
+      .slice(parts.length - i)
+      .join('-')
+      .toLowerCase()
     candidates.push(slug)
   }
 

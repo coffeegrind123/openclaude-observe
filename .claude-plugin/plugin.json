@@ -5,8 +5,14 @@
   "author": {
     "name": "simple10"
   },
-  "homepage": "https://github.com/simple10/claude-observe",
-  "repository": "https://github.com/simple10/claude-observe",
+  "homepage": "https://github.com/simple10/agents-observe",
+  "repository": "https://github.com/simple10/agents-observe",
   "license": "MIT",
-  "keywords": ["observability", "dashboard", "hooks", "agents", "monitoring"]
+  "keywords": [
+    "observability",
+    "dashboard",
+    "hooks",
+    "agents",
+    "monitoring"
+  ]
 }

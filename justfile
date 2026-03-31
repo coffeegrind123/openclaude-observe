@@ -1,4 +1,4 @@
-# Claude Observe
+# Agents Observe
 # Usage: just <recipe>
 #
 # AGENTS_OBSERVE_SERVER_PORT & AGENTS_OBSERVE_CLIENT_PORT are read from .env

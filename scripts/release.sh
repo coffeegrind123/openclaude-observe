@@ -53,7 +53,7 @@ npm test
 
 echo ""
 echo "=== Building Docker image ==="
-docker build -t claude-observe:local .
+docker build -t agents-observe:local .
 
 # ── Commit, tag, push ────────────────────────────────────
 
@@ -71,4 +71,4 @@ git push origin "$TAG"
 echo ""
 echo "=== Released $TAG ==="
 echo "GitHub Actions will build and publish the Docker image."
-echo "Watch: https://github.com/simple10/claude-observe/actions"
+echo "Watch: https://github.com/simple10/agents-observe/actions"

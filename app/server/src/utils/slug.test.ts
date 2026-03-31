@@ -9,24 +9,24 @@ describe('extractProjectDir', () => {
   })
 
   test('returns directory as-is when no file extension', () => {
-    expect(
-      extractProjectDir('/Users/joe/.claude/projects/-Users-joe-Dev-my-app'),
-    ).toBe('/Users/joe/.claude/projects/-Users-joe-Dev-my-app')
+    expect(extractProjectDir('/Users/joe/.claude/projects/-Users-joe-Dev-my-app')).toBe(
+      '/Users/joe/.claude/projects/-Users-joe-Dev-my-app',
+    )
   })
 
   test('strips trailing slash', () => {
-    expect(
-      extractProjectDir('/Users/joe/.claude/projects/-Users-joe-Dev-my-app/'),
-    ).toBe('/Users/joe/.claude/projects/-Users-joe-Dev-my-app')
+    expect(extractProjectDir('/Users/joe/.claude/projects/-Users-joe-Dev-my-app/')).toBe(
+      '/Users/joe/.claude/projects/-Users-joe-Dev-my-app',
+    )
   })
 })
 
 describe('deriveSlugCandidates', () => {
   test('extracts last two segments from Claude project path', () => {
     const candidates = deriveSlugCandidates(
-      '/Users/joe/.claude/projects/-Users-joe-Development-opik-agent-super-spy-claude-observe',
+      '/Users/joe/.claude/projects/-Users-joe-Development-opik-agent-super-spy-agents-observe',
     )
-    expect(candidates[0]).toBe('claude-observe')
+    expect(candidates[0]).toBe('agents-observe')
   })
 
   test('returns progressively longer segments', () => {
@@ -38,9 +38,7 @@ describe('deriveSlugCandidates', () => {
   })
 
   test('handles single-segment encoded path', () => {
-    const candidates = deriveSlugCandidates(
-      '/Users/joe/.claude/projects/-myproject',
-    )
+    const candidates = deriveSlugCandidates('/Users/joe/.claude/projects/-myproject')
     expect(candidates[0]).toBe('myproject')
   })
 
@@ -52,9 +50,7 @@ describe('deriveSlugCandidates', () => {
   })
 
   test('lowercases the slug', () => {
-    const candidates = deriveSlugCandidates(
-      '/Users/joe/.claude/projects/-MyApp',
-    )
+    const candidates = deriveSlugCandidates('/Users/joe/.claude/projects/-MyApp')
     expect(candidates[0]).toBe('myapp')
   })
 

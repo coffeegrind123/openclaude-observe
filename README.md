@@ -1,14 +1,14 @@
-# Claude Observe
+# Agents Observe
 
 Real-time observability dashboard for Claude Code agents.
 
 Includes powerful filtering, searching, and visualization of multi-agent sessions.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/simple10/claude-observe/main/docs/assets/dashboard1.png" alt="Claude Observe Dashboard Screenshot" />
+  <img src="https://raw.githubusercontent.com/simple10/agents-observe/main/docs/assets/dashboard1.png" alt="Claude Observe Dashboard Screenshot" />
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/simple10/claude-observe/main/docs/assets/dashboard2.png" alt="Claude Observe Dashboard Screenshot - Expanded Row" />
+  <img src="https://raw.githubusercontent.com/simple10/agents-observe/main/docs/assets/dashboard2.png" alt="Claude Observe Dashboard Screenshot - Expanded Row" />
 </p>
 
 The server and dashboard run locally or remotely, allowing multiple Claude Code instances to log full session data using hooks.
@@ -27,13 +27,13 @@ Hooks are used instead of OTEL to capture the full picture of agent actions.
 1. Add the marketplace:
 
    ```bash
-   claude plugin marketplace add simple10/claude-observe
+   claude plugin marketplace add simple10/agents-observe
    ```
 
 2. Install the plugin:
 
    ```bash
-   claude plugin install claude-observe
+   claude plugin install agents-observe
    ```
 
 3. Restart Claude Code.
@@ -85,8 +85,8 @@ The hook script is a dumb pipe — it reads the raw event from stdin, adds the p
 ### 1. Clone and install dependencies
 
 ```bash
-git clone https://github.com/simple10/claude-observe.git claude-observe
-cd claude-observe
+git clone https://github.com/simple10/agents-observe.git agents-observe
+cd agents-observe
 
 # Install just if needed
 brew install just
@@ -245,12 +245,12 @@ The plugin requires Docker to run the server. Make sure Docker Desktop (or the D
 If another process is using port 4981, stop it or remove a stale container:
 
 ```bash
-docker stop claude-observe && docker rm claude-observe
+docker stop agents-observe && docker rm agents-observe
 ```
 
 **Plugin not capturing events?**
 
-Run `/observe status` to check if the server is running. If the container doesn't exist, restart Claude Code. Check Docker logs with `docker logs claude-observe`.
+Run `/observe status` to check if the server is running. If the container doesn't exist, restart Claude Code. Check Docker logs with `docker logs agents-observe`.
 
 **Events not appearing in the dashboard?**
 
@@ -266,6 +266,14 @@ The client reconnects automatically every 3 seconds if the WebSocket connection 
 **Database issues?**
 
 Run `just db-reset` to delete the SQLite database and start fresh. The database is auto-created on the next server start.
+
+## ROADMAP
+
+- [ ] Add support for Codex
+- [ ] Add support for OpenClaw
+- [ ] Add support for pi-code agents
+
+--
 
 ## Reference
 
