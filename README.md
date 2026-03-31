@@ -118,8 +118,8 @@ This prints a JSON snippet with all paths pre-filled. Copy it into your Claude C
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CLAUDE_OBSERVE_PROJECT_SLUG` | (auto-detected) | Project slug shown in the dashboard URL. If not set, derived from the session transcript path. |
-| `CLAUDE_OBSERVE_API_BASE_URL` | `http://127.0.0.1:4981/api` | Full URL for the events endpoint |
+| `AGENTS_OBSERVE_PROJECT_SLUG` | (auto-detected) | Project slug shown in the dashboard URL. If not set, derived from the session transcript path. |
+| `AGENTS_OBSERVE_API_BASE_URL` | `http://127.0.0.1:4981/api` | Full URL for the events endpoint |
 
 ### 3. Verify it works
 
@@ -256,7 +256,7 @@ Run `/observe status` to check if the server is running. If the container doesn'
 
 1. **Is the server running?** Run `just health` to check.
 2. **Is the hook script configured?** Run `just setup-hooks my-project` and verify the output matches your `.claude/settings.json`.
-3. **Is `CLAUDE_OBSERVE_PROJECT_SLUG` set?** If `CLAUDE_OBSERVE_PROJECT_SLUG` is not set, the project is auto-detected from the session transcript path.
+3. **Is `AGENTS_OBSERVE_PROJECT_SLUG` set?** If `AGENTS_OBSERVE_PROJECT_SLUG` is not set, the project is auto-detected from the session transcript path.
 4. **Can the hook reach the server?** Run `just test-event` — if the event appears in the dashboard, the server is reachable.
 
 **WebSocket disconnected?**
