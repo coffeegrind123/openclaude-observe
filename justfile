@@ -15,6 +15,7 @@ dev_client_port := env("AGENTS_OBSERVE_CLIENT_PORT", "5174")
 project_root := justfile_directory()
 server := project_root / "app" / "server"
 client := project_root / "app" / "client"
+cli_script := project_root / "hooks" / "scripts" / "observe_cli.mjs"
 
 # List available recipes
 default:
@@ -107,7 +108,7 @@ db-reset:
 # Generate hooks config for a project's .claude/settings.json
 setup-hooks project_slug:
     #!/usr/bin/env bash
-    hook_script="{{ project_root }}/hooks/scripts/observe_cli.mjs"
+    hook_script="{{ cli_script }}"
     sed \
       -e "s|__PROJECT_SLUG__|{{ project_slug }}|g" \
       -e "s|__HOOK_SCRIPT__|${hook_script}|g" \
@@ -117,9 +118,7 @@ setup-hooks project_slug:
 
 # Check server health
 health:
-    @curl -sf http://localhost:{{ port }}/api/health > /dev/null 2>&1 \
-      && echo "Server: UP (http://localhost:{{ port }})" \
-      || echo "Server: DOWN (port {{ port }})"
+    node {{ cli_script }} health
 
 # Open the dashboard in browser
 open port=port:
