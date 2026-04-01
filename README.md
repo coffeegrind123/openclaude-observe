@@ -10,9 +10,9 @@ Includes powerful filtering, searching, and visualization of multi-agent session
   </a>
 </p>
 
-<br />
+<p>
 <a href="https://github.com/simple10/agents-observe/blob/videos/docs/assets/demo.mp4">Demo video</a>
-<br />
+</p>
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/simple10/agents-observe/main/docs/assets/dashboard2.png" alt="Claude Observe Dashboard Screenshot - Expanded Row" />
