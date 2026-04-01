@@ -18,7 +18,7 @@ const log = createLogger('mcp.log', config)
 async function main() {
   log.info(`Starting server...`)
 
-  const actualPort = await startServer(config)
+  const actualPort = await startServer(config, log)
   if (!actualPort) {
     log.error('Failed to start server')
     process.exit(1)
