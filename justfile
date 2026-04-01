@@ -31,6 +31,7 @@ build:
 start:
     @mkdir -p {{ project_root }}/data
     @docker compose down >/dev/null 2>&1 || true
+    @docker rm -f agents-observe >/dev/null 2>&1 || true
     docker compose up -d --build
     @echo ""
     @echo "Waiting for server..."
@@ -50,7 +51,8 @@ start-local:
 
 # Stop containers
 stop:
-    docker compose down
+    @docker compose down >/dev/null 2>&1 || true
+    @docker rm -f agents-observe >/dev/null 2>&1 || true
 
 # Restart containers
 restart: stop start
