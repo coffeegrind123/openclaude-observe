@@ -11,7 +11,7 @@ Includes powerful filtering, searching, and visualization of multi-agent session
 </p>
 
 <p>
-<a href="https://github.com/simple10/agents-observe/blob/videos/docs/assets/demo.mp4">Demo video</a>
+<a href="https://raw.githubusercontent.com/simple10/agents-observe/videos/docs/assets/demo.mp4">Demo video</a>
 </p>
 
 <p align="center">
