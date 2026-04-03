@@ -121,6 +121,7 @@ export function Sidebar({ connected }: SidebarProps) {
                 <span>Disconnected</span>
               </>
             )}
+            <span className="text-muted-foreground/50">v{__APP_VERSION__}</span>
           </div>
         )}
       </div>

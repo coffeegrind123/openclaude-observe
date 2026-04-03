@@ -14,43 +14,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Trash2, DatabaseZap } from 'lucide-react'
+import { ExternalLink, DatabaseZap } from 'lucide-react'
+import { ProjectModal } from './project-modal'
+import type { Project } from '@/types'
 
 export function ProjectsTab() {
   const { data: projects, isLoading } = useProjects()
   const queryClient = useQueryClient()
-  const { selectedProjectId, setSelectedProject } = useUIStore()
+  const { setSelectedProject } = useUIStore()
 
-  const [confirmDelete, setConfirmDelete] = useState<{ type: 'project'; id: number; name: string } | { type: 'all' } | null>(null)
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
   const [deleting, setDeleting] = useState(false)
-
-  async function handleDeleteProject(projectId: number) {
-    setDeleting(true)
-    try {
-      await api.deleteProject(projectId)
-      // If the deleted project was selected, clear selection
-      if (selectedProjectId === projectId) {
-        setSelectedProject(null)
-      }
-      await queryClient.invalidateQueries({ queryKey: ['projects'] })
-      await queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      await queryClient.invalidateQueries({ queryKey: ['recentSessions'] })
-    } finally {
-      setDeleting(false)
-      setConfirmDelete(null)
-    }
-  }
+  const [modalProject, setModalProject] = useState<Project | null>(null)
 
   async function handleDeleteAll() {
     setDeleting(true)
     try {
       await api.deleteAllData()
-      // Clear all selection state
       setSelectedProject(null)
       await queryClient.invalidateQueries()
     } finally {
       setDeleting(false)
-      setConfirmDelete(null)
+      setConfirmDeleteAll(false)
     }
   }
 
@@ -64,9 +49,10 @@ export function ProjectsTab() {
       {projects && projects.length > 0 ? (
         <div className="space-y-1">
           {projects.map((project) => (
-            <div
+            <button
               key={project.id}
-              className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+              className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 w-full text-left hover:bg-muted/50 cursor-pointer"
+              onClick={() => setModalProject(project)}
             >
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium truncate">{project.name}</div>
@@ -74,15 +60,8 @@ export function ProjectsTab() {
                   {project.sessionCount ?? 0} session{project.sessionCount !== 1 ? 's' : ''}
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="shrink-0 text-muted-foreground hover:text-destructive"
-                onClick={() => setConfirmDelete({ type: 'project', id: project.id, name: project.name })}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            </button>
           ))}
         </div>
       ) : (
@@ -95,7 +74,7 @@ export function ProjectsTab() {
           variant="destructive"
           size="sm"
           className="gap-1.5"
-          onClick={() => setConfirmDelete({ type: 'all' })}
+          onClick={() => setConfirmDeleteAll(true)}
         >
           <DatabaseZap className="h-3.5 w-3.5" />
           Delete All Logs
@@ -105,17 +84,13 @@ export function ProjectsTab() {
         </p>
       </div>
 
-      {/* Confirmation dialogs */}
-      <AlertDialog open={confirmDelete !== null} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+      {/* Delete All confirmation */}
+      <AlertDialog open={confirmDeleteAll} onOpenChange={setConfirmDeleteAll}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {confirmDelete?.type === 'all' ? 'Delete all logs?' : `Delete project "${confirmDelete?.type === 'project' ? confirmDelete.name : ''}"?`}
-            </AlertDialogTitle>
+            <AlertDialogTitle>Delete all logs?</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmDelete?.type === 'all'
-                ? 'This will permanently delete all Observe logs (projects, sessions, agents, and events). Your original Claude session files are not modified.'
-                : 'This will permanently delete this project and all its Observe logs. Your original Claude session files are not modified.'}
+              This will permanently delete all Observe logs (projects, sessions, agents, and events). Your original Claude session files are not modified.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -123,19 +98,20 @@ export function ProjectsTab() {
             <AlertDialogAction
               variant="destructive"
               disabled={deleting}
-              onClick={() => {
-                if (confirmDelete?.type === 'project') {
-                  handleDeleteProject(confirmDelete.id)
-                } else if (confirmDelete?.type === 'all') {
-                  handleDeleteAll()
-                }
-              }}
+              onClick={handleDeleteAll}
             >
               {deleting ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Project detail modal */}
+      <ProjectModal
+        project={modalProject}
+        open={modalProject !== null}
+        onOpenChange={(open) => !open && setModalProject(null)}
+      />
     </div>
   )
 }
