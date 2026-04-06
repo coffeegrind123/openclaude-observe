@@ -3,17 +3,25 @@
 # Bumps version, generates changelog via Claude, opens editor for review,
 # then commits, tags, and pushes.
 #
-# Usage: scripts/release.sh <version>
+# Usage: scripts/release.sh [--dry-run] <version>
 #   e.g.  scripts/release.sh 0.8.0
-#         scripts/release.sh v0.8.0
+#         scripts/release.sh --dry-run 0.8.0
 
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-VERSION="${1:-}"
+DRY_RUN=false
+VERSION=""
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=true ;;
+    *) VERSION="$arg" ;;
+  esac
+done
+
 if [ -z "$VERSION" ]; then
-  echo "Usage: scripts/release.sh <version>  (e.g. 0.8.0)"
+  echo "Usage: scripts/release.sh [--dry-run] <version>  (e.g. 0.8.0)"
   exit 1
 fi
 
@@ -129,6 +137,19 @@ npm test
 echo ""
 echo "=== Building Docker image ==="
 docker build -t agents-observe:local .
+
+if $DRY_RUN; then
+  echo ""
+  echo "=== Dry run complete ==="
+  echo "Changelog, version bumps, tests, and Docker build all passed."
+  echo "Modified files (not committed):"
+  git status --short
+  echo ""
+  echo "To finish the release, revert changes and run without --dry-run:"
+  echo "  git checkout -- VERSION package.json .claude-plugin/plugin.json CHANGELOG.md"
+  echo "  scripts/release.sh $VERSION"
+  exit 0
+fi
 
 # ── Commit, tag, push ────────────────────────────────────
 
