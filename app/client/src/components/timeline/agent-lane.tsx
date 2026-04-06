@@ -53,7 +53,7 @@ function DotContainer({
       {events.map((event) => {
         // Static position relative to the container. The container's
         // translateX animation slides everything left uniformly.
-        const position = ((event.timestamp - anchorTime) / rangeMs) * 100
+        const position = ((event.timestamp - anchorTime) / rangeMs) * 100 + 100
         if (position < -5 || position > 110) return null
 
         const Icon = getEventIcon(event.subtype, event.toolName)
