@@ -168,20 +168,7 @@ git tag "$TAG"
 echo "Pushing to origin..."
 git push origin main "$TAG"
 
-# ── Create GitHub release ────────────────────────────────
-
-echo ""
-echo "Creating GitHub release..."
-
-# Extract just this version's entry from CHANGELOG.md for the release body
-RELEASE_BODY=$(awk "/^## ${TAG//./\\.}/{found=1; next} /^## v[0-9]/{found=0} found" CHANGELOG.md)
-
-gh release create "$TAG" \
-  --title "$TAG" \
-  --notes "$RELEASE_BODY" \
-  || echo "Warning: gh release create failed — create manually at https://github.com/simple10/agents-observe/releases"
-
 echo ""
 echo "=== Released $TAG ==="
-echo "GitHub Actions will build and publish the Docker image."
+echo "GitHub Actions will build the Docker image and create the GitHub release."
 echo "Watch: https://github.com/simple10/agents-observe/actions"
