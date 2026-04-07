@@ -17,6 +17,7 @@ const envKeys = [
   'AGENTS_OBSERVE_RUNTIME',
   'AGENTS_OBSERVE_DEV_CLIENT_PORT',
   'AGENTS_OBSERVE_ALLOW_LOCAL_CALLBACKS',
+  'AGENTS_OBSERVE_HOOK_STARTUP_TIMEOUT',
 ]
 
 let savedEnv
@@ -243,6 +244,13 @@ describe('config', () => {
     expect(cfg.dockerImage).toBe('custom:image')
   })
 
+  // --- Docker label ---
+
+  it('exposes dockerLabel with simple10 prefix', async () => {
+    const cfg = await loadConfig()
+    expect(cfg.dockerLabel).toBe('simple10-agents-observe.managed')
+  })
+
   // --- Test skip pull ---
 
   it('defaults testSkipPull to false', async () => {
@@ -282,6 +290,44 @@ describe('config', () => {
   it('derives baseOrigin from apiBaseUrl', async () => {
     const cfg = await loadConfig()
     expect(cfg.baseOrigin).toBe(`http://127.0.0.1:${cfg.serverPort}`)
+  })
+
+  // --- hasCustomApiUrl ---
+
+  it('sets hasCustomApiUrl false when using default', async () => {
+    const cfg = await loadConfig()
+    expect(cfg.hasCustomApiUrl).toBe(false)
+  })
+
+  it('sets hasCustomApiUrl true when AGENTS_OBSERVE_API_BASE_URL is set', async () => {
+    process.env.AGENTS_OBSERVE_API_BASE_URL = 'http://remote:9999/api'
+    const cfg = await loadConfig()
+    expect(cfg.hasCustomApiUrl).toBe(true)
+  })
+
+  it('sets hasCustomApiUrl true when baseUrl override is provided', async () => {
+    const cfg = await loadConfig({ baseUrl: 'http://override:8888/api' })
+    expect(cfg.hasCustomApiUrl).toBe(true)
+  })
+
+  // --- hookStartupTimeout ---
+
+  it('defaults hookStartupTimeout to 30000', async () => {
+    const cfg = await loadConfig()
+    expect(cfg.hookStartupTimeout).toBe(30000)
+  })
+
+  it('reads AGENTS_OBSERVE_HOOK_STARTUP_TIMEOUT', async () => {
+    process.env.AGENTS_OBSERVE_HOOK_STARTUP_TIMEOUT = '10000'
+    const cfg = await loadConfig()
+    expect(cfg.hookStartupTimeout).toBe(10000)
+  })
+
+  it('parses hookStartupTimeout as integer', async () => {
+    process.env.AGENTS_OBSERVE_HOOK_STARTUP_TIMEOUT = '5000'
+    const cfg = await loadConfig()
+    expect(cfg.hookStartupTimeout).toBe(5000)
+    expect(Number.isInteger(cfg.hookStartupTimeout)).toBe(true)
   })
 
   // --- Callbacks ---

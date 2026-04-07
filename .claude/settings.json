@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $CLAUDE_PROJECT_DIR/hooks/scripts/hook.sh"
+            "command": "node $CLAUDE_PROJECT_DIR/hooks/scripts/observe_cli.mjs hook-autostart"
           }
         ]
       }

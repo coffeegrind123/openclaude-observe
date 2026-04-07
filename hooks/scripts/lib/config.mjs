@@ -56,9 +56,9 @@ export function getConfig(overrides = {}) {
   const serverPortFile = `${localDataRootDir}/${serverPortFileName}`
   const serverPort = overrides.serverPort || process.env.AGENTS_OBSERVE_SERVER_PORT || '4981'
   const savedPort = readServerPortFile(serverPortFile)
+  const customApiBaseUrl = overrides.baseUrl || process.env.AGENTS_OBSERVE_API_BASE_URL || null
   const apiBaseUrl =
-    overrides.baseUrl ||
-    process.env.AGENTS_OBSERVE_API_BASE_URL ||
+    customApiBaseUrl ||
     (savedPort ? `http://127.0.0.1:${savedPort}/api` : `http://127.0.0.1:${serverPort}/api`)
   const baseOrigin = new URL(apiBaseUrl).origin
   const version = readVersionFile(tmpConfig)
@@ -89,6 +89,7 @@ export function getConfig(overrides = {}) {
     serverPortFile,
     serverPortFileName,
     apiBaseUrl,
+    hasCustomApiUrl: !!customApiBaseUrl,
     baseOrigin,
     localDataRootDir,
 
@@ -114,7 +115,11 @@ export function getConfig(overrides = {}) {
     databaseFileName: 'observe.db',
 
     API_ID: 'agents-observe',
+    dockerLabel: 'simple10-agents-observe.managed',
     expectedVersion: version,
+
+    /** Max ms to wait for server startup in hook-autostart before returning a timeout message */
+    hookStartupTimeout: parseInt(process.env.AGENTS_OBSERVE_HOOK_STARTUP_TIMEOUT || '30000', 10),
 
     /* Test harness only — skip `docker pull` when image is pre-loaded. See docs/plans/_queued/spec-fresh-install-test-harness.md */
     testSkipPull: overrides.testSkipPull || process.env.AGENTS_OBSERVE_TEST_SKIP_PULL === '1',

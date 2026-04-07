@@ -18,16 +18,24 @@ const log = createLogger('cli.log', config)
 switch (cliArgs.commands[0] || 'help') {
   case 'help':
     console.log('Usage: node observe_cli.mjs <command> [--base-url URL] [--project-slug SLUG]')
-    console.log('Commands: hook, health, start, stop, restart, db-reset')
-    console.log('  hook:      Send an event to the server')
-    console.log('  health:    Check the server health')
-    console.log('  start:     Start the server')
-    console.log('  stop:      Stop the server')
-    console.log('  restart:   Restart the server')
-    console.log('  db-reset:  Delete the SQLite database [--force to skip confirmation]')
+    console.log('Commands: hook, hook-sync, hook-autostart, health, start, stop, restart, db-reset')
+    console.log('  hook:            Send an event (fire-and-forget)')
+    console.log('  hook-sync:       Send an event and return systemMessage JSON')
+    console.log('  hook-autostart:  Like hook-sync, but auto-starts server if unreachable')
+    console.log('  health:          Check the server health')
+    console.log('  start:           Start the server')
+    console.log('  stop:            Stop the server')
+    console.log('  restart:         Restart the server')
+    console.log('  db-reset:        Delete the SQLite database [--force to skip confirmation]')
     process.exit(0)
   case 'hook':
     hookCommand()
+    break
+  case 'hook-sync':
+    hookSyncCommand()
+    break
+  case 'hook-autostart':
+    hookAutostartCommand()
     break
   case 'health':
     healthCommand()
@@ -107,6 +115,201 @@ function hookCommand() {
         log.error(`Hook POST failed: ${err.message}`)
       })
   })
+}
+
+/**
+ * Mute console.log/error/warn so only our final JSON goes to stdout.
+ * Logger file writes still work — only the console output methods are silenced.
+ */
+function muteConsole() {
+  const noop = () => {}
+  console.log = noop
+  console.error = noop
+  console.warn = noop
+  console.debug = noop
+}
+
+/**
+ * Output a systemMessage JSON to stdout for Claude to surface to the user.
+ * This must be the ONLY stdout output — console is muted before this runs.
+ */
+function outputClaudeSystemMessage(message) {
+  // Use process.stdout.write directly since console.log is muted
+  process.stdout.write(JSON.stringify({ systemMessage: message }) + '\n')
+}
+
+/**
+ * Read stdin, POST to server synchronously, return { result, envelope }.
+ * Does NOT use fireAndForget — waits for the response.
+ */
+async function sendHookSync() {
+  const input = await readStdin()
+  if (!input) return { result: null, envelope: null }
+
+  let hookPayload
+  try {
+    hookPayload = JSON.parse(input)
+  } catch (err) {
+    log.warn(`Failed to parse hook payload: ${err.message}`)
+    return { result: null, envelope: null }
+  }
+
+  const hookEvent = hookPayload.event || 'unknown'
+  const toolName = hookPayload.tool_name || hookPayload.tool?.name || ''
+  log.debug(`Hook event: ${hookEvent}${toolName ? ` tool=${toolName}` : ''}`)
+
+  const envelope = { hook_payload: hookPayload, meta: { env: {} } }
+  if (config.projectSlug) {
+    envelope.meta.env.AGENTS_OBSERVE_PROJECT_SLUG = config.projectSlug
+  }
+
+  const result = await postJson(`${config.apiBaseUrl}/events`, envelope, { log })
+  return { result, envelope }
+}
+
+/**
+ * Read all stdin into a string (returns promise).
+ */
+function readStdin() {
+  return new Promise((resolve) => {
+    let input = ''
+    process.stdin.setEncoding('utf8')
+    process.stdin.on('data', (chunk) => {
+      input += chunk
+    })
+    process.stdin.on('end', () => resolve(input.trim() || null))
+  })
+}
+
+/**
+ * hook-sync: Send event synchronously, return systemMessage JSON.
+ * Mutes all console output so only the JSON response goes to stdout.
+ */
+async function hookSyncCommand() {
+  // Prevent console output so systemMessage can be returned to claude
+  muteConsole()
+
+  try {
+    const { result } = await sendHookSync()
+
+    if (!result || result.status === 0) {
+      outputClaudeSystemMessage(
+        `Agents Observe server is not running. Run /observe status for help.`,
+      )
+      return
+    }
+
+    // Handle callbacks if present
+    if (result.body?.requests) {
+      await handleCallbackRequests(result.body.requests, { config, log })
+    }
+
+    // Return systemMessage from server response if present, otherwise a default
+    const serverMessage = result.body?.systemMessage
+    if (serverMessage) {
+      outputClaudeSystemMessage(serverMessage)
+    } else {
+      outputClaudeSystemMessage(`Agents Observe: logging events. Dashboard: ${config.baseOrigin}`)
+    }
+  } catch (err) {
+    log.error(`hook-sync failed: ${err.message}`)
+    outputClaudeSystemMessage(`Agents Observe: internal error. Run /observe status for help.`)
+  }
+}
+
+/**
+ * hook-autostart: Like hook-sync, but auto-starts the server if unreachable.
+ * Waits up to hookStartupTimeout ms for the server to become healthy.
+ */
+async function hookAutostartCommand() {
+  // Prevent console output so systemMessage can be returned to claude
+  muteConsole()
+
+  try {
+    const { result, envelope } = await sendHookSync()
+
+    // Server is reachable — handle normally
+    if (result && result.status !== 0) {
+      if (result.body?.requests) {
+        await handleCallbackRequests(result.body.requests, { config, log })
+      }
+      const serverMessage = result.body?.systemMessage
+      if (serverMessage) {
+        outputClaudeSystemMessage(serverMessage)
+      } else {
+        outputClaudeSystemMessage(`Agents Observe: logging events. Dashboard: ${config.baseOrigin}`)
+      }
+      return
+    }
+
+    // Server unreachable — auto-start (only if using a local server)
+    if (config.hasCustomApiUrl) {
+      log.warn('Server unreachable at custom API URL — skipping auto-start')
+      outputClaudeSystemMessage(
+        `Agents Observe: server unreachable at ${config.apiBaseUrl}. Run /observe status for help.`,
+      )
+      return
+    }
+
+    log.warn('Server not running, auto-starting...')
+
+    // Start the server in the background — don't await it directly because
+    // docker pull + health loop can exceed the timeout. Instead, poll for
+    // health independently so we detect the server as soon as it's up.
+    let startFinished = false
+    const startPromise = startServer(config, log).then((port) => {
+      startFinished = true
+      return port
+    })
+
+    // Poll for health until the server is up or we hit the timeout
+    const deadline = Date.now() + config.hookStartupTimeout
+    let actualPort = null
+    while (Date.now() < deadline) {
+      const h = await getJson(`${config.apiBaseUrl}/health`, { log: null })
+      if (h.status === 200 && h.body?.ok) {
+        actualPort = config.serverPort
+        break
+      }
+      // If startServer already finished with null (failed), stop polling
+      if (startFinished) {
+        actualPort = await startPromise
+        break
+      }
+      await new Promise((r) => setTimeout(r, 1000))
+    }
+
+    if (!actualPort) {
+      outputClaudeSystemMessage(
+        `Agents Observe: server is starting (timed out after ${
+          config.hookStartupTimeout / 1000
+        }s). Run /observe status to check.`,
+      )
+      return
+    }
+
+    log.info(`Server auto-started on port ${actualPort}`)
+
+    // Retry sending the original event if we have one
+    if (envelope) {
+      const retryUrl = `http://127.0.0.1:${actualPort}/api/events`
+      const retry = await postJson(retryUrl, envelope, { log })
+      if (retry.status !== 0) {
+        log.info('Event delivered after auto-start')
+        if (retry.body?.requests) {
+          await handleCallbackRequests(retry.body.requests, { config, log })
+        }
+      } else {
+        log.error(`Event delivery failed after auto-start: ${retry.error}`)
+      }
+    }
+
+    const dashboardUrl = `http://127.0.0.1:${actualPort}`
+    outputClaudeSystemMessage(`Agents Observe: server started. Dashboard: ${dashboardUrl}`)
+  } catch (err) {
+    log.error(`hook-autostart failed: ${err.message}`)
+    outputClaudeSystemMessage(`Agents Observe: internal error. Run /observe status for help.`)
+  }
 }
 
 /**
