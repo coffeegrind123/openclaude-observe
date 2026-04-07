@@ -276,18 +276,37 @@ function SessionList({ projectId }: { projectId: number }) {
     return groupSessionsByDate(sessions)
   }, [sessions])
 
+  const totalSessions = sessions?.length ?? 0
+  const shouldCollapse = totalSessions > 10
+  const GROUP_PREVIEW_COUNT = 5
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+
+  const toggleGroup = useCallback((label: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(label)) next.delete(label)
+      else next.add(label)
+      return next
+    })
+  }, [])
+
   if (!sessions?.length) {
     return <div className="text-xs text-muted-foreground pl-6 py-1">No sessions</div>
   }
 
   return (
     <div className="ml-4 mt-1 space-y-0.5">
-      {groups.map((group) => (
+      {groups.map((group) => {
+        const isGroupExpanded = !shouldCollapse || expandedGroups.has(group.label)
+        const visibleSessions = isGroupExpanded ? group.sessions : group.sessions.slice(0, GROUP_PREVIEW_COUNT)
+        const hiddenCount = group.sessions.length - visibleSessions.length
+
+        return (
         <div key={group.label}>
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 dark:text-muted-foreground/60 px-2 pt-2 pb-0.5 select-none">
             {group.label}
           </div>
-          {group.sessions.map((session) => {
+          {visibleSessions.map((session) => {
             const isSelected = selectedSessionId === session.id
             const isEditing = editingSessionId === session.id
             const label = session.slug || session.id.slice(0, 8)
@@ -373,8 +392,25 @@ function SessionList({ projectId }: { projectId: number }) {
               </Tooltip>
             )
           })}
+          {hiddenCount > 0 && (
+            <button
+              className="w-full text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 cursor-pointer"
+              onClick={() => toggleGroup(group.label)}
+            >
+              Show {hiddenCount} more...
+            </button>
+          )}
+          {shouldCollapse && expandedGroups.has(group.label) && group.sessions.length > GROUP_PREVIEW_COUNT && (
+            <button
+              className="w-full text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 cursor-pointer"
+              onClick={() => toggleGroup(group.label)}
+            >
+              Show less
+            </button>
+          )}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
