@@ -4,7 +4,7 @@ import { useSessions } from '@/hooks/use-sessions'
 import { useEvents } from '@/hooks/use-events'
 import { useUIStore } from '@/stores/ui-store'
 import { cn } from '@/lib/utils'
-import { ChevronDown, ChevronRight, Folder, Pencil } from 'lucide-react'
+import { ChevronDown, ChevronRight, Folder, Pencil, Clock, CalendarDays } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useQueryClient } from '@tanstack/react-query'
@@ -69,13 +69,22 @@ interface SessionGroup {
   sessions: Session[]
 }
 
-function groupSessionsByDate(sessions: Session[]): SessionGroup[] {
+function groupSessionsByDate(sessions: Session[], sortBy: 'activity' | 'created'): SessionGroup[] {
+  // Sort sessions by the chosen field (descending — most recent first)
+  const sorted = [...sessions].sort((a, b) => {
+    const aTime = sortBy === 'activity' ? (a.lastActivity || a.startedAt) : a.startedAt
+    const bTime = sortBy === 'activity' ? (b.lastActivity || b.startedAt) : b.startedAt
+    return bTime - aTime
+  })
+
+  // Group by date label based on the same field used for sorting
   const groups: SessionGroup[] = []
   let currentLabel: string | null = null
   let currentGroup: Session[] = []
 
-  for (const session of sessions) {
-    const label = getDateGroupLabel(session.startedAt)
+  for (const session of sorted) {
+    const ts = sortBy === 'activity' ? (session.lastActivity || session.startedAt) : session.startedAt
+    const label = getDateGroupLabel(ts)
     if (label !== currentLabel) {
       if (currentLabel !== null && currentGroup.length > 0) {
         groups.push({ label: currentLabel, sessions: currentGroup })
@@ -235,7 +244,7 @@ function shortenCwd(cwd: string): string {
 
 function SessionList({ projectId }: { projectId: number }) {
   const { data: sessions } = useSessions(projectId)
-  const { selectedSessionId, setSelectedSessionId } = useUIStore()
+  const { selectedSessionId, setSelectedSessionId, sessionSortOrder, setSessionSortOrder } = useUIStore()
   const queryClient = useQueryClient()
   const { data: currentEvents } = useEvents(selectedSessionId)
 
@@ -273,8 +282,8 @@ function SessionList({ projectId }: { projectId: number }) {
 
   const groups = useMemo(() => {
     if (!sessions?.length) return []
-    return groupSessionsByDate(sessions)
-  }, [sessions])
+    return groupSessionsByDate(sessions, sessionSortOrder)
+  }, [sessions, sessionSortOrder])
 
   const totalSessions = sessions?.length ?? 0
   const shouldCollapse = totalSessions > 10
@@ -296,6 +305,25 @@ function SessionList({ projectId }: { projectId: number }) {
 
   return (
     <div className="ml-4 mt-1 space-y-0.5">
+      <div className="flex items-center justify-end px-2 pt-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+              onClick={() => setSessionSortOrder(sessionSortOrder === 'activity' ? 'created' : 'activity')}
+            >
+              {sessionSortOrder === 'activity' ? (
+                <><Clock className="h-3 w-3" /> Recent</>
+              ) : (
+                <><CalendarDays className="h-3 w-3" /> Created</>
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="text-xs">
+            {sessionSortOrder === 'activity' ? 'Sorted by recent activity' : 'Sorted by creation date'}
+          </TooltipContent>
+        </Tooltip>
+      </div>
       {groups.map((group) => {
         const isGroupExpanded = !shouldCollapse || expandedGroups.has(group.label)
         const previewCount = group.label === 'Today' ? 10 : GROUP_PREVIEW_COUNT
@@ -367,7 +395,7 @@ function SessionList({ projectId }: { projectId: number }) {
                       )}
                       {!isEditing && (
                         <span className="text-[10px] text-muted-foreground/80 dark:text-muted-foreground/60 ml-auto shrink-0">
-                          {formatRelativeTime(session.startedAt)}
+                          {formatRelativeTime(sessionSortOrder === 'activity' ? (session.lastActivity || session.startedAt) : session.startedAt)}
                         </span>
                       )}
                       {!isEditing && (session.eventCount != null || (session.id === selectedSessionId && currentEvents)) && (

@@ -16,6 +16,7 @@ export interface Session {
   metadata: Record<string, unknown> | null
   agentCount?: number
   eventCount?: number
+  lastActivity?: number
 }
 
 /** Agent metadata from the server — no derived state */

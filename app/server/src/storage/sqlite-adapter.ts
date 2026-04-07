@@ -239,13 +239,14 @@ export class SqliteAdapter implements EventStore {
         `
       SELECT s.*,
         COUNT(DISTINCT a.id) as agent_count,
-        COUNT(DISTINCT e.id) as event_count
+        COUNT(DISTINCT e.id) as event_count,
+        MAX(e.timestamp) as last_activity
       FROM sessions s
       LEFT JOIN agents a ON a.session_id = s.id
       LEFT JOIN events e ON e.session_id = s.id
       WHERE s.project_id = ?
       GROUP BY s.id
-      ORDER BY s.started_at DESC
+      ORDER BY COALESCE(MAX(e.timestamp), s.started_at) DESC
     `,
       )
       .all(projectId)

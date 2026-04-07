@@ -92,6 +92,10 @@ interface UIState {
   autoFollow: boolean
   setAutoFollow: (enabled: boolean) => void
 
+  // Session sort order in sidebar
+  sessionSortOrder: 'activity' | 'created'
+  setSessionSortOrder: (order: 'activity' | 'created') => void
+
   // Icon customization reactivity
   iconCustomizationVersion: number
   bumpIconCustomizationVersion: () => void
@@ -229,6 +233,9 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   autoFollow: true,
   setAutoFollow: (enabled) => set({ autoFollow: enabled }),
+
+  sessionSortOrder: 'activity',
+  setSessionSortOrder: (order) => set({ sessionSortOrder: order }),
 
   iconCustomizationVersion: 0,
   bumpIconCustomizationVersion: () => set((s) => ({ iconCustomizationVersion: s.iconCustomizationVersion + 1 })),
