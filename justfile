@@ -92,6 +92,10 @@ check:
     npm run fmt
     cd app/client && npm install && npm run build
 
+# Show client bundle size visualizer in browser
+bundle-visualizer:
+    cd app/client && npx vite-bundle-visualizer
+
 # Format all source files
 fmt:
     npm run fmt
