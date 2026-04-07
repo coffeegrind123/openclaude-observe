@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
+import Markdown from 'react-markdown'
 import { Button } from '@/components/ui/button'
-import { Copy, Check, ChevronDown, ChevronRight, Loader } from 'lucide-react'
+import { Copy, Check, ChevronDown, ChevronRight, Loader, FileText, Code } from 'lucide-react'
+
+const ReactDiffViewer = lazy(() => import('react-diff-viewer-continued'))
 import { api } from '@/lib/api-client'
 import { getEventIcon } from '@/config/event-icons'
 import { getEventSummary } from '@/lib/event-summary'
@@ -49,13 +52,24 @@ export function EventDetail({ event, agentMap, spawnInfo }: EventDetailProps) {
   return (
     <div className="px-4 py-2 bg-muted/30 border-t border-border text-xs space-y-2">
       {/* Per-event-type rich detail */}
-      <ToolDetail event={event} payload={p} cwd={cwd} thread={thread} agentMap={agentMap} spawnInfo={spawnInfo} />
+      <ToolDetail
+        event={event}
+        payload={p}
+        cwd={cwd}
+        thread={thread}
+        agentMap={agentMap}
+        spawnInfo={spawnInfo}
+      />
 
       {/* Conversation thread for UserPrompt / Stop / SubagentStop events */}
       {showThread && (
         <div>
           <div className="text-muted-foreground mb-1.5 font-medium">Conversation thread:</div>
-          {loadingThread && <div className="text-muted-foreground/80 dark:text-muted-foreground/60 py-2">Loading thread...</div>}
+          {loadingThread && (
+            <div className="text-muted-foreground/80 dark:text-muted-foreground/60 py-2">
+              Loading thread...
+            </div>
+          )}
           {thread && thread.length > 0 && (
             <div className="space-y-0.5 rounded border border-border/50 bg-muted/20 p-1.5">
               {dedupeThread(thread).map((e) => (
@@ -64,7 +78,9 @@ export function EventDetail({ event, agentMap, spawnInfo }: EventDetailProps) {
             </div>
           )}
           {thread && thread.length === 0 && (
-            <div className="text-muted-foreground/80 dark:text-muted-foreground/60 py-1">No thread events found</div>
+            <div className="text-muted-foreground/80 dark:text-muted-foreground/60 py-1">
+              No thread events found
+            </div>
           )}
         </div>
       )}
@@ -129,7 +145,7 @@ function ToolDetail({
     return (
       <div className="space-y-1.5">
         <DetailCode label="Prompt" value={payload.prompt} />
-        {finalMessage && <DetailCode label="Result" value={stripMarkdown(finalMessage)} />}
+        {finalMessage && <DetailCode label="Result" value={finalMessage} />}
       </div>
     )
   }
@@ -146,7 +162,7 @@ function ToolDetail({
       <div className="space-y-1.5">
         {promptText && <DetailCode label="Prompt" value={promptText} />}
         {payload.last_assistant_message && (
-          <DetailCode label="Final" value={stripMarkdown(payload.last_assistant_message)} />
+          <DetailCode label="Final" value={payload.last_assistant_message} />
         )}
       </div>
     )
@@ -162,7 +178,7 @@ function ToolDetail({
         <AgentIdentity assignedName={assignedName} rawName={rawName} agentId={event.agentId} />
         {spawnInfo?.description && <DetailRow label="Task" value={spawnInfo.description} />}
         {spawnInfo?.prompt && <DetailCode label="Prompt" value={spawnInfo.prompt} />}
-        {agentResult && <DetailCode label="Result" value={stripMarkdown(agentResult)} />}
+        {agentResult && <DetailCode label="Result" value={agentResult} />}
       </div>
     )
   }
@@ -216,7 +232,16 @@ function ToolDetail({
       <div className="space-y-1.5">
         {event.toolName && <DetailRow label="Tool" value={event.toolName} />}
         {ti.command && <DetailCode label="Command" value={ti.command} />}
-        {payload.error && <DetailCode label="Error" value={typeof payload.error === 'string' ? payload.error : JSON.stringify(payload.error, null, 2)} />}
+        {payload.error && (
+          <DetailCode
+            label="Error"
+            value={
+              typeof payload.error === 'string'
+                ? payload.error
+                : JSON.stringify(payload.error, null, 2)
+            }
+          />
+        )}
       </div>
     )
   }
@@ -225,7 +250,9 @@ function ToolDetail({
     return (
       <div className="space-y-1">
         {payload.tool_name && <DetailRow label="Tool" value={payload.tool_name as string} />}
-        {payload.description && <DetailRow label="Description" value={payload.description as string} />}
+        {payload.description && (
+          <DetailRow label="Description" value={payload.description as string} />
+        )}
       </div>
     )
   }
@@ -234,7 +261,9 @@ function ToolDetail({
     return (
       <div className="space-y-1">
         {payload.description && <DetailRow label="Task" value={payload.description as string} />}
-        {payload.task_description && <DetailRow label="Task" value={payload.task_description as string} />}
+        {payload.task_description && (
+          <DetailRow label="Task" value={payload.task_description as string} />
+        )}
         {payload.status && <DetailRow label="Status" value={payload.status as string} />}
       </div>
     )
@@ -243,7 +272,9 @@ function ToolDetail({
   if (event.subtype === 'TeammateIdle') {
     return (
       <div className="space-y-1">
-        {payload.teammate_name && <DetailRow label="Teammate" value={payload.teammate_name as string} />}
+        {payload.teammate_name && (
+          <DetailRow label="Teammate" value={payload.teammate_name as string} />
+        )}
       </div>
     )
   }
@@ -251,7 +282,9 @@ function ToolDetail({
   if (event.subtype === 'InstructionsLoaded') {
     return (
       <div className="space-y-1">
-        {payload.file_path && <DetailRow label="File" value={relPath(payload.file_path as string, cwd)} />}
+        {payload.file_path && (
+          <DetailRow label="File" value={relPath(payload.file_path as string, cwd)} />
+        )}
       </div>
     )
   }
@@ -259,7 +292,9 @@ function ToolDetail({
   if (event.subtype === 'ConfigChange') {
     return (
       <div className="space-y-1">
-        {payload.file_path && <DetailRow label="File" value={relPath(payload.file_path as string, cwd)} />}
+        {payload.file_path && (
+          <DetailRow label="File" value={relPath(payload.file_path as string, cwd)} />
+        )}
       </div>
     )
   }
@@ -276,7 +311,9 @@ function ToolDetail({
   if (event.subtype === 'FileChanged') {
     return (
       <div className="space-y-1">
-        {payload.file_path && <DetailRow label="File" value={relPath(payload.file_path as string, cwd)} />}
+        {payload.file_path && (
+          <DetailRow label="File" value={relPath(payload.file_path as string, cwd)} />
+        )}
       </div>
     )
   }
@@ -284,9 +321,16 @@ function ToolDetail({
   if (event.subtype === 'PreCompact' || event.subtype === 'PostCompact') {
     return (
       <div className="space-y-1">
-        <DetailRow label="Status" value={event.subtype === 'PreCompact' ? 'Compacting...' : 'Compacted'} />
-        {payload.tokens_before && <DetailRow label="Tokens before" value={String(payload.tokens_before)} />}
-        {payload.tokens_after && <DetailRow label="Tokens after" value={String(payload.tokens_after)} />}
+        <DetailRow
+          label="Status"
+          value={event.subtype === 'PreCompact' ? 'Compacting...' : 'Compacted'}
+        />
+        {payload.tokens_before && (
+          <DetailRow label="Tokens before" value={String(payload.tokens_before)} />
+        )}
+        {payload.tokens_after && (
+          <DetailRow label="Tokens after" value={String(payload.tokens_after)} />
+        )}
       </div>
     )
   }
@@ -322,13 +366,15 @@ function ToolDetail({
   if (event.subtype !== 'PreToolUse' && event.subtype !== 'PostToolUse') return null
 
   switch (event.toolName) {
-    case 'Bash':
+    case 'Bash': {
+      const isDiff = /\bdiff\b/.test(ti.command || '')
       return (
         <div className="space-y-1.5">
           {ti.command && <DetailCode label="Command" value={ti.command} />}
-          {result && <DetailCode label="Result" value={formatResult(result)} />}
+          {result && <DetailCode label="Result" value={formatResult(result)} diff={isDiff} />}
         </div>
       )
+    }
     case 'Read':
       return (
         <div className="space-y-1.5">
@@ -353,8 +399,14 @@ function ToolDetail({
       return (
         <div className="space-y-1.5">
           <DetailRow label="File" value={relPath(ti.file_path, cwd)} />
-          {ti.old_string && <DetailCode label="Old" value={ti.old_string} />}
-          {ti.new_string && <DetailCode label="New" value={ti.new_string} />}
+          {ti.old_string && ti.new_string ? (
+            <DetailDiff oldValue={ti.old_string} newValue={ti.new_string} />
+          ) : (
+            <>
+              {ti.old_string && <DetailCode label="Old" value={ti.old_string} />}
+              {ti.new_string && <DetailCode label="New" value={ti.new_string} />}
+            </>
+          )}
           {result && <DetailCode label="Result" value={formatResult(result)} />}
         </div>
       )
@@ -382,7 +434,11 @@ function ToolDetail({
       const agentRawName = ti.name as string | undefined
       return (
         <div className="space-y-1.5">
-          <AgentIdentity assignedName={agentAssignedName} rawName={agentRawName} agentId={spawnedAgentId} />
+          <AgentIdentity
+            assignedName={agentAssignedName}
+            rawName={agentRawName}
+            agentId={spawnedAgentId}
+          />
           {ti.description && <DetailRow label="Task" value={ti.description} />}
           {ti.prompt && <DetailCode label="Prompt" value={ti.prompt} />}
         </div>
@@ -421,7 +477,9 @@ function AgentIdentity({
           <span className="truncate">
             {displayName}
             {showRawName && (
-              <span className="text-muted-foreground/80 dark:text-muted-foreground/60 ml-1.5">({rawName})</span>
+              <span className="text-muted-foreground/80 dark:text-muted-foreground/60 ml-1.5">
+                ({rawName})
+              </span>
             )}
           </span>
         </div>
@@ -429,7 +487,9 @@ function AgentIdentity({
       {showId && (
         <div className="flex gap-2">
           <span className="text-muted-foreground shrink-0 w-20 text-right">Agent ID:</span>
-          <span className="truncate font-mono text-muted-foreground/80 dark:text-muted-foreground/60">{agentId}</span>
+          <span className="truncate font-mono text-muted-foreground/80 dark:text-muted-foreground/60">
+            {agentId}
+          </span>
         </div>
       )}
     </>
@@ -446,22 +506,217 @@ function DetailRow({ label, value }: { label: string; value?: string }) {
   )
 }
 
-function stripMarkdown(s: string): string {
-  return s
-    .replace(/\*\*(.*?)\*\*/g, '$1') // **bold** → bold
-    .replace(/`([^`]+)`/g, '$1') // `code` → code
-    .replace(/^[-*] /gm, '• ') // list items
-    .trim()
+/** Heuristic: does the text contain enough markdown signals to render? */
+function looksLikeMarkdown(s: string): boolean {
+  const trimmed = s.trimStart()
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return false
+
+  const markers = [
+    /^#{1,6}\s/m, // headings
+    /\*\*.+?\*\*/, // bold
+    /^[-*]\s/m, // unordered list
+    /^\d+\.\s/m, // ordered list
+    /```/, // code fence
+    /`[^`]+`/, // inline code
+    /\[.+?\]\(.+?\)/, // links
+    /^\s*>/m, // blockquote
+  ]
+  let hits = 0
+  for (const re of markers) {
+    if (re.test(s)) hits++
+    if (hits >= 2) return true
+  }
+  return false
 }
 
-function DetailCode({ label, value }: { label: string; value?: string }) {
+const mdComponents = {
+  h1: ({ children, ...props }: React.ComponentProps<'h1'>) => (
+    <h1 className="text-xs font-bold mt-3 first:mt-0 mb-1.5 text-foreground" {...props}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children, ...props }: React.ComponentProps<'h2'>) => (
+    <h2 className="text-xs font-bold mt-3 first:mt-0 mb-1.5 text-foreground" {...props}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children, ...props }: React.ComponentProps<'h3'>) => (
+    <h3 className="text-[11px] font-semibold mt-2 first:mt-0 mb-1" {...props}>
+      {children}
+    </h3>
+  ),
+  p: ({ children, ...props }: React.ComponentProps<'p'>) => (
+    <p className="mb-1.5 last:mb-0 leading-relaxed" {...props}>
+      {children}
+    </p>
+  ),
+  strong: ({ children, ...props }: React.ComponentProps<'strong'>) => (
+    <strong className="font-semibold text-foreground" {...props}>
+      {children}
+    </strong>
+  ),
+  ul: ({ children, ...props }: React.ComponentProps<'ul'>) => (
+    <ul className="list-disc pl-4 space-y-1 mb-1.5" {...props}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children, ...props }: React.ComponentProps<'ol'>) => (
+    <ol className="list-decimal pl-4 space-y-1 mb-1.5" {...props}>
+      {children}
+    </ol>
+  ),
+  li: ({ children, ...props }: React.ComponentProps<'li'>) => (
+    <li className="leading-relaxed" {...props}>
+      {children}
+    </li>
+  ),
+  code: ({ children, className, ...props }: React.ComponentProps<'code'>) => {
+    const isBlock = className?.includes('language-')
+    if (isBlock) {
+      return (
+        <code
+          className="block bg-black/20 dark:bg-white/10 border border-border/50 rounded p-1.5 font-mono text-[10px] leading-relaxed overflow-x-auto my-1.5"
+          {...props}
+        >
+          {children}
+        </code>
+      )
+    }
+    return (
+      <code
+        className="bg-black/10 dark:bg-white/10 border border-border/40 rounded px-1 py-0.5 font-mono text-[10px] text-amber-700 dark:text-amber-400"
+        {...props}
+      >
+        {children}
+      </code>
+    )
+  },
+  pre: ({ children, ...props }: React.ComponentProps<'pre'>) => (
+    <pre className="overflow-x-auto my-1.5" {...props}>
+      {children}
+    </pre>
+  ),
+  blockquote: ({ children, ...props }: React.ComponentProps<'blockquote'>) => (
+    <blockquote
+      className="border-l-2 border-primary/40 pl-2.5 text-muted-foreground italic my-1.5"
+      {...props}
+    >
+      {children}
+    </blockquote>
+  ),
+  a: ({ children, ...props }: React.ComponentProps<'a'>) => (
+    <a
+      className="text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-600/30 dark:decoration-blue-400/30 hover:decoration-blue-600 dark:hover:decoration-blue-400"
+      target="_blank"
+      rel="noopener noreferrer"
+      {...props}
+    >
+      {children}
+    </a>
+  ),
+  hr: (props: React.ComponentProps<'hr'>) => <hr className="my-2 border-border/50" {...props} />,
+}
+
+/** Renders unified diff text with colored +/- lines */
+function DiffPre({ value }: { value: string }) {
+  const lines = value.split('\n')
+  return (
+    <pre className="overflow-x-auto rounded bg-muted/50 p-1.5 font-mono text-[10px] leading-relaxed max-h-40 overflow-y-auto">
+      {lines.map((line, i) => {
+        let cls = ''
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+          cls = 'text-green-600 dark:text-green-400 bg-green-500/10'
+        } else if (line.startsWith('-') && !line.startsWith('---')) {
+          cls = 'text-red-600 dark:text-red-400 bg-red-500/10'
+        } else if (line.startsWith('@@')) {
+          cls = 'text-blue-600 dark:text-blue-400'
+        }
+        return (
+          <div key={i} className={cls}>
+            {line}
+          </div>
+        )
+      })}
+    </pre>
+  )
+}
+
+/** Side-by-side diff for Edit tool old/new strings */
+function DetailDiff({ oldValue, newValue }: { oldValue: string; newValue: string }) {
+  return (
+    <div className="flex gap-2">
+      <span className="text-muted-foreground shrink-0 w-20 text-right">Diff:</span>
+      <div className="flex-1 min-w-0 overflow-x-auto rounded bg-muted/50 max-h-60 overflow-y-auto [&_table]:!bg-transparent text-[10px]">
+        <Suspense
+          fallback={
+            <pre className="p-1.5 font-mono text-[10px] leading-relaxed">Loading diff...</pre>
+          }
+        >
+          <ReactDiffViewer
+            oldValue={oldValue}
+            newValue={newValue}
+            splitView={false}
+            useDarkTheme
+            hideLineNumbers
+            codeFoldMessageRenderer={() => <span />}
+            extraLinesSurroundingDiff={Infinity}
+            styles={{
+              variables: {
+                dark: {
+                  diffViewerBackground: 'transparent',
+                  addedBackground: 'rgba(34,197,94,0.1)',
+                  removedBackground: 'rgba(239,68,68,0.1)',
+                  addedColor: '#4ade80',
+                  removedColor: '#f87171',
+                  wordAddedBackground: 'rgba(34,197,94,0.25)',
+                  wordRemovedBackground: 'rgba(239,68,68,0.25)',
+                  emptyLineBackground: 'transparent',
+                  gutterBackground: 'transparent',
+                  codeFoldBackground: 'transparent',
+                  codeFoldGutterBackground: 'transparent',
+                },
+              },
+              contentText: { fontSize: '10px', lineHeight: '1.6' },
+            }}
+          />
+        </Suspense>
+      </div>
+    </div>
+  )
+}
+
+function DetailCode({ label, value, diff }: { label: string; value?: string; diff?: boolean }) {
   if (!value) return null
+  const hasDiff = diff ?? false
+  const hasMd = !hasDiff && looksLikeMarkdown(value)
+  const [showRaw, setShowRaw] = useState(!hasMd && !hasDiff)
+
   return (
     <div className="flex gap-2">
       <span className="text-muted-foreground shrink-0 w-20 text-right">{label}:</span>
-      <pre className="overflow-x-auto rounded bg-muted/50 p-1.5 font-mono text-[10px] leading-relaxed max-h-40 overflow-y-auto flex-1 min-w-0">
-        {value}
-      </pre>
+      <div className="flex-1 min-w-0">
+        {(hasMd || hasDiff) && (
+          <button
+            type="button"
+            className="flex items-center gap-1 text-[9px] text-muted-foreground/70 hover:text-muted-foreground mb-0.5 transition-colors"
+            onClick={() => setShowRaw(!showRaw)}
+          >
+            {showRaw ? <Code className="h-2.5 w-2.5" /> : <FileText className="h-2.5 w-2.5" />}
+            {showRaw ? 'raw' : hasDiff ? 'diff' : 'markdown'}
+          </button>
+        )}
+        {showRaw ? (
+          <pre className="overflow-x-auto rounded bg-muted/50 p-1.5 font-mono text-[10px] leading-relaxed max-h-40 overflow-y-auto">
+            {value}
+          </pre>
+        ) : hasDiff ? (
+          <DiffPre value={value} />
+        ) : (
+          <div className="overflow-y-auto max-h-40 rounded bg-muted/50 p-1.5 text-[11px] leading-relaxed prose-sm">
+            <Markdown components={mdComponents}>{value}</Markdown>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -583,14 +838,18 @@ function ThreadEvent({ event, isCurrentEvent }: { event: ParsedEvent; isCurrentE
         <span
           className={cn(
             'shrink-0',
-            isCompleted ? 'text-green-600 dark:text-green-500' : 'text-yellow-600 dark:text-yellow-500/70',
+            isCompleted
+              ? 'text-green-600 dark:text-green-500'
+              : 'text-yellow-600 dark:text-yellow-500/70',
           )}
         >
           {isCompleted ? <Check className="h-3 w-3" /> : <Loader className="h-3 w-3" />}
         </span>
       )}
       {isTool && event.toolName && (
-        <span className="text-xs font-medium text-blue-700 dark:text-blue-400 shrink-0">{event.toolName}</span>
+        <span className="text-xs font-medium text-blue-700 dark:text-blue-400 shrink-0">
+          {event.toolName}
+        </span>
       )}
       <span className="truncate flex-1 text-[10px]">{summary}</span>
       <span className="text-[9px] text-muted-foreground/70 dark:text-muted-foreground/50 tabular-nums shrink-0">
