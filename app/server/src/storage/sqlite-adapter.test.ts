@@ -190,6 +190,16 @@ describe('SqliteAdapter — sessions', () => {
     const session = await store.getSessionById('sess1')
     expect(session.slug).toBe('new-slug')
   })
+
+  test('updateSessionProject moves session to a different project', async () => {
+    const proj1 = await store.createProject('proj1', 'Project 1', null)
+    const proj2 = await store.createProject('proj2', 'Project 2', null)
+    await store.upsertSession('sess1', proj1, null, null, 1000)
+
+    await store.updateSessionProject('sess1', proj2)
+    const session = await store.getSessionById('sess1')
+    expect(session.project_id).toBe(proj2)
+  })
 })
 
 // ---------------------------------------------------------------------------

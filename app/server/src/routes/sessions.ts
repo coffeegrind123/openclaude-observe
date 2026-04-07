@@ -123,6 +123,42 @@ router.get('/sessions/:id/events', async (c) => {
   return c.json(events)
 })
 
+// PATCH /sessions/:id — move session to a different project
+router.patch('/sessions/:id', async (c) => {
+  const store = c.get('store')
+  const broadcastToAll = c.get('broadcastToAll')
+
+  try {
+    const sessionId = decodeURIComponent(c.req.param('id'))
+    const data = (await c.req.json()) as Record<string, unknown>
+
+    const session = await store.getSessionById(sessionId)
+    if (!session) return c.json({ error: 'Session not found' }, 404)
+
+    if (data.projectSlug && typeof data.projectSlug === 'string') {
+      const project = await store.getProjectBySlug(data.projectSlug)
+      if (!project) return c.json({ error: 'Project not found' }, 404)
+      await store.updateSessionProject(sessionId, project.id)
+      broadcastToAll({
+        type: 'session_update',
+        data: { id: sessionId, projectId: project.id, projectSlug: project.slug },
+      })
+    } else if (data.projectId && typeof data.projectId === 'number') {
+      await store.updateSessionProject(sessionId, data.projectId)
+      broadcastToAll({
+        type: 'session_update',
+        data: { id: sessionId, projectId: data.projectId },
+      })
+    } else {
+      return c.json({ error: 'Provide projectSlug or projectId' }, 400)
+    }
+
+    return c.json({ ok: true })
+  } catch {
+    return c.json({ error: 'Invalid request' }, 400)
+  }
+})
+
 // POST /sessions/:id/metadata
 router.post('/sessions/:id/metadata', async (c) => {
   const store = c.get('store')

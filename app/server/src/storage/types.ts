@@ -61,6 +61,7 @@ export interface EventStore {
   updateAgentType(id: string, agentType: string): Promise<void>
   updateSessionStatus(id: string, status: string): Promise<void>
   updateSessionSlug(sessionId: string, slug: string): Promise<void>
+  updateSessionProject(sessionId: string, projectId: number): Promise<void>
   updateAgentName(agentId: string, name: string): Promise<void>
   insertEvent(params: InsertEventParams): Promise<number>
   getProjects(): Promise<any[]>

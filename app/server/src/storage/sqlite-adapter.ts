@@ -180,6 +180,12 @@ export class SqliteAdapter implements EventStore {
       .run(status, status === 'stopped' ? Date.now() : null, id)
   }
 
+  async updateSessionProject(sessionId: string, projectId: number): Promise<void> {
+    this.db
+      .prepare('UPDATE sessions SET project_id = ?, updated_at = ? WHERE id = ?')
+      .run(projectId, Date.now(), sessionId)
+  }
+
   async updateSessionSlug(sessionId: string, slug: string): Promise<void> {
     this.db
       .prepare(
