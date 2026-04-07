@@ -79,6 +79,7 @@ su -s /bin/bash testuser -c "
   export AGENTS_OBSERVE_DOCKER_IMAGE='$AGENTS_OBSERVE_DOCKER_IMAGE'
   export AGENTS_OBSERVE_TEST_SKIP_PULL='$AGENTS_OBSERVE_TEST_SKIP_PULL'
   export AGENTS_OBSERVE_LOG_LEVEL='${AGENTS_OBSERVE_LOG_LEVEL:-trace}'
+  export AGENTS_OBSERVE_PROJECT_SLUG='claude-test'
   export CLAUDE_PLUGIN_ROOT='$CLAUDE_PLUGIN_ROOT'
   claude \
     --plugin-dir /plugin \

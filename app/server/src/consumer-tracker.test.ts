@@ -73,10 +73,10 @@ describe('consumer-tracker', () => {
       expect(exitSpy).not.toHaveBeenCalled()
     })
 
-    test('shuts down after grace period when no consumers or clients', () => {
-      vi.advanceTimersByTime(61_000) // past grace period
+    test('shuts down after grace period + shutdown delay when no consumers or clients', () => {
+      vi.advanceTimersByTime(61_000) // past startup grace period
       tracker.checkShutdown()
-      vi.advanceTimersByTime(500) // process.exit is in a setTimeout
+      vi.advanceTimersByTime(30_000) // shutdown delay (30s)
       expect(exitSpy).toHaveBeenCalledWith(0)
     })
 
@@ -145,12 +145,23 @@ describe('consumer-tracker', () => {
   })
 
   describe('deregister triggers shutdown', () => {
-    test('shutting down after last consumer deregisters', () => {
+    test('shutting down after last consumer deregisters (after shutdown delay)', () => {
       vi.advanceTimersByTime(61_000)
       tracker.heartbeat('mcp-1')
       tracker.deregister('mcp-1')
-      vi.advanceTimersByTime(500)
+      vi.advanceTimersByTime(30_000) // shutdown delay
       expect(exitSpy).toHaveBeenCalledWith(0)
+    })
+
+    test('shutdown cancelled if client reconnects during delay', () => {
+      vi.advanceTimersByTime(61_000)
+      tracker.heartbeat('mcp-1')
+      tracker.deregister('mcp-1')
+      vi.advanceTimersByTime(5_000) // 5s into the 30s delay
+      websocketMock.getClientCount.mockReturnValue(1) // client reconnects
+      tracker.cancelPendingShutdown()
+      vi.advanceTimersByTime(30_000) // well past the original delay
+      expect(exitSpy).not.toHaveBeenCalled()
     })
 
     test('no shutdown when other consumers remain', () => {
