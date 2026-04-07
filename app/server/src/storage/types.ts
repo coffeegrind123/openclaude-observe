@@ -58,6 +58,7 @@ export interface EventStore {
     name: string | null,
     description: string | null,
     agentType?: string | null,
+    transcriptPath?: string | null,
   ): Promise<void>
   updateAgentType(id: string, agentType: string): Promise<void>
   updateSessionStatus(id: string, status: string): Promise<void>

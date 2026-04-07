@@ -81,6 +81,7 @@ export class SqliteAdapter implements EventStore {
         description TEXT,
         agent_type TEXT,
         agent_class TEXT DEFAULT 'claude-code',
+        transcript_path TEXT,
         metadata TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -89,10 +90,13 @@ export class SqliteAdapter implements EventStore {
       )
     `)
 
-    // Migration: add metadata to agents if missing
+    // Migrations for agents
     const agentCols = this.db.prepare("PRAGMA table_info('agents')").all() as { name: string }[]
     if (!agentCols.some((c) => c.name === 'metadata')) {
       this.db.exec('ALTER TABLE agents ADD COLUMN metadata TEXT')
+    }
+    if (!agentCols.some((c) => c.name === 'transcript_path')) {
+      this.db.exec('ALTER TABLE agents ADD COLUMN transcript_path TEXT')
     }
 
     this.db.exec(`
@@ -187,22 +191,24 @@ export class SqliteAdapter implements EventStore {
     name: string | null,
     description: string | null,
     agentType?: string | null,
+    transcriptPath?: string | null,
   ): Promise<void> {
     const now = Date.now()
     const existing = this.db.prepare('SELECT id FROM agents WHERE id = ?').get(id)
     this.db
       .prepare(
         `
-      INSERT INTO agents (id, session_id, parent_agent_id, name, description, agent_type, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agents (id, session_id, parent_agent_id, name, description, agent_type, transcript_path, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = COALESCE(excluded.name, agents.name),
         description = COALESCE(excluded.description, agents.description),
         agent_type = COALESCE(excluded.agent_type, agents.agent_type),
+        transcript_path = COALESCE(excluded.transcript_path, agents.transcript_path),
         updated_at = ?
     `,
       )
-      .run(id, sessionId, parentAgentId, name, description, agentType ?? null, now, now, now)
+      .run(id, sessionId, parentAgentId, name, description, agentType ?? null, transcriptPath ?? null, now, now, now)
 
     if (!existing) {
       this.db

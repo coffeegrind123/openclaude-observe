@@ -2,11 +2,14 @@
 
 ## QUEUED TASKS
 
-(empty)
+- [ ] Enhance events stream expanded summaries:
+  - [ ] Show both the command and description - we're currently just showing the command and result
+  - [ ] For Read tools, split out the response into: type and contents - we're currently showing the tool_response as the content instead of tool_response.file.content
+- [ ] Show both Stop and SubagentStop hooks when the Stop filter is used - currently, SubagentStop is only shown for the Agent filter but we need to show all Stop-type events with the Stop filter
 
 ## COMPLETED TASKS
 
-(keep)
+- [x] Add transcript_path to agents table
 
 ---
 
@@ -14,6 +17,9 @@
 
 Don't implement these yet. They're here for future reference.
 
+- [ ] Add env var to disable auto server shutdown
+  - Disable auto shutdown when using `just start` and `just dev`
+  - Add /observe config to change env vars including the auto shutdown? - good test of how plugins deal with env vars
 - [ ] Implement timeline replay feature; see [spec-timeline-rewind.md](docs/plans/_queued/spec-timeline-rewind.md)
 - [ ] Track token & context window usage per session and agent
   - On Stop hook, use two-way pattern: hook reads transcript JSONL, sums `usage` fields from all assistant messages, posts totals to `/api/sessions/:id/usage` callback

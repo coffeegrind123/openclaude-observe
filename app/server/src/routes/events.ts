@@ -159,8 +159,9 @@ router.post('/events', async (c) => {
         }
       }
 
-      // Extract agent_type from the hook payload — every subagent event carries it
+      // Extract agent_type and transcript_path from the hook payload
       const ownerAgentType: string | null = (hookPayload as any)?.agent_type ?? null
+      const agentTranscriptPath: string | null = (hookPayload as any)?.agent_transcript_path ?? null
 
       await store.upsertAgent(
         parsed.ownerAgentId,
@@ -169,6 +170,7 @@ router.post('/events', async (c) => {
         pending?.name ?? null,
         pending?.description ?? null,
         ownerAgentType,
+        agentTranscriptPath,
       )
     }
     let agentId = parsed.ownerAgentId || rootAgentId
