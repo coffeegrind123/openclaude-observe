@@ -1,4 +1,5 @@
 import { useUIStore } from '@/stores/ui-store'
+import { SessionBreadcrumb } from './session-breadcrumb'
 import { ScopeBar } from './scope-bar'
 import { EventFilterBar } from './event-filter-bar'
 import { ActivityTimeline } from '@/components/timeline/activity-timeline'
@@ -19,6 +20,7 @@ export function MainPanel() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      <SessionBreadcrumb />
       <ScopeBar />
       <EventFilterBar />
       <ActivityTimeline />
