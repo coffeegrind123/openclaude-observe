@@ -1,4 +1,7 @@
+import { lazy } from 'react'
 import type { LucideIcon } from 'lucide-react'
+import dynamicIconImports from 'lucide-react/dynamicIconImports'
+import { resolveIconName } from '@/lib/dynamic-icon'
 import {
   Rocket,
   Flag,
@@ -32,8 +35,10 @@ import {
   User,
   Pin,
 } from 'lucide-react'
-import { icons as allLucideIcons } from 'lucide-react'
 import { getIconCustomization, COLOR_PRESETS } from '@/hooks/use-icon-customizations'
+
+// Cache lazy-loaded icon components so we don't create new ones on every render
+const lazyIconCache = new Map<string, LucideIcon>()
 
 export const eventIcons: Record<string, LucideIcon> = {
   // Session lifecycle
@@ -241,8 +246,13 @@ export function getEventIcon(subtype: string | null, toolName?: string | null): 
   // Check user customizations first
   const custom = getIconCustomization(key)
   if (custom?.iconName) {
-    const icon = (allLucideIcons as Record<string, LucideIcon>)[custom.iconName]
-    if (icon) return icon
+    const resolved = resolveIconName(custom.iconName)
+    if (resolved) {
+      if (!lazyIconCache.has(resolved)) {
+        lazyIconCache.set(resolved, lazy(dynamicIconImports[resolved]) as unknown as LucideIcon)
+      }
+      return lazyIconCache.get(resolved)!
+    }
   }
 
   // Fall back to defaults

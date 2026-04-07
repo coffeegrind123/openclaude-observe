@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { icons as allLucideIcons } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { ALL_ICON_NAMES, DynamicIcon, toPascalCase } from '@/lib/dynamic-icon'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,8 +12,8 @@ interface IconPickerProps {
   onSelect: (iconName: string) => void
 }
 
-// Pre-compute the full icon list once
-const ALL_ICON_NAMES = Object.keys(allLucideIcons as Record<string, LucideIcon>).sort()
+// Limit visible icons for performance — no virtualization needed with this cap
+const MAX_VISIBLE = 300
 
 export function IconPicker({
   currentIconName,
@@ -25,13 +24,10 @@ export function IconPicker({
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
 
-  const CurrentIcon = (allLucideIcons as Record<string, LucideIcon>)[currentIconName]
-
   // When the picker is open, prevent scrolling on the modal behind it
   useEffect(() => {
     if (!open) return
     const handler = (e: WheelEvent) => {
-      // Allow scrolling inside the popover, block everywhere else
       const target = e.target as HTMLElement
       if (!target.closest('[data-slot="popover-content"]')) {
         e.preventDefault()
@@ -44,8 +40,14 @@ export function IconPicker({
   const filtered = useMemo(() => {
     if (!search) return ALL_ICON_NAMES
     const lower = search.toLowerCase()
-    return ALL_ICON_NAMES.filter((name) => name.toLowerCase().includes(lower))
+    return ALL_ICON_NAMES.filter((name) => name.includes(lower))
   }, [search])
+
+  // Convert currentIconName (PascalCase) to kebab-case for comparison
+  const currentKebab = currentIconName
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
+    .toLowerCase()
 
   return (
     <Popover
@@ -57,11 +59,11 @@ export function IconPicker({
     >
       <PopoverTrigger asChild>
         <Button variant="outline" size="icon-sm" className="shrink-0" aria-label="Change icon">
-          {CurrentIcon ? (
-            <CurrentIcon className={cn('h-4 w-4', iconColorClass)} style={iconStyle} />
-          ) : (
-            <span className="text-xs text-muted-foreground">?</span>
-          )}
+          <DynamicIcon
+            name={currentKebab}
+            className={cn('h-4 w-4', iconColorClass)}
+            style={iconStyle}
+          />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -81,10 +83,8 @@ export function IconPicker({
         </div>
         <div className="h-72 overflow-y-auto overscroll-contain">
           <div className="grid grid-cols-6 gap-1 p-2">
-            {filtered.map((name) => {
-              const Icon = (allLucideIcons as Record<string, LucideIcon>)[name]
-              if (!Icon) return null
-              const isCurrent = name === currentIconName
+            {filtered.slice(0, MAX_VISIBLE).map((name) => {
+              const isCurrent = name === currentKebab
               return (
                 <button
                   key={name}
@@ -94,16 +94,21 @@ export function IconPicker({
                   )}
                   title={formatIconName(name)}
                   onClick={() => {
-                    onSelect(name)
+                    onSelect(toPascalCase(name))
                     setOpen(false)
                     setSearch('')
                   }}
                 >
-                  <Icon className="h-4 w-4 text-foreground" />
+                  <DynamicIcon name={name} className="h-4 w-4 text-foreground" />
                 </button>
               )
             })}
           </div>
+          {filtered.length > MAX_VISIBLE && (
+            <p className="py-2 text-center text-[10px] text-muted-foreground">
+              Showing {MAX_VISIBLE} of {filtered.length} — refine your search
+            </p>
+          )}
           {filtered.length === 0 && (
             <p className="py-6 text-center text-sm text-muted-foreground">No icons found.</p>
           )}
@@ -113,7 +118,10 @@ export function IconPicker({
   )
 }
 
-/** Convert PascalCase to spaced words: "CircleCheck" -> "Circle Check" */
+/** Convert kebab-case to spaced words: "circle-check" -> "Circle Check" */
 function formatIconName(name: string): string {
-  return name.replace(/([A-Z])/g, ' $1').trim()
+  return name
+    .split('-')
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join(' ')
 }

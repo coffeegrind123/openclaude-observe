@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
-import { icons as allLucideIcons } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { DynamicIcon, resolveIconName } from '@/lib/dynamic-icon'
 import { eventIcons, eventColors, defaultEventIcon } from '@/config/event-icons'
 import { useIconCustomizations, COLOR_PRESETS } from '@/hooks/use-icon-customizations'
 import { IconPicker } from './icon-picker'
@@ -211,8 +211,9 @@ function EventRow({ entry, customization, onChangeIcon, onChangeColor, onReset }
   const activeColorKey = customization?.colorName || entry.defaultColorKey
   const activeCustomHex = customization?.customHex
 
-  // Resolve actual icon component for preview
-  const Icon = (allLucideIcons as Record<string, LucideIcon>)[activeIconName] || defaultEventIcon
+  // Resolve whether to use dynamic or default icon for preview
+  const useDynamic = !!resolveIconName(activeIconName)
+  const FallbackIcon = defaultEventIcon
 
   // Resolve active color class or custom hex
   const isCustomColor = activeColorKey === 'custom' && activeCustomHex
@@ -235,10 +236,18 @@ function EventRow({ entry, customization, onChangeIcon, onChangeColor, onReset }
       )}
     >
       {/* Preview icon */}
-      <Icon
-        className={cn('h-4 w-4 shrink-0', !isCustomColor && activeIconColorClass)}
-        style={isCustomColor ? { color: activeCustomHex } : undefined}
-      />
+      {useDynamic ? (
+        <DynamicIcon
+          name={activeIconName}
+          className={cn('h-4 w-4 shrink-0', !isCustomColor && activeIconColorClass)}
+          style={isCustomColor ? { color: activeCustomHex } : undefined}
+        />
+      ) : (
+        <FallbackIcon
+          className={cn('h-4 w-4 shrink-0', !isCustomColor && activeIconColorClass)}
+          style={isCustomColor ? { color: activeCustomHex } : undefined}
+        />
+      )}
 
       {/* Event name: label + key */}
       <div className="flex-1 min-w-0">
