@@ -208,7 +208,10 @@ describe('getEventSummary', () => {
     it('should show tool_name with tool_input.description', () => {
       const event = makeEvent({
         subtype: 'PermissionRequest',
-        payload: { tool_name: 'Bash', tool_input: { description: 'Test awk extraction for v0.8.0 changelog' } },
+        payload: {
+          tool_name: 'Bash',
+          tool_input: { description: 'Test awk extraction for v0.8.0 changelog' },
+        },
       })
       expect(getEventSummary(event)).toBe('Bash: Test awk extraction for v0.8.0 changelog')
     })
@@ -287,9 +290,15 @@ describe('getEventSummary', () => {
       const event = makeEvent({
         subtype: 'PreToolUse',
         toolName: 'Bash',
-        payload: { tool_input: { command: 'cat > /tmp/test.js << \'EOF\'\nconsole.log("hello")\nEOF\nnode /tmp/test.js' } },
+        payload: {
+          tool_input: {
+            command: 'cat > /tmp/test.js << \'EOF\'\nconsole.log("hello")\nEOF\nnode /tmp/test.js',
+          },
+        },
       })
-      expect(getEventSummary(event)).toBe('cat > /tmp/test.js << \'EOF\' \\n console.log("hello") \\n EOF \\n node /tmp/test.js')
+      expect(getEventSummary(event)).toBe(
+        'cat > /tmp/test.js << \'EOF\' \\n console.log("hello") \\n EOF \\n node /tmp/test.js',
+      )
     })
 
     it('should return empty for missing input', () => {
@@ -648,8 +657,12 @@ describe('getEventSummary', () => {
     })
 
     it('should show defaults for empty payloads', () => {
-      expect(getEventSummary(makeEvent({ subtype: 'Elicitation', payload: {} }))).toBe('MCP input requested')
-      expect(getEventSummary(makeEvent({ subtype: 'ElicitationResult', payload: {} }))).toBe('User responded')
+      expect(getEventSummary(makeEvent({ subtype: 'Elicitation', payload: {} }))).toBe(
+        'MCP input requested',
+      )
+      expect(getEventSummary(makeEvent({ subtype: 'ElicitationResult', payload: {} }))).toBe(
+        'User responded',
+      )
     })
   })
 

@@ -4,6 +4,12 @@ import type { EventStore } from '../storage/types'
 import type { ParsedEvent } from '../types'
 import { config } from '../config'
 
+function deriveEventStatus(subtype: string | null): string {
+  if (subtype === 'PreToolUse') return 'running'
+  if (subtype === 'PostToolUse') return 'completed'
+  return 'pending'
+}
+
 type Env = {
   Variables: {
     store: EventStore
@@ -98,8 +104,9 @@ router.get('/sessions/:id/events', async (c) => {
     subtype: r.subtype,
     toolName: r.tool_name,
     toolUseId: r.tool_use_id || null,
-    status: r.status || 'pending',
+    status: deriveEventStatus(r.subtype),
     timestamp: r.timestamp,
+    createdAt: r.created_at || r.timestamp,
     payload: JSON.parse(r.payload),
   }))
 
@@ -107,13 +114,24 @@ router.get('/sessions/:id/events', async (c) => {
   if (events.length > 0) {
     let lastSessionEndIdx = -1
     for (let i = events.length - 1; i >= 0; i--) {
-      if (events[i].subtype === 'SessionEnd') { lastSessionEndIdx = i; break }
+      if (events[i].subtype === 'SessionEnd') {
+        lastSessionEndIdx = i
+        break
+      }
     }
     const session = await store.getSessionById(sessionId)
     if (session) {
-      if (lastSessionEndIdx >= 0 && lastSessionEndIdx === events.length - 1 && session.status === 'active') {
+      if (
+        lastSessionEndIdx >= 0 &&
+        lastSessionEndIdx === events.length - 1 &&
+        session.status === 'active'
+      ) {
         await store.updateSessionStatus(sessionId, 'stopped')
-      } else if (lastSessionEndIdx >= 0 && lastSessionEndIdx < events.length - 1 && session.status === 'stopped') {
+      } else if (
+        lastSessionEndIdx >= 0 &&
+        lastSessionEndIdx < events.length - 1 &&
+        session.status === 'stopped'
+      ) {
         await store.updateSessionStatus(sessionId, 'active')
       } else if (lastSessionEndIdx < 0 && session.status === 'stopped') {
         await store.updateSessionStatus(sessionId, 'active')

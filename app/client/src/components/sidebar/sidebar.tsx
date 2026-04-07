@@ -75,7 +75,9 @@ export function Sidebar({ connected }: SidebarProps) {
         {!sidebarCollapsed && (
           <button
             className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-            onClick={() => { useUIStore.getState().setSelectedProject(null) }}
+            onClick={() => {
+              useUIStore.getState().setSelectedProject(null)
+            }}
           >
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
               O
@@ -109,14 +111,18 @@ export function Sidebar({ connected }: SidebarProps) {
       <Separator />
 
       {/* Footer */}
-      <div className={cn(
-        'flex items-center gap-1 p-2',
-        sidebarCollapsed ? 'flex-col h-auto' : 'h-10',
-      )}>
+      <div
+        className={cn('flex items-center gap-1 p-2', sidebarCollapsed ? 'flex-col h-auto' : 'h-10')}
+      >
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleTheme}>
           {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
         </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSettingsOpen(true)}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={() => setSettingsOpen(true)}
+        >
           <Settings className="h-3.5 w-3.5" />
         </Button>
         {!sidebarCollapsed && (

@@ -37,17 +37,25 @@ export function ProjectPage() {
           <TooltipTrigger asChild>
             <button
               className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
-              onClick={() => setSessionSortOrder(sessionSortOrder === 'activity' ? 'created' : 'activity')}
+              onClick={() =>
+                setSessionSortOrder(sessionSortOrder === 'activity' ? 'created' : 'activity')
+              }
             >
               {sessionSortOrder === 'activity' ? (
-                <><Clock className="h-3 w-3" /> Recent</>
+                <>
+                  <Clock className="h-3 w-3" /> Recent
+                </>
               ) : (
-                <><CalendarDays className="h-3 w-3" /> Created</>
+                <>
+                  <CalendarDays className="h-3 w-3" /> Created
+                </>
               )}
             </button>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-xs">
-            {sessionSortOrder === 'activity' ? 'Sorted by recent activity' : 'Sorted by creation date'}
+            {sessionSortOrder === 'activity'
+              ? 'Sorted by recent activity'
+              : 'Sorted by creation date'}
           </TooltipContent>
         </Tooltip>
       </div>

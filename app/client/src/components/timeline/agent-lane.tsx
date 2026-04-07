@@ -39,10 +39,11 @@ function DotContainer({
     const el = containerRef.current
     if (!el) return
 
-    const anim = el.animate(
-      [{ transform: 'translateX(0%)' }, { transform: 'translateX(-100%)' }],
-      { duration: rangeMs, easing: 'linear', fill: 'forwards' },
-    )
+    const anim = el.animate([{ transform: 'translateX(0%)' }, { transform: 'translateX(-100%)' }], {
+      duration: rangeMs,
+      easing: 'linear',
+      fill: 'forwards',
+    })
 
     anim.onfinish = () => setAnchorTime(Date.now())
     return () => anim.cancel()
@@ -69,7 +70,10 @@ function DotContainer({
                 onClick={() => setScrollToEventId(event.id)}
               >
                 <span
-                  className={cn('flex items-center justify-center h-5 w-5 rounded-full', !customHex && dotColor)}
+                  className={cn(
+                    'flex items-center justify-center h-5 w-5 rounded-full',
+                    !customHex && dotColor,
+                  )}
                   style={customHex ? { backgroundColor: customHex } : undefined}
                 >
                   <Icon className="h-3 w-3 text-white" />
@@ -109,7 +113,14 @@ function tooltipLabel(event: ParsedEvent): string {
   return map[event.subtype || ''] || event.subtype || event.type
 }
 
-export function AgentLane({ agent, parentAgent, events, allEvents, isSubagent, color }: AgentLaneProps) {
+export function AgentLane({
+  agent,
+  parentAgent,
+  events,
+  allEvents,
+  isSubagent,
+  color,
+}: AgentLaneProps) {
   const agentId = agent.id
   const { timeRange, setScrollToEventId, iconCustomizationVersion } = useUIStore()
 
@@ -172,7 +183,11 @@ export function AgentLane({ agent, parentAgent, events, allEvents, isSubagent, c
   return (
     <div className="flex items-center h-8 border-b border-border/30">
       <button
-        className={cn('w-40 shrink-0 text-[10px] truncate px-2 text-left cursor-pointer hover:underline', color, isSubagent ? 'opacity-80 dark:opacity-50' : 'opacity-100 dark:opacity-70')}
+        className={cn(
+          'w-40 shrink-0 text-[10px] truncate px-2 text-left cursor-pointer hover:underline',
+          color,
+          isSubagent ? 'opacity-80 dark:opacity-50' : 'opacity-100 dark:opacity-70',
+        )}
         onClick={handleAgentNameClick}
       >
         {isSubagent ? '↳ ' : ''}

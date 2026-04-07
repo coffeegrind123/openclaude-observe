@@ -182,7 +182,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     }
 
     // Restore saved filter state for the new session, or default to "All"
-    const restored = id ? nextFilterStates.get(id) ?? DEFAULT_FILTER_STATE : DEFAULT_FILTER_STATE
+    const restored = id ? (nextFilterStates.get(id) ?? DEFAULT_FILTER_STATE) : DEFAULT_FILTER_STATE
 
     set({
       selectedSessionId: id,
@@ -264,17 +264,19 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSessionSortOrder: (order) => set({ sessionSortOrder: order }),
 
   pinnedSessionIds: loadPinnedSessions(),
-  togglePinnedSession: (id) => set((s) => {
-    const next = new Set(s.pinnedSessionIds)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    savePinnedSessions(next)
-    return { pinnedSessionIds: next }
-  }),
+  togglePinnedSession: (id) =>
+    set((s) => {
+      const next = new Set(s.pinnedSessionIds)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      savePinnedSessions(next)
+      return { pinnedSessionIds: next }
+    }),
   isSessionPinned: (id) => get().pinnedSessionIds.has(id),
 
   iconCustomizationVersion: 0,
-  bumpIconCustomizationVersion: () => set((s) => ({ iconCustomizationVersion: s.iconCustomizationVersion + 1 })),
+  bumpIconCustomizationVersion: () =>
+    set((s) => ({ iconCustomizationVersion: s.iconCustomizationVersion + 1 })),
 
   serverVersion: null,
   setServerVersion: (version) => set({ serverVersion: version }),
@@ -297,7 +299,7 @@ if (typeof window !== 'undefined') {
 
   // Check server version on page load
   fetch('/api/health')
-    .then((r) => r.ok ? r.json() : null)
+    .then((r) => (r.ok ? r.json() : null))
     .then((data) => {
       if (data?.version) {
         useUIStore.getState().setServerVersion(data.version)
@@ -311,7 +313,7 @@ if (typeof window !== 'undefined') {
     const match = githubRepoUrl.match(/github\.com\/([^/]+\/[^/]+)/)
     if (match) {
       fetch(`https://api.github.com/repos/${match[1]}/releases/latest`)
-        .then((r) => r.ok ? r.json() : null)
+        .then((r) => (r.ok ? r.json() : null))
         .then((release) => {
           if (release?.tag_name) {
             useUIStore.getState().setLatestVersion(release.tag_name.replace(/^v/, ''))

@@ -9,16 +9,21 @@ const CLI = resolve(import.meta.dirname, '../../../hooks/scripts/observe_cli.mjs
 
 function runCli(args, { stdin, env } = {}) {
   return new Promise((resolve) => {
-    const child = execFile('node', [CLI, ...args], {
-      env: { ...process.env, ...env },
-      timeout: 10000,
-    }, (err, stdout, stderr) => {
-      resolve({
-        code: err?.code ?? 0,
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
-      })
-    })
+    const child = execFile(
+      'node',
+      [CLI, ...args],
+      {
+        env: { ...process.env, ...env },
+        timeout: 10000,
+      },
+      (err, stdout, stderr) => {
+        resolve({
+          code: err?.code ?? 0,
+          stdout: stdout.trim(),
+          stderr: stderr.trim(),
+        })
+      },
+    )
     if (stdin) {
       child.stdin.write(stdin)
       child.stdin.end()
@@ -44,7 +49,9 @@ function mockApiHandler(responses = {}) {
     received,
     handler: (req, res) => {
       let body = ''
-      req.on('data', (c) => { body += c })
+      req.on('data', (c) => {
+        body += c
+      })
       req.on('end', () => {
         received.push({ method: req.method, url: req.url, body })
         const key = `${req.method} ${req.url}`
@@ -129,7 +136,10 @@ describe('observe_cli', () => {
 
     it('returns server systemMessage if present in response', async () => {
       const mock = mockApiHandler({
-        'POST /api/events': { status: 201, body: { ok: true, systemMessage: 'Custom server message' } },
+        'POST /api/events': {
+          status: 201,
+          body: { ok: true, systemMessage: 'Custom server message' },
+        },
       })
       const { server, url } = await startMockServer(mock.handler)
 

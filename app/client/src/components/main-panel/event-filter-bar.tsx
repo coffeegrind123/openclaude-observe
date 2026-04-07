@@ -4,7 +4,12 @@ import { useEvents } from '@/hooks/use-events'
 import { cn } from '@/lib/utils'
 import { Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { STATIC_FILTERS, getDynamicFilterNames, getDynamicDisplayName, getFiltersWithMatches } from '@/config/filters'
+import {
+  STATIC_FILTERS,
+  getDynamicFilterNames,
+  getDynamicDisplayName,
+  getFiltersWithMatches,
+} from '@/config/filters'
 
 export function EventFilterBar() {
   const {
@@ -48,8 +53,14 @@ export function EventFilterBar() {
       : events
   }, [events, selectedAgentIds])
 
-  const dynamicNames = useMemo(() => getDynamicFilterNames(agentFilteredEvents), [agentFilteredEvents])
-  const filtersWithMatches = useMemo(() => getFiltersWithMatches(agentFilteredEvents), [agentFilteredEvents])
+  const dynamicNames = useMemo(
+    () => getDynamicFilterNames(agentFilteredEvents),
+    [agentFilteredEvents],
+  )
+  const filtersWithMatches = useMemo(
+    () => getFiltersWithMatches(agentFilteredEvents),
+    [agentFilteredEvents],
+  )
 
   const hasAnyFilter = activeStaticFilters.length > 0 || activeToolFilters.length > 0
 
@@ -95,18 +106,23 @@ export function EventFilterBar() {
         <div className="flex-1" />
 
         <div className="relative w-48">
-          <Search className={cn(
-            "absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5",
-            localSearch ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground',
-          )} />
+          <Search
+            className={cn(
+              'absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5',
+              localSearch ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground',
+            )}
+          />
           <Input
             placeholder="Search events..."
             value={localSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
             className={cn(
               'h-7 pl-7 text-xs',
-              localSearch && 'border-green-600 dark:border-green-400 ring-1 ring-green-600/30 dark:ring-green-400/30',
-              localSearch && (localSearch !== localSearch.trim()) && 'bg-green-600/5 dark:bg-green-400/5',
+              localSearch &&
+                'border-green-600 dark:border-green-400 ring-1 ring-green-600/30 dark:ring-green-400/30',
+              localSearch &&
+                localSearch !== localSearch.trim() &&
+                'bg-green-600/5 dark:bg-green-400/5',
               localSearch && 'pr-7',
             )}
           />

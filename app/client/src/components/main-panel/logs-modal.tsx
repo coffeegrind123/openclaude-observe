@@ -2,8 +2,22 @@ import { useState, useRef, useEffect, useTransition } from 'react'
 import { useEvents } from '@/hooks/use-events'
 import { useUIStore } from '@/stores/ui-store'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogTrigger, DialogContent, DialogClose, DialogTitle } from '@/components/ui/dialog'
-import { ScrollText, Copy, Check, ArrowDownToLine, ClipboardCopy, X, LoaderCircle } from 'lucide-react'
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogClose,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  ScrollText,
+  Copy,
+  Check,
+  ArrowDownToLine,
+  ClipboardCopy,
+  X,
+  LoaderCircle,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ParsedEvent } from '@/types'
 
@@ -66,21 +80,17 @@ export function LogsModal() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          title="View raw event logs"
-        >
+        <Button variant="ghost" size="icon" className="h-7 w-7" title="View raw event logs">
           <ScrollText className="h-3.5 w-3.5" />
         </Button>
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined} className="w-[90vw] max-w-5xl h-[85vh] flex flex-col p-0">
+      <DialogContent
+        aria-describedby={undefined}
+        className="w-[90vw] max-w-5xl h-[85vh] flex flex-col p-0"
+      >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
           <DialogTitle>Raw Event Logs</DialogTitle>
-          <span className="text-xs text-muted-foreground">
-            {events?.length ?? 0} events
-          </span>
+          <span className="text-xs text-muted-foreground">{events?.length ?? 0} events</span>
           <div className="flex items-center gap-1 ml-auto">
             <Button
               variant="ghost"
@@ -90,7 +100,11 @@ export function LogsModal() {
               title="Copy all logs"
               disabled={loading}
             >
-              {copiedAll ? <Check className="h-3 w-3 text-green-500" /> : <ClipboardCopy className="h-3 w-3" />}
+              {copiedAll ? (
+                <Check className="h-3 w-3 text-green-500" />
+              ) : (
+                <ClipboardCopy className="h-3 w-3" />
+              )}
               {copiedAll ? 'Copied' : 'Copy all'}
             </Button>
             <Button
@@ -124,9 +138,7 @@ export function LogsModal() {
                 return (
                   <div key={event.id} className="px-4 py-2 hover:bg-muted/30">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-mono font-medium text-primary">
-                        {hookName}
-                      </span>
+                      <span className="text-xs font-mono font-medium text-primary">{hookName}</span>
                       {toolName && (
                         <span className="text-xs font-mono text-blue-700 dark:text-blue-400">
                           {toolName}
@@ -152,11 +164,13 @@ export function LogsModal() {
                         )}
                       </button>
                     </div>
-                    <pre className={cn(
-                      'text-[10px] font-mono leading-relaxed text-muted-foreground',
-                      'overflow-x-auto max-h-60 overflow-y-auto',
-                      'rounded bg-muted/40 p-2',
-                    )}>
+                    <pre
+                      className={cn(
+                        'text-[10px] font-mono leading-relaxed text-muted-foreground',
+                        'overflow-x-auto max-h-60 overflow-y-auto',
+                        'rounded bg-muted/40 p-2',
+                      )}
+                    >
                       {JSON.stringify(event.payload, null, 2)}
                     </pre>
                   </div>

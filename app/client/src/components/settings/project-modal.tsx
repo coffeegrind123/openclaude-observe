@@ -16,7 +16,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Pencil, Trash2, Check, X, Clock, CalendarDays, ArrowRightLeft, Folder, Copy } from 'lucide-react'
+import {
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  Clock,
+  CalendarDays,
+  ArrowRightLeft,
+  Folder,
+  Copy,
+} from 'lucide-react'
 import { useProjects } from '@/hooks/use-projects'
 import type { Project, Session } from '@/types'
 
@@ -47,7 +57,9 @@ export function ProjectModal({ project, open, onOpenChange }: ProjectModalProps)
   const [isRenaming, setIsRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set())
-  const [confirmAction, setConfirmAction] = useState<'delete-project' | 'delete-sessions' | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'delete-project' | 'delete-sessions' | null>(
+    null,
+  )
   const [deleting, setDeleting] = useState(false)
   const [sortOrder, setSortOrder] = useState<'activity' | 'created'>('activity')
   const [moveSessionIds, setMoveSessionIds] = useState<Set<string> | null>(null)
@@ -97,7 +109,10 @@ export function ProjectModal({ project, open, onOpenChange }: ProjectModalProps)
     let topCwd = ''
     let topCount = 0
     for (const [cwd, count] of counts) {
-      if (count > topCount) { topCwd = cwd; topCount = count }
+      if (count > topCount) {
+        topCwd = cwd
+        topCount = count
+      }
     }
     const otherCount = counts.size - 1
     return { cwd: shortenCwd(topCwd), otherCount }
@@ -189,7 +204,10 @@ export function ProjectModal({ project, open, onOpenChange }: ProjectModalProps)
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent aria-describedby={undefined} className="w-[700px] max-w-[90vw] max-h-[80vh] flex flex-col p-0">
+        <DialogContent
+          aria-describedby={undefined}
+          className="w-[700px] max-w-[90vw] max-h-[80vh] flex flex-col p-0"
+        >
           {/* Header: project name + actions */}
           <div className="flex items-center gap-3 px-5 pt-5 pb-1">
             {isRenaming ? (
@@ -263,10 +281,7 @@ export function ProjectModal({ project, open, onOpenChange }: ProjectModalProps)
               <div className="divide-y divide-border/50">
                 {/* Select all header */}
                 <div className="flex items-center gap-3 px-5 py-2 min-h-12 bg-background sticky top-0 z-10 border-b border-border/50">
-                  <Checkbox
-                    checked={allSelected}
-                    onCheckedChange={toggleAll}
-                  />
+                  <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
                   <span className="text-xs text-muted-foreground">
                     {sortedSessions.length} session{sortedSessions.length !== 1 ? 's' : ''}
                     {selectedSessionIds.size > 0 && (
@@ -296,12 +311,18 @@ export function ProjectModal({ project, open, onOpenChange }: ProjectModalProps)
                   ) : (
                     <button
                       className="flex items-center gap-1 ml-auto text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
-                      onClick={() => setSortOrder(sortOrder === 'activity' ? 'created' : 'activity')}
+                      onClick={() =>
+                        setSortOrder(sortOrder === 'activity' ? 'created' : 'activity')
+                      }
                     >
                       {sortOrder === 'activity' ? (
-                        <><Clock className="h-3 w-3" /> Recent</>
+                        <>
+                          <Clock className="h-3 w-3" /> Recent
+                        </>
                       ) : (
-                        <><CalendarDays className="h-3 w-3" /> Created</>
+                        <>
+                          <CalendarDays className="h-3 w-3" /> Created
+                        </>
                       )}
                     </button>
                   )}
@@ -334,7 +355,10 @@ export function ProjectModal({ project, open, onOpenChange }: ProjectModalProps)
       </Dialog>
 
       {/* Delete confirmation dialog */}
-      <AlertDialog open={confirmAction !== null} onOpenChange={(open) => !open && setConfirmAction(null)}>
+      <AlertDialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => !open && setConfirmAction(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
@@ -381,14 +405,21 @@ export function ProjectModal({ project, open, onOpenChange }: ProjectModalProps)
       />
 
       {/* Move confirmation for multi-select */}
-      <AlertDialog open={confirmMoveTarget !== null} onOpenChange={(open) => { if (!open) setConfirmMoveTarget(null) }}>
+      <AlertDialog
+        open={confirmMoveTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmMoveTarget(null)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Move {moveSessionIds?.size} session{(moveSessionIds?.size ?? 0) !== 1 ? 's' : ''} to &ldquo;{confirmMoveTarget?.name}&rdquo;?
+              Move {moveSessionIds?.size} session{(moveSessionIds?.size ?? 0) !== 1 ? 's' : ''} to
+              &ldquo;{confirmMoveTarget?.name}&rdquo;?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              The selected sessions will be moved from &ldquo;{project.name}&rdquo; to &ldquo;{confirmMoveTarget?.name}&rdquo;.
+              The selected sessions will be moved from &ldquo;{project.name}&rdquo; to &ldquo;
+              {confirmMoveTarget?.name}&rdquo;.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -457,19 +488,32 @@ function SessionRow({
       className="group flex items-center gap-3 px-5 py-2 hover:bg-muted/20 cursor-pointer"
       onClick={() => !isEditing && onToggle()}
     >
-      <Checkbox checked={selected} onCheckedChange={onToggle} onClick={(e) => e.stopPropagation()} />
+      <Checkbox
+        checked={selected}
+        onCheckedChange={onToggle}
+        onClick={(e) => e.stopPropagation()}
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 text-sm">
           {isEditing ? (
-            <div className="flex items-center gap-1 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+            <div
+              className="flex items-center gap-1 flex-1 min-w-0"
+              onClick={(e) => e.stopPropagation()}
+            >
               <input
                 ref={inputRef}
                 className="truncate bg-transparent border border-border rounded px-1 text-sm outline-none flex-1 min-w-0"
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); saveEdit() }
-                  if (e.key === 'Escape') { e.preventDefault(); setIsEditing(false) }
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    saveEdit()
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
+                    setIsEditing(false)
+                  }
                 }}
               />
               <Button variant="ghost" size="icon-xs" onClick={saveEdit}>
@@ -483,13 +527,17 @@ function SessionRow({
             <span className="truncate">{label}</span>
           )}
           {!isEditing && (
-            <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">Created {createdTime}</span>
+            <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+              Created {createdTime}
+            </span>
           )}
         </div>
         <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground min-w-0">
           <span
             className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-              session.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/60 dark:bg-muted-foreground/40'
+              session.status === 'active'
+                ? 'bg-green-500'
+                : 'bg-muted-foreground/60 dark:bg-muted-foreground/40'
             }`}
           />
           <span className="shrink-0">{activityTime}</span>
@@ -514,15 +562,23 @@ function SessionRow({
               setTimeout(() => setCopied(false), 1500)
             }}
           >
-            {copied
-              ? <Check className="h-3 w-3 text-green-500" />
-              : <Copy className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />}
+            {copied ? (
+              <Check className="h-3 w-3 text-green-500" />
+            ) : (
+              <Copy className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+            )}
           </Button>
         )}
         <Button variant="ghost" size="icon-xs" title="Move to project" onClick={onMove}>
           <ArrowRightLeft className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
         </Button>
-        <Button variant="ghost" size="icon-xs" title="Delete" className="group-hover:text-destructive" onClick={onDelete}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          title="Delete"
+          className="group-hover:text-destructive"
+          onClick={onDelete}
+        >
           <Trash2 className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
         </Button>
       </div>
@@ -547,8 +603,16 @@ function MoveSessionModal({
   const otherProjects = projects?.filter((p) => p.id !== currentProjectId) ?? []
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent aria-describedby={undefined} className="w-[400px] max-w-[90vw] max-h-[60vh] flex flex-col p-0">
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) onClose()
+      }}
+    >
+      <DialogContent
+        aria-describedby={undefined}
+        className="w-[400px] max-w-[90vw] max-h-[60vh] flex flex-col p-0"
+      >
         <div className="px-5 pt-5 pb-3">
           <DialogTitle>
             Move {sessionCount} session{sessionCount !== 1 ? 's' : ''} to...
@@ -566,7 +630,9 @@ function MoveSessionModal({
                   <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <span className="truncate">{p.name}</span>
                   {p.sessionCount != null && (
-                    <span className="ml-auto text-[10px] text-muted-foreground">{p.sessionCount} sessions</span>
+                    <span className="ml-auto text-[10px] text-muted-foreground">
+                      {p.sessionCount} sessions
+                    </span>
                   )}
                 </button>
               ))}

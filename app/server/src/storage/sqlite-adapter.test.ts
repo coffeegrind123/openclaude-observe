@@ -146,7 +146,7 @@ describe('SqliteAdapter — sessions', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -313,7 +313,7 @@ describe('SqliteAdapter — agents', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -323,7 +323,7 @@ describe('SqliteAdapter — agents', () => {
       type: 'tool',
       subtype: 'PreToolUse',
       toolName: 'Bash',
-      summary: null,
+
       timestamp: 2000,
       payload: {},
     })
@@ -345,7 +345,7 @@ describe('SqliteAdapter — events', () => {
       type: 'user',
       subtype: 'UserPromptSubmit',
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: { text: 'hello' },
     })
@@ -355,7 +355,7 @@ describe('SqliteAdapter — events', () => {
       type: 'tool',
       subtype: 'PreToolUse',
       toolName: 'Bash',
-      summary: null,
+
       timestamp: 2000,
       payload: {},
     })
@@ -363,7 +363,7 @@ describe('SqliteAdapter — events', () => {
     expect(id2).toBe(id1 + 1)
   })
 
-  test('insertEvent with toolUseId and status', async () => {
+  test('insertEvent with toolUseId', async () => {
     const { sessionId, rootAgentId } = await seedBasic()
     await store.insertEvent({
       agentId: rootAgentId,
@@ -371,20 +371,18 @@ describe('SqliteAdapter — events', () => {
       type: 'tool',
       subtype: 'PreToolUse',
       toolName: 'Read',
-      summary: null,
       timestamp: 1000,
       payload: {},
       toolUseId: 'toolu_abc123',
-      status: 'success',
     })
 
     const events = await store.getEventsForSession(sessionId)
     expect(events).toHaveLength(1)
     expect(events[0].tool_use_id).toBe('toolu_abc123')
-    expect(events[0].status).toBe('success')
   })
 
-  test('insertEvent defaults status to "pending"', async () => {
+  test('insertEvent sets created_at', async () => {
+    const before = Date.now()
     const { sessionId, rootAgentId } = await seedBasic()
     await store.insertEvent({
       agentId: rootAgentId,
@@ -392,13 +390,13 @@ describe('SqliteAdapter — events', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
       timestamp: 1000,
       payload: {},
     })
 
     const events = await store.getEventsForSession(sessionId)
-    expect(events[0].status).toBe('pending')
+    expect(events[0].created_at).toBeGreaterThanOrEqual(before)
+    expect(events[0].created_at).toBeLessThanOrEqual(Date.now())
   })
 
   test('getEventsForAgent returns only that agent events', async () => {
@@ -413,7 +411,7 @@ describe('SqliteAdapter — events', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -423,7 +421,7 @@ describe('SqliteAdapter — events', () => {
       type: 'tool',
       subtype: 'PreToolUse',
       toolName: 'Bash',
-      summary: null,
+
       timestamp: 2000,
       payload: {},
     })
@@ -433,7 +431,7 @@ describe('SqliteAdapter — events', () => {
       type: 'system',
       subtype: 'Stop',
       toolName: null,
-      summary: null,
+
       timestamp: 3000,
       payload: {},
     })
@@ -457,7 +455,7 @@ describe('SqliteAdapter — events', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -467,7 +465,7 @@ describe('SqliteAdapter — events', () => {
       type: 'tool',
       subtype: 'PreToolUse',
       toolName: 'Bash',
-      summary: null,
+
       timestamp: 2000,
       payload: {},
     })
@@ -494,7 +492,7 @@ describe('SqliteAdapter — event filtering', () => {
       type: 'user',
       subtype: 'UserPromptSubmit',
       toolName: null,
-      summary: 'User asked a question',
+
       timestamp: 1000,
       payload: { text: 'hello world' },
     })
@@ -504,7 +502,7 @@ describe('SqliteAdapter — event filtering', () => {
       type: 'tool',
       subtype: 'PreToolUse',
       toolName: 'Bash',
-      summary: 'Running ls command',
+
       timestamp: 2000,
       payload: { command: 'ls -la' },
     })
@@ -514,7 +512,7 @@ describe('SqliteAdapter — event filtering', () => {
       type: 'tool',
       subtype: 'PostToolUse',
       toolName: 'Read',
-      summary: 'Read file contents',
+
       timestamp: 3000,
       payload: { file: '/tmp/test.txt' },
     })
@@ -524,7 +522,7 @@ describe('SqliteAdapter — event filtering', () => {
       type: 'system',
       subtype: 'Stop',
       toolName: null,
-      summary: null,
+
       timestamp: 4000,
       payload: {},
     })
@@ -555,13 +553,6 @@ describe('SqliteAdapter — event filtering', () => {
     const filtered = await store.getEventsForSession('sess1', { subtype: 'PreToolUse' })
     expect(filtered).toHaveLength(1)
     expect(filtered[0].subtype).toBe('PreToolUse')
-  })
-
-  test('filter by search (matches summary)', async () => {
-    await seedWithMixedEvents()
-    const filtered = await store.getEventsForSession('sess1', { search: 'question' })
-    expect(filtered).toHaveLength(1)
-    expect(filtered[0].summary).toContain('question')
   })
 
   test('filter by search (matches payload)', async () => {
@@ -629,7 +620,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'user',
       subtype: 'UserPromptSubmit',
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -639,7 +630,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'tool',
       subtype: 'PreToolUse',
       toolName: 'Bash',
-      summary: null,
+
       timestamp: 2000,
       payload: {},
     })
@@ -649,7 +640,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'tool',
       subtype: 'PostToolUse',
       toolName: 'Bash',
-      summary: null,
+
       timestamp: 3000,
       payload: {},
     })
@@ -659,7 +650,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'system',
       subtype: 'Stop',
       toolName: null,
-      summary: null,
+
       timestamp: 4000,
       payload: {},
     })
@@ -682,7 +673,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'tool',
       subtype: 'PreToolUse',
       toolName: 'Bash',
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -693,7 +684,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'system',
       subtype: 'SubagentStop',
       toolName: null,
-      summary: null,
+
       timestamp: 2000,
       payload: {},
     })
@@ -721,7 +712,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'user',
       subtype: 'UserPromptSubmit',
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -731,7 +722,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'tool',
       subtype: 'PreToolUse',
       toolName: 'Bash',
-      summary: null,
+
       timestamp: 2000,
       payload: {},
     })
@@ -741,7 +732,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'system',
       subtype: 'Stop',
       toolName: null,
-      summary: null,
+
       timestamp: 3000,
       payload: {},
     })
@@ -753,7 +744,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'user',
       subtype: 'UserPromptSubmit',
       toolName: null,
-      summary: null,
+
       timestamp: 4000,
       payload: {},
     })
@@ -763,7 +754,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'system',
       subtype: 'Stop',
       toolName: null,
-      summary: null,
+
       timestamp: 5000,
       payload: {},
     })
@@ -791,7 +782,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'user',
       subtype: 'UserPromptSubmit',
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -801,7 +792,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'tool',
       subtype: 'PreToolUse',
       toolName: 'Read',
-      summary: null,
+
       timestamp: 2000,
       payload: {},
     })
@@ -811,7 +802,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'tool',
       subtype: 'PostToolUse',
       toolName: 'Read',
-      summary: null,
+
       timestamp: 3000,
       payload: {},
     })
@@ -834,7 +825,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'tool',
       subtype: 'PreToolUse',
       toolName: 'Bash',
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -844,7 +835,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       type: 'system',
       subtype: 'Stop',
       toolName: null,
-      summary: null,
+
       timestamp: 2000,
       payload: {},
     })
@@ -873,7 +864,7 @@ describe('SqliteAdapter — getRecentSessions', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
+
       timestamp: 5000, // more recent activity
       payload: {},
     })
@@ -883,7 +874,7 @@ describe('SqliteAdapter — getRecentSessions', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
+
       timestamp: 3000,
       payload: {},
     })
@@ -919,7 +910,7 @@ describe('SqliteAdapter — getRecentSessions', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -941,7 +932,7 @@ describe('SqliteAdapter — getRecentSessions', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
+
       timestamp: 5000,
       payload: {},
     })
@@ -970,7 +961,7 @@ describe('SqliteAdapter — deletion', () => {
       type: 'user',
       subtype: 'UserPromptSubmit',
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -999,7 +990,7 @@ describe('SqliteAdapter — deletion', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -1009,7 +1000,7 @@ describe('SqliteAdapter — deletion', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
+
       timestamp: 2000,
       payload: {},
     })
@@ -1047,7 +1038,7 @@ describe('SqliteAdapter — deletion', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })
@@ -1067,7 +1058,7 @@ describe('SqliteAdapter — deletion', () => {
       type: 'user',
       subtype: null,
       toolName: null,
-      summary: null,
+
       timestamp: 1000,
       payload: {},
     })

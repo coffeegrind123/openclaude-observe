@@ -26,7 +26,11 @@ interface SessionListProps {
   sortBy?: 'activity' | 'created'
 }
 
-export function SessionList({ sessions, showProject = false, sortBy = 'activity' }: SessionListProps) {
+export function SessionList({
+  sessions,
+  showProject = false,
+  sortBy = 'activity',
+}: SessionListProps) {
   const { setSelectedProject, setSelectedSessionId } = useUIStore()
 
   const handleSessionClick = (projectId: number, projectSlug: string, sessionId: string) => {
@@ -48,13 +52,11 @@ export function SessionList({ sessions, showProject = false, sortBy = 'activity'
     <div className="divide-y divide-border">
       {sessions.map((session) => {
         const label = session.slug || session.id.slice(0, 8)
-        const cwd =
-          typeof session.metadata?.cwd === 'string'
-            ? session.metadata.cwd
-            : null
-        const lastTime = sortBy === 'activity'
-          ? (('lastActivity' in session && session.lastActivity) || session.startedAt)
-          : session.startedAt
+        const cwd = typeof session.metadata?.cwd === 'string' ? session.metadata.cwd : null
+        const lastTime =
+          sortBy === 'activity'
+            ? ('lastActivity' in session && session.lastActivity) || session.startedAt
+            : session.startedAt
         const projectName = 'projectName' in session ? session.projectName : null
 
         return (
@@ -65,7 +67,11 @@ export function SessionList({ sessions, showProject = false, sortBy = 'activity'
               'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
             )}
             onClick={() =>
-              handleSessionClick(session.projectId, 'projectSlug' in session ? session.projectSlug : '', session.id)
+              handleSessionClick(
+                session.projectId,
+                'projectSlug' in session ? session.projectSlug : '',
+                session.id,
+              )
             }
           >
             <div className="flex items-center gap-2 min-w-0">
@@ -77,15 +83,10 @@ export function SessionList({ sessions, showProject = false, sortBy = 'activity'
                     : 'bg-muted-foreground/60 dark:bg-muted-foreground/40',
                 )}
               />
-              <span className="text-sm font-medium truncate">
-                {label}
-              </span>
+              <span className="text-sm font-medium truncate">{label}</span>
               <div className="flex items-center gap-1.5 ml-auto shrink-0">
                 {session.eventCount != null && session.eventCount > 0 && (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] h-4 px-1.5"
-                  >
+                  <Badge variant="outline" className="text-[10px] h-4 px-1.5">
                     {session.eventCount} events
                   </Badge>
                 )}

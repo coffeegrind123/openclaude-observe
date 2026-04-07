@@ -51,6 +51,7 @@ export interface ParsedEvent {
   toolUseId: string | null
   status: string
   timestamp: number
+  createdAt: number
   payload: Record<string, unknown>
 }
 
@@ -74,6 +75,4 @@ export type WSMessage =
   | { type: 'session_update'; data: Session }
   | { type: 'project_update'; data: { id: number; name: string } }
 
-export type WSClientMessage =
-  | { type: 'subscribe'; sessionId: string }
-  | { type: 'unsubscribe' }
+export type WSClientMessage = { type: 'subscribe'; sessionId: string } | { type: 'unsubscribe' }

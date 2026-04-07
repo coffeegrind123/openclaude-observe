@@ -12,7 +12,10 @@ export interface IconCustomization {
 export type IconCustomizations = Record<string, IconCustomization>
 
 // Color presets: each defines a text class for stream icons and a bg class for timeline dots
-export const COLOR_PRESETS: Record<string, { label: string; iconColor: string; dotColor: string; swatch: string }> = {
+export const COLOR_PRESETS: Record<
+  string,
+  { label: string; iconColor: string; dotColor: string; swatch: string }
+> = {
   red: {
     label: 'Red',
     iconColor: 'text-red-600 dark:text-red-400',
@@ -186,7 +189,9 @@ function notifyListeners() {
 
 function subscribe(listener: Listener) {
   listeners.add(listener)
-  return () => { listeners.delete(listener) }
+  return () => {
+    listeners.delete(listener)
+  }
 }
 
 function getSnapshot(): IconCustomizations {

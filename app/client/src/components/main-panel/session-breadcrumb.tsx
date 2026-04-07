@@ -74,7 +74,9 @@ export function SessionBreadcrumb() {
             setTranscriptCopied(true)
             setTimeout(() => setTranscriptCopied(false), 2000)
           }}
-          title={transcriptCopied ? 'Copied transcript path!' : `Copy transcript: ${transcriptPath}`}
+          title={
+            transcriptCopied ? 'Copied transcript path!' : `Copy transcript: ${transcriptPath}`
+          }
         >
           {transcriptCopied ? (
             <Check className="h-3 w-3 text-green-500" />

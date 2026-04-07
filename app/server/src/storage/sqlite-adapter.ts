@@ -107,23 +107,33 @@ export class SqliteAdapter implements EventStore {
         type TEXT NOT NULL,
         subtype TEXT,
         tool_name TEXT,
-        summary TEXT,
         timestamp INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
         payload TEXT NOT NULL,
         tool_use_id TEXT,
-        status TEXT DEFAULT 'pending',
         FOREIGN KEY (agent_id) REFERENCES agents(id),
         FOREIGN KEY (session_id) REFERENCES sessions(id)
       )
     `)
 
+    // Migration: add created_at to events if missing (backfill from timestamp)
+    const eventCols = this.db.prepare("PRAGMA table_info('events')").all() as { name: string }[]
+    if (!eventCols.some((c) => c.name === 'created_at')) {
+      this.db.exec('ALTER TABLE events ADD COLUMN created_at INTEGER')
+      this.db.exec('UPDATE events SET created_at = timestamp WHERE created_at IS NULL')
+    }
+
     // Create indexes
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug)')
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_projects_transcript_path ON projects(transcript_path)')
+    this.db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_projects_transcript_path ON projects(transcript_path)',
+    )
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, timestamp)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent_id, timestamp)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_events_type ON events(type, subtype)')
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_events_session_agent ON events(session_id, agent_id, timestamp)')
+    this.db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_events_session_agent ON events(session_id, agent_id, timestamp)',
+    )
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_events_tool_use_id ON events(tool_use_id)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_agent_id)')
@@ -133,7 +143,9 @@ export class SqliteAdapter implements EventStore {
   async createProject(slug: string, name: string, transcriptPath: string | null): Promise<number> {
     const now = Date.now()
     const result = this.db
-      .prepare('INSERT INTO projects (slug, name, transcript_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .prepare(
+        'INSERT INTO projects (slug, name, transcript_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+      )
       .run(slug, name, transcriptPath, now, now)
     return result.lastInsertRowid as number
   }
@@ -150,13 +162,15 @@ export class SqliteAdapter implements EventStore {
   }
 
   async updateProjectName(projectId: number, name: string): Promise<void> {
-    this.db.prepare('UPDATE projects SET name = ?, updated_at = ? WHERE id = ?').run(name, Date.now(), projectId)
+    this.db
+      .prepare('UPDATE projects SET name = ?, updated_at = ? WHERE id = ?')
+      .run(name, Date.now(), projectId)
   }
 
   async isSlugAvailable(slug: string): Promise<boolean> {
-    const row = this.db
-      .prepare(`SELECT id FROM projects WHERE slug = ?`)
-      .get(slug) as { id: number } | undefined
+    const row = this.db.prepare(`SELECT id FROM projects WHERE slug = ?`).get(slug) as
+      | { id: number }
+      | undefined
     return row === undefined
   }
 
@@ -181,7 +195,17 @@ export class SqliteAdapter implements EventStore {
         updated_at = ?
     `,
       )
-      .run(id, projectId, slug, timestamp, transcriptPath || null, metadata ? JSON.stringify(metadata) : null, now, now, now)
+      .run(
+        id,
+        projectId,
+        slug,
+        timestamp,
+        transcriptPath || null,
+        metadata ? JSON.stringify(metadata) : null,
+        now,
+        now,
+        now,
+      )
   }
 
   async upsertAgent(
@@ -208,7 +232,18 @@ export class SqliteAdapter implements EventStore {
         updated_at = ?
     `,
       )
-      .run(id, sessionId, parentAgentId, name, description, agentType ?? null, transcriptPath ?? null, now, now, now)
+      .run(
+        id,
+        sessionId,
+        parentAgentId,
+        name,
+        description,
+        agentType ?? null,
+        transcriptPath ?? null,
+        now,
+        now,
+        now,
+      )
 
     if (!existing) {
       this.db
@@ -218,7 +253,9 @@ export class SqliteAdapter implements EventStore {
   }
 
   async updateAgentType(id: string, agentType: string): Promise<void> {
-    this.db.prepare('UPDATE agents SET agent_type = ?, updated_at = ? WHERE id = ?').run(agentType, Date.now(), id)
+    this.db
+      .prepare('UPDATE agents SET agent_type = ?, updated_at = ? WHERE id = ?')
+      .run(agentType, Date.now(), id)
   }
 
   async updateSessionStatus(id: string, status: string): Promise<void> {
@@ -248,15 +285,18 @@ export class SqliteAdapter implements EventStore {
   }
 
   async updateAgentName(agentId: string, name: string): Promise<void> {
-    this.db.prepare('UPDATE agents SET name = ?, updated_at = ? WHERE id = ?').run(name, Date.now(), agentId)
+    this.db
+      .prepare('UPDATE agents SET name = ?, updated_at = ? WHERE id = ?')
+      .run(name, Date.now(), agentId)
   }
 
   async insertEvent(params: InsertEventParams): Promise<number> {
+    const now = Date.now()
     const result = this.db
       .prepare(
         `
-      INSERT INTO events (agent_id, session_id, type, subtype, tool_name, summary, timestamp, payload, tool_use_id, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO events (agent_id, session_id, type, subtype, tool_name, timestamp, created_at, payload, tool_use_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       )
       .run(
@@ -265,11 +305,10 @@ export class SqliteAdapter implements EventStore {
         params.type,
         params.subtype,
         params.toolName,
-        params.summary,
         params.timestamp,
+        now,
         JSON.stringify(params.payload),
         params.toolUseId || null,
-        params.status || 'pending',
       )
 
     // Update cached counters on session
@@ -361,9 +400,9 @@ export class SqliteAdapter implements EventStore {
     }
 
     if (filters?.search) {
-      sql += ' AND (summary LIKE ? OR payload LIKE ?)'
+      sql += ' AND payload LIKE ?'
       const term = `%${filters.search}%`
-      params.push(term, term)
+      params.push(term)
     }
 
     sql += ' ORDER BY timestamp ASC'
@@ -486,7 +525,9 @@ export class SqliteAdapter implements EventStore {
     this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId)
     this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId)
     this.db
-      .prepare('UPDATE sessions SET event_count = 0, agent_count = 0, last_activity = NULL WHERE id = ?')
+      .prepare(
+        'UPDATE sessions SET event_count = 0, agent_count = 0, last_activity = NULL WHERE id = ?',
+      )
       .run(sessionId)
   }
 
@@ -513,7 +554,9 @@ export class SqliteAdapter implements EventStore {
 
       // Verify tables exist
       const tables = this.db
-        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('projects','sessions','events','agents')")
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('projects','sessions','events','agents')",
+        )
         .all() as { name: string }[]
       if (tables.length < 4) {
         const missing = ['projects', 'sessions', 'events', 'agents'].filter(

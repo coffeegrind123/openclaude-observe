@@ -18,6 +18,13 @@ const router = new Hono<Env>()
 
 const LOG_LEVEL = config.logLevel
 
+/** Derive event status from subtype (not stored in DB) */
+function deriveEventStatus(subtype: string | null): string {
+  if (subtype === 'PreToolUse') return 'running'
+  if (subtype === 'PostToolUse') return 'completed'
+  return 'pending'
+}
+
 // Track root agent IDs per session (sessionId -> agentId)
 const sessionRootAgents = new Map<string, string>()
 
@@ -29,16 +36,16 @@ const sessionRootAgents = new Map<string, string>()
 //
 // When multiple Agent tools are invoked concurrently (e.g. two subagents spawned
 // in the same turn), each gets its own queue entry so names are assigned 1:1.
-interface PendingAgentMeta { name: string | null; description: string | null }
+interface PendingAgentMeta {
+  name: string | null
+  description: string | null
+}
 const pendingAgentMeta = new Map<string, PendingAgentMeta>() // toolUseId -> { name, description }
 const pendingAgentTypes = new Map<string, string>() // toolUseId -> subagent_type
 const pendingAgentMetaQueue = new Map<string, PendingAgentMeta[]>() // sessionId -> FIFO queue
 const namedAgents = new Map<string, Set<string>>() // sessionId -> set of agent IDs already named via queue
 
-async function ensureRootAgent(
-  store: EventStore,
-  sessionId: string,
-): Promise<string> {
+async function ensureRootAgent(store: EventStore, sessionId: string): Promise<string> {
   let rootId = sessionRootAgents.get(sessionId)
   if (!rootId) {
     rootId = sessionId
@@ -77,7 +84,9 @@ router.post('/events', async (c) => {
           : `Keys: ${logKeys} \nPayload: ${payload.slice(0, 500)}`
 
       if (hookPayload.hook_event_name) {
-        const toolInfo = hookPayload.tool_name ? `tool:${hookPayload.tool_name} tool_use_id:${hookPayload.tool_use_id}` : ''
+        const toolInfo = hookPayload.tool_name
+          ? `tool:${hookPayload.tool_name} tool_use_id:${hookPayload.tool_use_id}`
+          : ''
         console.log(`[HOOK:${hookPayload.hook_event_name}] ${toolInfo} \n${logPayload}\n---`)
       } else {
         console.log('[EVENT]', logPayload)
@@ -118,7 +127,10 @@ router.post('/events', async (c) => {
     // in a per-session FIFO queue (for early naming when subagent events arrive
     // before PostToolUse, since those events don't carry the parent tool_use_id).
     if (parsed.subtype === 'PreToolUse' && parsed.toolName === 'Agent') {
-      const meta: PendingAgentMeta = { name: parsed.subAgentName, description: parsed.subAgentDescription }
+      const meta: PendingAgentMeta = {
+        name: parsed.subAgentName,
+        description: parsed.subAgentDescription,
+      }
       if (meta.name || meta.description) {
         if (parsed.toolUseId) {
           pendingAgentMeta.set(parsed.toolUseId, meta)
@@ -189,11 +201,12 @@ router.post('/events', async (c) => {
         }
         // Agent type: prefer stashed value from PreToolUse, then tool_input/tool_response
         const toolResponse = (hookPayload as any)?.tool_response
-        subAgentType = pendingAgentTypes.get(parsed.toolUseId)
-          ?? (hookPayload as any)?.tool_input?.subagent_type
-          ?? toolResponse?.agentType
-          ?? toolResponse?.subagent_type
-          ?? subAgentType
+        subAgentType =
+          pendingAgentTypes.get(parsed.toolUseId) ??
+          (hookPayload as any)?.tool_input?.subagent_type ??
+          toolResponse?.agentType ??
+          toolResponse?.subagent_type ??
+          subAgentType
         pendingAgentTypes.delete(parsed.toolUseId)
       }
 
@@ -230,22 +243,16 @@ router.post('/events', async (c) => {
       }
     }
 
-    // Set status for tool events
-    let status = 'pending'
-    if (parsed.subtype === 'PreToolUse') status = 'running'
-    else if (parsed.subtype === 'PostToolUse') status = 'completed'
-
+    const now = Date.now()
     const eventId = await store.insertEvent({
       agentId,
       sessionId: parsed.sessionId,
       type: parsed.type,
       subtype: parsed.subtype,
       toolName: parsed.toolName,
-      summary: null, // computed client-side
       timestamp: parsed.timestamp,
       payload: parsed.raw,
       toolUseId: parsed.toolUseId,
-      status,
     })
 
     const event: ParsedEvent = {
@@ -256,8 +263,9 @@ router.post('/events', async (c) => {
       subtype: parsed.subtype,
       toolName: parsed.toolName,
       toolUseId: parsed.toolUseId,
-      status,
+      status: deriveEventStatus(parsed.subtype),
       timestamp: parsed.timestamp,
+      createdAt: now,
       payload: parsed.raw,
     }
 
@@ -311,8 +319,9 @@ router.get('/events/:id/thread', async (c) => {
     subtype: r.subtype,
     toolName: r.tool_name,
     toolUseId: r.tool_use_id || null,
-    status: r.status || 'pending',
+    status: deriveEventStatus(r.subtype),
     timestamp: r.timestamp,
+    createdAt: r.created_at || r.timestamp,
     payload: JSON.parse(r.payload),
   }))
   return c.json(events)

@@ -91,10 +91,7 @@ describe('buildAgentColorMap', () => {
   })
 
   it('should handle flat agent list (no children)', () => {
-    const agents: Agent[] = [
-      makeAgent({ id: 'a' }),
-      makeAgent({ id: 'b' }),
-    ]
+    const agents: Agent[] = [makeAgent({ id: 'a' }), makeAgent({ id: 'b' })]
     const map = buildAgentColorMap(agents)
     expect(map.get('a')).toBe(0)
     expect(map.get('b')).toBe(1)

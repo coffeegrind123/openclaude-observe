@@ -8,6 +8,12 @@ type Env = { Variables: { store: EventStore } }
 
 const LOG_LEVEL = config.logLevel
 
+function deriveEventStatus(subtype: string | null): string {
+  if (subtype === 'PreToolUse') return 'running'
+  if (subtype === 'PostToolUse') return 'completed'
+  return 'pending'
+}
+
 const router = new Hono<Env>()
 
 // GET /agents/:id/events
@@ -23,8 +29,9 @@ router.get('/agents/:id/events', async (c) => {
     subtype: r.subtype,
     toolName: r.tool_name,
     toolUseId: r.tool_use_id || null,
-    status: r.status || 'pending',
+    status: deriveEventStatus(r.subtype),
     timestamp: r.timestamp,
+    createdAt: r.created_at || r.timestamp,
     payload: JSON.parse(r.payload),
   }))
   return c.json(events)

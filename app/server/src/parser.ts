@@ -27,7 +27,8 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
   const sessionId = (raw.session_id as string) || (raw.sessionId as string) || 'unknown'
   const slug = (raw.slug as string) || null
   const transcriptPath = (raw.transcript_path as string) || null
-  const timestamp = parseTimestamp(raw.timestamp)
+  const meta = raw.meta as Record<string, unknown> | undefined
+  const timestamp = parseTimestamp(meta?.timestamp ?? raw.timestamp)
   const toolUseId = (raw.tool_use_id as string) || null
   // agent_id is present on hook events fired from subagents
   const ownerAgentId = (raw.agent_id as string) || null

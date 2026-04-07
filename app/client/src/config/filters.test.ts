@@ -99,7 +99,9 @@ describe('eventMatchesFilters', () => {
     })
 
     it('should match Session filter', () => {
-      expect(eventMatchesFilters(makeEvent({ subtype: 'SessionStart' }), ['Session'], [])).toBe(true)
+      expect(eventMatchesFilters(makeEvent({ subtype: 'SessionStart' }), ['Session'], [])).toBe(
+        true,
+      )
       expect(eventMatchesFilters(makeEvent({ subtype: 'SessionEnd' }), ['Session'], [])).toBe(true)
     })
 
@@ -113,7 +115,9 @@ describe('eventMatchesFilters', () => {
 
     it('should match MCP filter for Elicitation events', () => {
       expect(eventMatchesFilters(makeEvent({ subtype: 'Elicitation' }), ['MCP'], [])).toBe(true)
-      expect(eventMatchesFilters(makeEvent({ subtype: 'ElicitationResult' }), ['MCP'], [])).toBe(true)
+      expect(eventMatchesFilters(makeEvent({ subtype: 'ElicitationResult' }), ['MCP'], [])).toBe(
+        true,
+      )
     })
 
     it('should match Permissions filter', () => {
@@ -133,8 +137,12 @@ describe('eventMatchesFilters', () => {
     })
 
     it('should match Compaction filter', () => {
-      expect(eventMatchesFilters(makeEvent({ subtype: 'PreCompact' }), ['Compaction'], [])).toBe(true)
-      expect(eventMatchesFilters(makeEvent({ subtype: 'PostCompact' }), ['Compaction'], [])).toBe(true)
+      expect(eventMatchesFilters(makeEvent({ subtype: 'PreCompact' }), ['Compaction'], [])).toBe(
+        true,
+      )
+      expect(eventMatchesFilters(makeEvent({ subtype: 'PostCompact' }), ['Compaction'], [])).toBe(
+        true,
+      )
     })
 
     it('should match Errors filter for events with error payload', () => {
@@ -264,16 +272,12 @@ describe('getDynamicFilterNames', () => {
   })
 
   it('should extract tool names from PostToolUse events', () => {
-    const events = [
-      makeEvent({ subtype: 'PostToolUse', toolName: 'Write' }),
-    ]
+    const events = [makeEvent({ subtype: 'PostToolUse', toolName: 'Write' })]
     expect(getDynamicFilterNames(events)).toContain('Write')
   })
 
   it('should extract tool names from PostToolUseFailure events', () => {
-    const events = [
-      makeEvent({ subtype: 'PostToolUseFailure', toolName: 'Edit' }),
-    ]
+    const events = [makeEvent({ subtype: 'PostToolUseFailure', toolName: 'Edit' })]
     expect(getDynamicFilterNames(events)).toContain('Edit')
   })
 
@@ -292,10 +296,7 @@ describe('getDynamicFilterNames', () => {
   })
 
   it('should include catchall subtypes not covered by static filters', () => {
-    const events = [
-      makeEvent({ subtype: 'CwdChanged' }),
-      makeEvent({ subtype: 'FileChanged' }),
-    ]
+    const events = [makeEvent({ subtype: 'CwdChanged' }), makeEvent({ subtype: 'FileChanged' })]
     const names = getDynamicFilterNames(events)
     expect(names).toContain('CwdChanged')
     expect(names).toContain('FileChanged')

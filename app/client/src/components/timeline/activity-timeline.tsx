@@ -134,7 +134,9 @@ export function ActivityTimeline() {
             <AgentLane
               key={agent.id}
               agent={agent}
-              parentAgent={agent.parentAgentId ? agents.find((a) => a.id === agent.parentAgentId) : null}
+              parentAgent={
+                agent.parentAgentId ? agents.find((a) => a.id === agent.parentAgentId) : null
+              }
               events={eventsByAgent.get(agent.id) || []}
               allEvents={events || []}
               isSubagent={isSubagent}

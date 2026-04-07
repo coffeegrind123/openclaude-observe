@@ -90,7 +90,9 @@ describe('MainPanel routing', () => {
     expect(screen.getByTestId('scope-bar')).toBeInTheDocument()
 
     // Deselect session
-    act(() => { useUIStore.setState({ selectedSessionId: null }) })
+    act(() => {
+      useUIStore.setState({ selectedSessionId: null })
+    })
     rerender(<MainPanel />)
 
     expect(screen.getByTestId('project-page')).toBeInTheDocument()
@@ -104,7 +106,9 @@ describe('MainPanel routing', () => {
     expect(screen.getByTestId('project-page')).toBeInTheDocument()
 
     // Deselect project
-    act(() => { useUIStore.setState({ selectedProjectId: null }) })
+    act(() => {
+      useUIStore.setState({ selectedProjectId: null })
+    })
     rerender(<MainPanel />)
 
     expect(screen.getByTestId('home-page')).toBeInTheDocument()

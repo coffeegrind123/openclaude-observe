@@ -356,7 +356,11 @@ describe('parseRawEvent — hook format', () => {
       project_name: 'hook-proj',
       session_id: 'hook-sess-1',
       tool_name: 'Agent',
-      tool_input: { name: 'file-searcher', description: 'Search for files', prompt: 'Find all .ts files' },
+      tool_input: {
+        name: 'file-searcher',
+        description: 'Search for files',
+        prompt: 'Find all .ts files',
+      },
       tool_response: { agentId: 'sub-agent-abc', result: 'done' },
       timestamp: 1711411203000,
     }
@@ -496,9 +500,7 @@ describe('parseRawEvent — hook format', () => {
       transcript_path: '/Users/joe/.claude/projects/-Users-joe-my-app/sess-1.jsonl',
       timestamp: 1000,
     })
-    expect(parsed.transcriptPath).toBe(
-      '/Users/joe/.claude/projects/-Users-joe-my-app/sess-1.jsonl',
-    )
+    expect(parsed.transcriptPath).toBe('/Users/joe/.claude/projects/-Users-joe-my-app/sess-1.jsonl')
   })
 
   test('hook event — transcriptPath is null when not present', () => {

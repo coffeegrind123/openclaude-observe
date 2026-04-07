@@ -59,8 +59,18 @@ function getDateGroupLabel(ts: number): string {
   }
   // Older: group by month
   const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ]
   return `${monthNames[date.getMonth()]} ${date.getFullYear()}`
 }
@@ -73,8 +83,8 @@ interface SessionGroup {
 function groupSessionsByDate(sessions: Session[], sortBy: 'activity' | 'created'): SessionGroup[] {
   // Sort sessions by the chosen field (descending — most recent first)
   const sorted = [...sessions].sort((a, b) => {
-    const aTime = sortBy === 'activity' ? (a.lastActivity || a.startedAt) : a.startedAt
-    const bTime = sortBy === 'activity' ? (b.lastActivity || b.startedAt) : b.startedAt
+    const aTime = sortBy === 'activity' ? a.lastActivity || a.startedAt : a.startedAt
+    const bTime = sortBy === 'activity' ? b.lastActivity || b.startedAt : b.startedAt
     return bTime - aTime
   })
 
@@ -84,7 +94,7 @@ function groupSessionsByDate(sessions: Session[], sortBy: 'activity' | 'created'
   let currentGroup: Session[] = []
 
   for (const session of sorted) {
-    const ts = sortBy === 'activity' ? (session.lastActivity || session.startedAt) : session.startedAt
+    const ts = sortBy === 'activity' ? session.lastActivity || session.startedAt : session.startedAt
     const label = getDateGroupLabel(ts)
     if (label !== currentLabel) {
       if (currentLabel !== null && currentGroup.length > 0) {
@@ -142,7 +152,12 @@ export function ProjectList({ collapsed }: ProjectListProps) {
                         ? 'bg-primary/10 text-primary border border-primary/30'
                         : 'text-muted-foreground hover:bg-accent',
                     )}
-                    onClick={() => setSelectedProject(isSelected ? null : project.id, isSelected ? null : project.slug)}
+                    onClick={() =>
+                      setSelectedProject(
+                        isSelected ? null : project.id,
+                        isSelected ? null : project.slug,
+                      )
+                    }
                   >
                     {displayLabel.charAt(0).toUpperCase()}
                   </button>
@@ -159,7 +174,12 @@ export function ProjectList({ collapsed }: ProjectListProps) {
                   'group flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm transition-colors cursor-pointer',
                   isSelected ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-accent',
                 )}
-                onClick={() => setSelectedProject(isSelected ? null : project.id, isSelected ? null : project.slug)}
+                onClick={() =>
+                  setSelectedProject(
+                    isSelected ? null : project.id,
+                    isSelected ? null : project.slug,
+                  )
+                }
               >
                 {isSelected ? (
                   <ChevronDown className="h-3.5 w-3.5 shrink-0" />
@@ -169,7 +189,10 @@ export function ProjectList({ collapsed }: ProjectListProps) {
                 <Folder className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{displayLabel}</span>
                 {project.sessionCount != null && (
-                  <Badge variant="secondary" className="ml-auto text-[10px] h-4 px-1 group-hover:hidden">
+                  <Badge
+                    variant="secondary"
+                    className="ml-auto text-[10px] h-4 px-1 group-hover:hidden"
+                  >
                     {project.sessionCount}
                   </Badge>
                 )}
@@ -190,7 +213,9 @@ export function ProjectList({ collapsed }: ProjectListProps) {
       <ProjectModal
         project={modalProject}
         open={modalProject !== null}
-        onOpenChange={(open) => { if (!open) setModalProject(null) }}
+        onOpenChange={(open) => {
+          if (!open) setModalProject(null)
+        }}
       />
     </TooltipProvider>
   )
@@ -203,7 +228,14 @@ function shortenCwd(cwd: string): string {
 
 function SessionList({ projectId }: { projectId: number }) {
   const { data: sessions } = useSessions(projectId)
-  const { selectedSessionId, setSelectedSessionId, sessionSortOrder, setSessionSortOrder, togglePinnedSession, pinnedSessionIds } = useUIStore()
+  const {
+    selectedSessionId,
+    setSelectedSessionId,
+    sessionSortOrder,
+    setSessionSortOrder,
+    togglePinnedSession,
+    pinnedSessionIds,
+  } = useUIStore()
   const queryClient = useQueryClient()
   const { data: currentEvents } = useEvents(selectedSessionId)
 
@@ -229,15 +261,18 @@ function SessionList({ projectId }: { projectId: number }) {
     setEditValue('')
   }, [])
 
-  const saveSlug = useCallback(async (sessionId: string) => {
-    const trimmed = editValue.trim()
-    if (trimmed) {
-      await api.updateSessionSlug(sessionId, trimmed)
-      await queryClient.invalidateQueries({ queryKey: ['sessions', projectId] })
-    }
-    setEditingSessionId(null)
-    setEditValue('')
-  }, [editValue, projectId, queryClient])
+  const saveSlug = useCallback(
+    async (sessionId: string) => {
+      const trimmed = editValue.trim()
+      if (trimmed) {
+        await api.updateSessionSlug(sessionId, trimmed)
+        await queryClient.invalidateQueries({ queryKey: ['sessions', projectId] })
+      }
+      setEditingSessionId(null)
+      setEditValue('')
+    },
+    [editValue, projectId, queryClient],
+  )
 
   const groups = useMemo(() => {
     if (!sessions?.length) return []
@@ -269,149 +304,184 @@ function SessionList({ projectId }: { projectId: number }) {
           <TooltipTrigger asChild>
             <button
               className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
-              onClick={() => setSessionSortOrder(sessionSortOrder === 'activity' ? 'created' : 'activity')}
+              onClick={() =>
+                setSessionSortOrder(sessionSortOrder === 'activity' ? 'created' : 'activity')
+              }
             >
               {sessionSortOrder === 'activity' ? (
-                <><Clock className="h-3 w-3" /> Recent</>
+                <>
+                  <Clock className="h-3 w-3" /> Recent
+                </>
               ) : (
-                <><CalendarDays className="h-3 w-3" /> Created</>
+                <>
+                  <CalendarDays className="h-3 w-3" /> Created
+                </>
               )}
             </button>
           </TooltipTrigger>
           <TooltipContent side="right" className="text-xs">
-            {sessionSortOrder === 'activity' ? 'Sorted by recent activity' : 'Sorted by creation date'}
+            {sessionSortOrder === 'activity'
+              ? 'Sorted by recent activity'
+              : 'Sorted by creation date'}
           </TooltipContent>
         </Tooltip>
       </div>
       {groups.map((group) => {
         const isGroupExpanded = !shouldCollapse || expandedGroups.has(group.label)
         const previewCount = group.label === 'Today' ? 10 : GROUP_PREVIEW_COUNT
-        const visibleSessions = isGroupExpanded ? group.sessions : group.sessions.slice(0, previewCount)
+        const visibleSessions = isGroupExpanded
+          ? group.sessions
+          : group.sessions.slice(0, previewCount)
         const hiddenCount = group.sessions.length - visibleSessions.length
 
         return (
-        <div key={group.label}>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 dark:text-muted-foreground/60 px-2 pt-2 pb-0.5 select-none">
-            {group.label}
-          </div>
-          {visibleSessions.map((session) => {
-            const isSelected = selectedSessionId === session.id
-            const isEditing = editingSessionId === session.id
-            const label = session.slug || session.id.slice(0, 8)
-            const cwd = typeof session.metadata?.cwd === 'string' ? session.metadata.cwd : null
-            const statusLabel = session.status === 'active' ? 'Active' : 'Ended'
-            const tooltipLines = [
-              statusLabel,
-              cwd,
-            ].filter(Boolean)
+          <div key={group.label}>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 dark:text-muted-foreground/60 px-2 pt-2 pb-0.5 select-none">
+              {group.label}
+            </div>
+            {visibleSessions.map((session) => {
+              const isSelected = selectedSessionId === session.id
+              const isEditing = editingSessionId === session.id
+              const label = session.slug || session.id.slice(0, 8)
+              const cwd = typeof session.metadata?.cwd === 'string' ? session.metadata.cwd : null
+              const statusLabel = session.status === 'active' ? 'Active' : 'Ended'
+              const tooltipLines = [statusLabel, cwd].filter(Boolean)
 
-            return (
-              <Tooltip key={session.id}>
-                <TooltipTrigger asChild>
-                  <div
-                    className={cn(
-                      'group rounded-md px-2 py-1 transition-colors cursor-pointer',
-                      isSelected
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-                    )}
-                    onClick={() => !isEditing && setSelectedSessionId(isSelected ? null : session.id)}
-                  >
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <span
-                        className="relative h-3 w-3 shrink-0 flex items-center justify-center"
-                        onClick={(e) => { e.stopPropagation(); togglePinnedSession(session.id) }}
-                      >
+              return (
+                <Tooltip key={session.id}>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={cn(
+                        'group rounded-md px-2 py-1 transition-colors cursor-pointer',
+                        isSelected
+                          ? 'bg-accent text-accent-foreground'
+                          : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                      )}
+                      onClick={() =>
+                        !isEditing && setSelectedSessionId(isSelected ? null : session.id)
+                      }
+                    >
+                      <div className="flex items-center gap-1.5 text-xs">
                         <span
-                          className={cn(
-                            'h-2 w-2 rounded-full',
-                            pinnedSessionIds.has(session.id) ? 'hidden' : 'group-hover:hidden',
-                            session.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/60 dark:bg-muted-foreground/40',
-                          )}
-                        />
-                        <Pin
-                          className={cn(
-                            'h-3 w-3 absolute inset-0 cursor-pointer transition-opacity',
-                            pinnedSessionIds.has(session.id)
-                              ? session.status === 'active' ? 'opacity-80 text-green-500' : 'opacity-60 text-primary'
-                              : 'opacity-0 group-hover:opacity-100',
-                            !pinnedSessionIds.has(session.id) && (session.status === 'active' ? 'text-green-500/60 hover:text-green-500' : 'text-muted-foreground/50 hover:text-muted-foreground'),
-                          )}
-                        />
-                      </span>
-                      {isEditing ? (
-                        <input
-                          ref={inputRef}
-                          className="truncate bg-transparent border border-border rounded px-0.5 text-xs outline-none w-full min-w-0"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              saveSlug(session.id)
-                            } else if (e.key === 'Escape') {
-                              e.preventDefault()
-                              cancelEditing()
-                            }
+                          className="relative h-3 w-3 shrink-0 flex items-center justify-center"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            togglePinnedSession(session.id)
                           }}
-                          onBlur={() => saveSlug(session.id)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      ) : (
-                        <span className="truncate">{label}</span>
-                      )}
-                      {!isEditing && (
-                        <span className="text-[10px] text-muted-foreground/80 dark:text-muted-foreground/60 ml-auto shrink-0 hidden @[250px]:inline group-hover:!hidden">
-                          {formatRelativeTime(sessionSortOrder === 'activity' ? (session.lastActivity || session.startedAt) : session.startedAt)}
+                        >
+                          <span
+                            className={cn(
+                              'h-2 w-2 rounded-full',
+                              pinnedSessionIds.has(session.id) ? 'hidden' : 'group-hover:hidden',
+                              session.status === 'active'
+                                ? 'bg-green-500'
+                                : 'bg-muted-foreground/60 dark:bg-muted-foreground/40',
+                            )}
+                          />
+                          <Pin
+                            className={cn(
+                              'h-3 w-3 absolute inset-0 cursor-pointer transition-opacity',
+                              pinnedSessionIds.has(session.id)
+                                ? session.status === 'active'
+                                  ? 'opacity-80 text-green-500'
+                                  : 'opacity-60 text-primary'
+                                : 'opacity-0 group-hover:opacity-100',
+                              !pinnedSessionIds.has(session.id) &&
+                                (session.status === 'active'
+                                  ? 'text-green-500/60 hover:text-green-500'
+                                  : 'text-muted-foreground/50 hover:text-muted-foreground'),
+                            )}
+                          />
                         </span>
-                      )}
-                      {!isEditing && (session.eventCount != null || (session.id === selectedSessionId && currentEvents)) && (
-                        <Badge variant="outline" className="text-[9px] h-3.5 px-1 shrink-0 hidden @[200px]:inline-flex ml-auto @[250px]:ml-0 group-hover:!hidden">
-                          {session.id === selectedSessionId && currentEvents ? currentEvents.length : session.eventCount}
-                        </Badge>
-                      )}
-                      {!isEditing && (
-                        <Pencil
-                          data-testid={`edit-session-${session.id}`}
-                          className="h-3 w-3 shrink-0 ml-auto hidden group-hover:block text-muted-foreground/50 hover:text-muted-foreground transition-opacity cursor-pointer"
-                          onClick={(e) => startEditing(session, e)}
-                        />
+                        {isEditing ? (
+                          <input
+                            ref={inputRef}
+                            className="truncate bg-transparent border border-border rounded px-0.5 text-xs outline-none w-full min-w-0"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                saveSlug(session.id)
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault()
+                                cancelEditing()
+                              }
+                            }}
+                            onBlur={() => saveSlug(session.id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span className="truncate">{label}</span>
+                        )}
+                        {!isEditing && (
+                          <span className="text-[10px] text-muted-foreground/80 dark:text-muted-foreground/60 ml-auto shrink-0 hidden @[250px]:inline group-hover:!hidden">
+                            {formatRelativeTime(
+                              sessionSortOrder === 'activity'
+                                ? session.lastActivity || session.startedAt
+                                : session.startedAt,
+                            )}
+                          </span>
+                        )}
+                        {!isEditing &&
+                          (session.eventCount != null ||
+                            (session.id === selectedSessionId && currentEvents)) && (
+                            <Badge
+                              variant="outline"
+                              className="text-[9px] h-3.5 px-1 shrink-0 hidden @[200px]:inline-flex ml-auto @[250px]:ml-0 group-hover:!hidden"
+                            >
+                              {session.id === selectedSessionId && currentEvents
+                                ? currentEvents.length
+                                : session.eventCount}
+                            </Badge>
+                          )}
+                        {!isEditing && (
+                          <Pencil
+                            data-testid={`edit-session-${session.id}`}
+                            className="h-3 w-3 shrink-0 ml-auto hidden group-hover:block text-muted-foreground/50 hover:text-muted-foreground transition-opacity cursor-pointer"
+                            onClick={(e) => startEditing(session, e)}
+                          />
+                        )}
+                      </div>
+                      {cwd && (
+                        <div
+                          className="pl-[18px] pb-0.5 text-[10px] text-muted-foreground/30 dark:text-muted-foreground/20 group-hover:text-muted-foreground/70 dark:group-hover:text-muted-foreground/50 transition-colors truncate"
+                          dir="rtl"
+                        >
+                          <span dir="ltr">{shortenCwd(cwd)}</span>
+                        </div>
                       )}
                     </div>
-                    {cwd && (
-                      <div className="pl-[18px] pb-0.5 text-[10px] text-muted-foreground/30 dark:text-muted-foreground/20 group-hover:text-muted-foreground/70 dark:group-hover:text-muted-foreground/50 transition-colors truncate" dir="rtl">
-                        <span dir="ltr">{shortenCwd(cwd)}</span>
-                      </div>
-                    )}
-                  </div>
-                </TooltipTrigger>
-                {tooltipLines.length > 0 && (
-                  <TooltipContent side="right" className="text-xs">
-                    {tooltipLines.map((line, i) => (
-                      <div key={i}>{line}</div>
-                    ))}
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            )
-          })}
-          {hiddenCount > 0 && (
-            <button
-              className="w-full text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 cursor-pointer"
-              onClick={() => toggleGroup(group.label)}
-            >
-              Show {hiddenCount} more...
-            </button>
-          )}
-          {shouldCollapse && expandedGroups.has(group.label) && group.sessions.length > previewCount && (
-            <button
-              className="w-full text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 cursor-pointer"
-              onClick={() => toggleGroup(group.label)}
-            >
-              Show less
-            </button>
-          )}
-        </div>
+                  </TooltipTrigger>
+                  {tooltipLines.length > 0 && (
+                    <TooltipContent side="right" className="text-xs">
+                      {tooltipLines.map((line, i) => (
+                        <div key={i}>{line}</div>
+                      ))}
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              )
+            })}
+            {hiddenCount > 0 && (
+              <button
+                className="w-full text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 cursor-pointer"
+                onClick={() => toggleGroup(group.label)}
+              >
+                Show {hiddenCount} more...
+              </button>
+            )}
+            {shouldCollapse &&
+              expandedGroups.has(group.label) &&
+              group.sessions.length > previewCount && (
+                <button
+                  className="w-full text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 cursor-pointer"
+                  onClick={() => toggleGroup(group.label)}
+                >
+                  Show less
+                </button>
+              )}
+          </div>
         )
       })}
     </div>

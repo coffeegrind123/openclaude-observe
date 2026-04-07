@@ -58,18 +58,35 @@ const LABEL_MAP: Record<string, string> = {
   WorktreeRemove: 'Worktree',
 }
 
-export const EventRow = memo(function EventRow({ event, agentMap, agentColorMap, showAgentLabel, spawnInfo, onRowRef }: EventRowProps) {
-  const { expandedEventIds, toggleExpandedEvent, scrollToEventId, setScrollToEventId, selectedEventId, setSelectedEventId, iconCustomizationVersion } =
-    useUIStore()
+export const EventRow = memo(function EventRow({
+  event,
+  agentMap,
+  agentColorMap,
+  showAgentLabel,
+  spawnInfo,
+  onRowRef,
+}: EventRowProps) {
+  const {
+    expandedEventIds,
+    toggleExpandedEvent,
+    scrollToEventId,
+    setScrollToEventId,
+    selectedEventId,
+    setSelectedEventId,
+    iconCustomizationVersion,
+  } = useUIStore()
   const isExpanded = expandedEventIds.has(event.id)
   const isSelected = selectedEventId === event.id
   const rowRef = useRef<HTMLDivElement>(null)
 
   // Register this row's DOM element with the parent for scroll-to-selected
-  const combinedRef = useCallback((el: HTMLDivElement | null) => {
-    (rowRef as React.MutableRefObject<HTMLDivElement | null>).current = el
-    onRowRef?.(event.id, el)
-  }, [event.id, onRowRef])
+  const combinedRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      ;(rowRef as React.MutableRefObject<HTMLDivElement | null>).current = el
+      onRowRef?.(event.id, el)
+    },
+    [event.id, onRowRef],
+  )
 
   const agent = agentMap.get(event.agentId)
   const isSubagent = agent?.parentAgentId != null
@@ -78,7 +95,10 @@ export const EventRow = memo(function EventRow({ event, agentMap, agentColorMap,
   const Icon = getEventIcon(event.subtype, event.toolName)
   const { iconColor, customHex } = getEventColor(event.subtype, event.toolName)
 
-  const isTool = event.subtype === 'PreToolUse' || event.subtype === 'PostToolUse' || event.subtype === 'PostToolUseFailure'
+  const isTool =
+    event.subtype === 'PreToolUse' ||
+    event.subtype === 'PostToolUse' ||
+    event.subtype === 'PostToolUseFailure'
   const isFailure = event.subtype === 'PostToolUseFailure' || event.status === 'failed'
   const isCompleted = event.status === 'completed'
 
@@ -98,9 +118,13 @@ export const EventRow = memo(function EventRow({ event, agentMap, agentColorMap,
           if (entry.isIntersecting) {
             observer.disconnect()
             el.classList.add('animate-[flash-ring_0.4s_ease-in-out_3]')
-            el.addEventListener('animationend', () => {
-              el.classList.remove('animate-[flash-ring_0.4s_ease-in-out_3]')
-            }, { once: true })
+            el.addEventListener(
+              'animationend',
+              () => {
+                el.classList.remove('animate-[flash-ring_0.4s_ease-in-out_3]')
+              },
+              { once: true },
+            )
           }
         },
         { threshold: 0.5 },
@@ -123,7 +147,10 @@ export const EventRow = memo(function EventRow({ event, agentMap, agentColorMap,
   }
 
   return (
-    <div ref={combinedRef} className={cn('transition-shadow', isSelected && 'ring-1 ring-primary/40')}>
+    <div
+      ref={combinedRef}
+      className={cn('transition-shadow', isSelected && 'ring-1 ring-primary/40')}
+    >
       <button
         className={cn(
           'flex flex-col w-full text-left px-3 py-1.5 border-l-2 transition-colors hover:bg-accent/50 overflow-hidden cursor-pointer',
@@ -133,10 +160,17 @@ export const EventRow = memo(function EventRow({ event, agentMap, agentColorMap,
             : agentColors.border,
         )}
         onClick={handleRowClick}
-        onMouseDown={(e) => { if (e.button === 1) e.preventDefault() }}
+        onMouseDown={(e) => {
+          if (e.button === 1) e.preventDefault()
+        }}
       >
         {showAgentLabel && (
-          <div className={cn('text-[10px] opacity-90 dark:opacity-60 leading-tight', agentColors.textOnly)}>
+          <div
+            className={cn(
+              'text-[10px] opacity-90 dark:opacity-60 leading-tight',
+              agentColors.textOnly,
+            )}
+          >
             {isSubagent ? '↳ ' : ''}
             {agent ? (
               <AgentLabel agent={agent} parentAgent={parentAgent} />
@@ -147,7 +181,11 @@ export const EventRow = memo(function EventRow({ event, agentMap, agentColorMap,
         )}
 
         <div className="flex items-center gap-2 w-full min-w-0">
-          <span className={cn('shrink-0', !customHex && iconColor)} style={customHex ? { color: customHex } : undefined} title={event.subtype || event.type}>
+          <span
+            className={cn('shrink-0', !customHex && iconColor)}
+            style={customHex ? { color: customHex } : undefined}
+            title={event.subtype || event.type}
+          >
             <Icon className="h-4 w-4" />
           </span>
           <span
@@ -160,14 +198,26 @@ export const EventRow = memo(function EventRow({ event, agentMap, agentColorMap,
             <span
               className={cn(
                 'shrink-0',
-                isFailure ? 'text-red-600 dark:text-red-500' : isCompleted ? 'text-green-600 dark:text-green-500' : 'text-yellow-600 dark:text-yellow-500/70',
+                isFailure
+                  ? 'text-red-600 dark:text-red-500'
+                  : isCompleted
+                    ? 'text-green-600 dark:text-green-500'
+                    : 'text-yellow-600 dark:text-yellow-500/70',
               )}
             >
-              {isFailure ? <X className="h-3 w-3" /> : isCompleted ? <Check className="h-3 w-3" /> : <Loader className="h-3 w-3" />}
+              {isFailure ? (
+                <X className="h-3 w-3" />
+              ) : isCompleted ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                <Loader className="h-3 w-3" />
+              )}
             </span>
           )}
           {isTool && event.toolName && (
-            <span className="text-xs font-medium text-blue-700 dark:text-blue-400 shrink-0">{event.toolName}</span>
+            <span className="text-xs font-medium text-blue-700 dark:text-blue-400 shrink-0">
+              {event.toolName}
+            </span>
           )}
           {displaySummary.includes('\n') ? (
             <div className="text-xs text-muted-foreground flex-1 min-w-0">

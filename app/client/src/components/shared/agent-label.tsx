@@ -17,9 +17,16 @@ interface AgentLabelProps {
  * agent type, and parent relationship. Wrap any inline agent name
  * in this component to get consistent tooltips everywhere.
  */
-export function AgentLabel({ agent, parentAgent, className, disableTooltip, children }: AgentLabelProps) {
+export function AgentLabel({
+  agent,
+  parentAgent,
+  className,
+  disableTooltip,
+  children,
+}: AgentLabelProps) {
   const displayName = getAgentDisplayName(agent)
-  const hasTooltipContent = !disableTooltip && (agent.description || agent.agentType || agent.parentAgentId)
+  const hasTooltipContent =
+    !disableTooltip && (agent.description || agent.agentType || agent.parentAgentId)
 
   if (!hasTooltipContent) {
     return <span className={className}>{children ?? displayName}</span>
@@ -36,9 +43,7 @@ export function AgentLabel({ agent, parentAgent, className, disableTooltip, chil
             <span>{agent.description}</span>
           )}
           <span className="font-medium">{displayName}</span>
-          {agent.agentType && (
-            <span className="opacity-70">Type: {agent.agentType}</span>
-          )}
+          {agent.agentType && <span className="opacity-70">Type: {agent.agentType}</span>}
           {agent.parentAgentId && (
             <span className="text-[10px] opacity-50">
               Sub of {parentAgent ? getAgentDisplayName(parentAgent) : 'Main'}

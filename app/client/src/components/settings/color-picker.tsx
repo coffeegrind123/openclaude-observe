@@ -15,25 +15,26 @@ interface ColorPickerProps {
 
 const colorKeys = Object.keys(COLOR_PRESETS)
 
-export function ColorPicker({ currentColor, customHex, onSelect, defaultSwatch }: ColorPickerProps) {
+export function ColorPicker({
+  currentColor,
+  customHex,
+  onSelect,
+  defaultSwatch,
+}: ColorPickerProps) {
   const [open, setOpen] = useState(false)
   const colorInputRef = useRef<HTMLInputElement>(null)
 
-  const activeSwatch = currentColor === 'custom' && customHex
-    ? customHex
-    : currentColor
-      ? COLOR_PRESETS[currentColor]?.swatch
-      : defaultSwatch || '#6b7280'
+  const activeSwatch =
+    currentColor === 'custom' && customHex
+      ? customHex
+      : currentColor
+        ? COLOR_PRESETS[currentColor]?.swatch
+        : defaultSwatch || '#6b7280'
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon-sm"
-          className="shrink-0"
-          aria-label="Change color"
-        >
+        <Button variant="outline" size="icon-sm" className="shrink-0" aria-label="Change color">
           <div
             className="h-3.5 w-3.5 rounded-full border border-border"
             style={{ backgroundColor: activeSwatch }}
@@ -50,9 +51,7 @@ export function ColorPicker({ currentColor, customHex, onSelect, defaultSwatch }
                 key={key}
                 className={cn(
                   'flex h-7 w-7 items-center justify-center rounded-md border transition-colors',
-                  isSelected
-                    ? 'border-foreground'
-                    : 'border-transparent hover:border-border',
+                  isSelected ? 'border-foreground' : 'border-transparent hover:border-border',
                 )}
                 style={{ backgroundColor: preset.swatch }}
                 title={preset.label}
@@ -61,9 +60,7 @@ export function ColorPicker({ currentColor, customHex, onSelect, defaultSwatch }
                   setOpen(false)
                 }}
               >
-                {isSelected && (
-                  <Check className="h-3.5 w-3.5 text-white drop-shadow-sm" />
-                )}
+                {isSelected && <Check className="h-3.5 w-3.5 text-white drop-shadow-sm" />}
               </button>
             )
           })}

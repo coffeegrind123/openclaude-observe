@@ -24,23 +24,26 @@ export function useRouteSync() {
   useEffect(() => {
     if (!selectedSessionId || selectedProjectId) return
 
-    api.getSession(selectedSessionId).then((session) => {
-      if (!session) return
-      const projectId = session.projectId
-      // Find the project slug from loaded projects, or fetch it
-      const project = projects?.find((p) => p.id === projectId)
-      if (project) {
-        useUIStore.getState().setSelectedProject(projectId, project.slug)
-        // Re-set the session since setSelectedProject clears it
-        useUIStore.getState().setSelectedSessionId(selectedSessionId)
-      } else {
-        // Projects not loaded yet — just set the ID, slug will be corrected later
-        useUIStore.setState({ selectedProjectId: projectId })
-      }
-    }).catch(() => {
-      // Session not found — clear the URL
-      useUIStore.getState().setSelectedProject(null)
-    })
+    api
+      .getSession(selectedSessionId)
+      .then((session) => {
+        if (!session) return
+        const projectId = session.projectId
+        // Find the project slug from loaded projects, or fetch it
+        const project = projects?.find((p) => p.id === projectId)
+        if (project) {
+          useUIStore.getState().setSelectedProject(projectId, project.slug)
+          // Re-set the session since setSelectedProject clears it
+          useUIStore.getState().setSelectedSessionId(selectedSessionId)
+        } else {
+          // Projects not loaded yet — just set the ID, slug will be corrected later
+          useUIStore.setState({ selectedProjectId: projectId })
+        }
+      })
+      .catch(() => {
+        // Session not found — clear the URL
+        useUIStore.getState().setSelectedProject(null)
+      })
   }, [selectedSessionId, selectedProjectId, projects])
 
   // When projects load: resolve slug → project ID, or correct a stale slug

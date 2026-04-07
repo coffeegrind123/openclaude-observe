@@ -16,7 +16,12 @@ interface IconPickerProps {
 // Pre-compute the full icon list once
 const ALL_ICON_NAMES = Object.keys(allLucideIcons as Record<string, LucideIcon>).sort()
 
-export function IconPicker({ currentIconName, iconColorClass, iconStyle, onSelect }: IconPickerProps) {
+export function IconPicker({
+  currentIconName,
+  iconColorClass,
+  iconStyle,
+  onSelect,
+}: IconPickerProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
 
@@ -43,14 +48,15 @@ export function IconPicker({ currentIconName, iconColorClass, iconStyle, onSelec
   }, [search])
 
   return (
-    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch('') }}>
+    <Popover
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v)
+        if (!v) setSearch('')
+      }}
+    >
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon-sm"
-          className="shrink-0"
-          aria-label="Change icon"
-        >
+        <Button variant="outline" size="icon-sm" className="shrink-0" aria-label="Change icon">
           {CurrentIcon ? (
             <CurrentIcon className={cn('h-4 w-4', iconColorClass)} style={iconStyle} />
           ) : (
@@ -84,9 +90,7 @@ export function IconPicker({ currentIconName, iconColorClass, iconStyle, onSelec
                   key={name}
                   className={cn(
                     'flex items-center justify-center h-9 w-9 rounded-md transition-colors',
-                    isCurrent
-                      ? 'bg-primary/20 ring-1 ring-primary/50'
-                      : 'hover:bg-accent',
+                    isCurrent ? 'bg-primary/20 ring-1 ring-primary/50' : 'hover:bg-accent',
                   )}
                   title={formatIconName(name)}
                   onClick={() => {

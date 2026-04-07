@@ -118,7 +118,10 @@ export const eventColors: Record<string, [string, string]> = {
 
   // User input — green
   UserPromptSubmit: ['text-green-600 dark:text-green-400', 'bg-green-600 dark:bg-green-500'],
-  UserPromptSubmitResponse: ['text-green-600 dark:text-green-400', 'bg-green-600 dark:bg-green-500'],
+  UserPromptSubmitResponse: [
+    'text-green-600 dark:text-green-400',
+    'bg-green-600 dark:bg-green-500',
+  ],
   user: ['text-green-600 dark:text-green-400', 'bg-green-600 dark:bg-green-500'],
 
   // Tool use — blue (by tool name)
@@ -177,7 +180,10 @@ export const eventColors: Record<string, [string, string]> = {
   progress: ['text-amber-600 dark:text-amber-400', 'bg-amber-600 dark:bg-amber-500'],
 }
 
-const defaultEventColor: [string, string] = ['text-muted-foreground', 'bg-muted-foreground dark:bg-muted-foreground']
+const defaultEventColor: [string, string] = [
+  'text-muted-foreground',
+  'bg-muted-foreground dark:bg-muted-foreground',
+]
 
 /**
  * Resolve an event to its logical icon/color key.
@@ -185,7 +191,8 @@ const defaultEventColor: [string, string] = ['text-muted-foreground', 'bg-muted-
  * Non-tool events resolve by subtype (e.g., "SessionStart").
  */
 export function resolveEventKey(subtype: string | null, toolName?: string | null): string {
-  const isTool = subtype === 'PreToolUse' || subtype === 'PostToolUse' || subtype === 'PostToolUseFailure'
+  const isTool =
+    subtype === 'PreToolUse' || subtype === 'PostToolUse' || subtype === 'PostToolUseFailure'
   if (isTool && toolName) return toolName
   return subtype || 'unknown'
 }
@@ -199,9 +206,13 @@ function toolFallbackKey(subtype: string | null): string {
   return '_ToolDefault'
 }
 
-export function getEventColor(subtype: string | null, toolName?: string | null): { iconColor: string; dotColor: string; customHex?: string } {
+export function getEventColor(
+  subtype: string | null,
+  toolName?: string | null,
+): { iconColor: string; dotColor: string; customHex?: string } {
   const key = resolveEventKey(subtype, toolName)
-  const isTool = subtype === 'PreToolUse' || subtype === 'PostToolUse' || subtype === 'PostToolUseFailure'
+  const isTool =
+    subtype === 'PreToolUse' || subtype === 'PostToolUse' || subtype === 'PostToolUseFailure'
 
   // Check user customizations first
   const custom = getIconCustomization(key)
@@ -224,7 +235,8 @@ export function getEventColor(subtype: string | null, toolName?: string | null):
 
 export function getEventIcon(subtype: string | null, toolName?: string | null): LucideIcon {
   const key = resolveEventKey(subtype, toolName)
-  const isTool = subtype === 'PreToolUse' || subtype === 'PostToolUse' || subtype === 'PostToolUseFailure'
+  const isTool =
+    subtype === 'PreToolUse' || subtype === 'PostToolUse' || subtype === 'PostToolUseFailure'
 
   // Check user customizations first
   const custom = getIconCustomization(key)

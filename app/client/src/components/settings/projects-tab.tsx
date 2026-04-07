@@ -90,16 +90,13 @@ export function ProjectsTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete all logs?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete all Observe logs (projects, sessions, agents, and events). Your original Claude session files are not modified.
+              This will permanently delete all Observe logs (projects, sessions, agents, and
+              events). Your original Claude session files are not modified.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={deleting}
-              onClick={handleDeleteAll}
-            >
+            <AlertDialogAction variant="destructive" disabled={deleting} onClick={handleDeleteAll}>
               {deleting ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>

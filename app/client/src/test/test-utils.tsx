@@ -20,11 +20,7 @@ export function renderWithProviders(
   const queryClient = createTestQueryClient()
 
   function Wrapper({ children }: { children: React.ReactNode }) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    )
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   }
 
   return {

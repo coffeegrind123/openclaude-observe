@@ -76,17 +76,11 @@ export function AgentCombobox() {
     <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1.5 text-xs px-2.5"
-          >
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs px-2.5">
             <Users className="h-3.5 w-3.5" />
             Agents
             {activeCount > 0 && (
-              <span className="text-green-600 dark:text-green-400">
-                {activeCount} active
-              </span>
+              <span className="text-green-600 dark:text-green-400">{activeCount} active</span>
             )}
             {selectedAgentIds.length > 0 && (
               <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">
@@ -97,16 +91,18 @@ export function AgentCombobox() {
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[28rem] p-0" align="start">
-          <Command filter={(value, search) => {
-            // Custom filter: match against agent display name and description
-            const agent = sortedAgents.find((a) => a.id === value)
-            if (!agent) return 0
-            const name = getAgentDisplayName(agent).toLowerCase()
-            const desc = (agent.name || '').toLowerCase()
-            const s = search.toLowerCase()
-            if (name.includes(s) || desc.includes(s) || agent.id.includes(s)) return 1
-            return 0
-          }}>
+          <Command
+            filter={(value, search) => {
+              // Custom filter: match against agent display name and description
+              const agent = sortedAgents.find((a) => a.id === value)
+              if (!agent) return 0
+              const name = getAgentDisplayName(agent).toLowerCase()
+              const desc = (agent.name || '').toLowerCase()
+              const s = search.toLowerCase()
+              if (name.includes(s) || desc.includes(s) || agent.id.includes(s)) return 1
+              return 0
+            }}
+          >
             <CommandInput placeholder="Search agents..." />
             <CommandList>
               <CommandEmpty>No agents found.</CommandEmpty>
@@ -118,9 +114,7 @@ export function AgentCombobox() {
                 >
                   <Bot className="h-3.5 w-3.5" />
                   <span className="font-medium">Show All Agents</span>
-                  {selectedAgentIds.length === 0 && (
-                    <Check className="ml-auto h-3.5 w-3.5" />
-                  )}
+                  {selectedAgentIds.length === 0 && <Check className="ml-auto h-3.5 w-3.5" />}
                 </CommandItem>
               </CommandGroup>
               <CommandSeparator />
@@ -137,12 +131,14 @@ export function AgentCombobox() {
                       onSelect={() => toggleAgentId(agent.id)}
                       className="text-xs gap-2 items-start"
                     >
-                      <div className={cn(
-                        'flex items-center justify-center h-4 w-4 rounded border shrink-0 mt-0.5',
-                        isSelected
-                          ? 'bg-primary border-primary text-primary-foreground'
-                          : 'border-muted-foreground/30',
-                      )}>
+                      <div
+                        className={cn(
+                          'flex items-center justify-center h-4 w-4 rounded border shrink-0 mt-0.5',
+                          isSelected
+                            ? 'bg-primary border-primary text-primary-foreground'
+                            : 'border-muted-foreground/30',
+                        )}
+                      >
                         {isSelected && <Check className="h-3 w-3" />}
                       </div>
                       <span
@@ -157,24 +153,30 @@ export function AgentCombobox() {
                           disableTooltip
                           className={cn('truncate', isMain && 'font-medium', agentColor.textOnly)}
                         />
-                        {!isMain && (() => {
-                          const showDesc = agent.description && agent.description !== getAgentDisplayName(agent)
-                          const showType = !!agent.agentType
-                          const showCwd = !!agent.cwd
-                          return (
-                            <div className="flex items-center gap-0 text-[10px] text-muted-foreground/50 min-w-0">
-                              {showDesc && <span className="truncate">{agent.description}</span>}
-                              {showDesc && showType && <span className="shrink-0 mx-1">-</span>}
-                              {showType && <span className="font-mono shrink-0">{agent.agentType}</span>}
-                              {!showDesc && !showType && !showCwd && <span>&nbsp;</span>}
-                              {showCwd && (
-                                <span className="ml-auto truncate pl-2" dir="rtl">
-                                  <span dir="ltr">{agent.cwd!.replace(/^\/(?:Users|home)\/[^/]+/, '~')}</span>
-                                </span>
-                              )}
-                            </div>
-                          )
-                        })()}
+                        {!isMain &&
+                          (() => {
+                            const showDesc =
+                              agent.description && agent.description !== getAgentDisplayName(agent)
+                            const showType = !!agent.agentType
+                            const showCwd = !!agent.cwd
+                            return (
+                              <div className="flex items-center gap-0 text-[10px] text-muted-foreground/50 min-w-0">
+                                {showDesc && <span className="truncate">{agent.description}</span>}
+                                {showDesc && showType && <span className="shrink-0 mx-1">-</span>}
+                                {showType && (
+                                  <span className="font-mono shrink-0">{agent.agentType}</span>
+                                )}
+                                {!showDesc && !showType && !showCwd && <span>&nbsp;</span>}
+                                {showCwd && (
+                                  <span className="ml-auto truncate pl-2" dir="rtl">
+                                    <span dir="ltr">
+                                      {agent.cwd!.replace(/^\/(?:Users|home)\/[^/]+/, '~')}
+                                    </span>
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })()}
                       </div>
                       <div className="flex items-center gap-2 shrink-0 text-[10px] text-muted-foreground">
                         <span>{formatStartTime(agent.firstEventAt ?? 0)}</span>
@@ -206,33 +208,33 @@ export function AgentCombobox() {
       {selectedAgents.map((agent) => {
         const chipColor = getAgentColorById(agent.id, agentColorMap)
         return (
-        <Badge
-          key={agent.id}
-          variant="secondary"
-          className="gap-1 text-xs h-6 cursor-pointer select-none border-primary/60 bg-primary/10 ring-1 ring-primary/40"
-          onClick={() => toggleAgentId(agent.id)}
-        >
-          <span
-            className={cn(
-              'h-1.5 w-1.5 rounded-full',
-              agent.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/40',
-            )}
-          />
-          <AgentLabel
-            agent={agent}
-            parentAgent={agent.parentAgentId ? agentMap.get(agent.parentAgentId) : null}
-            className={chipColor.textOnly}
-          />
-          <button
-            className="ml-0.5 hover:text-foreground"
-            onClick={(e) => {
-              e.stopPropagation()
-              toggleAgentId(agent.id)
-            }}
+          <Badge
+            key={agent.id}
+            variant="secondary"
+            className="gap-1 text-xs h-6 cursor-pointer select-none border-primary/60 bg-primary/10 ring-1 ring-primary/40"
+            onClick={() => toggleAgentId(agent.id)}
           >
-            <X className="h-2.5 w-2.5" />
-          </button>
-        </Badge>
+            <span
+              className={cn(
+                'h-1.5 w-1.5 rounded-full',
+                agent.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/40',
+              )}
+            />
+            <AgentLabel
+              agent={agent}
+              parentAgent={agent.parentAgentId ? agentMap.get(agent.parentAgentId) : null}
+              className={chipColor.textOnly}
+            />
+            <button
+              className="ml-0.5 hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleAgentId(agent.id)
+              }}
+            >
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </Badge>
         )
       })}
     </div>

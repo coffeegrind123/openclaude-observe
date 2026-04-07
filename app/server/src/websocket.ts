@@ -32,7 +32,9 @@ export function attachWebSocket(server: Server) {
           const prev = clientSessions.get(ws)
           clientSessions.delete(ws)
           if (LOG_LEVEL === 'debug' || LOG_LEVEL === 'trace') {
-            console.log(`[WS] Client unsubscribed${prev ? ` from session ${prev.slice(0, 8)}` : ''}`)
+            console.log(
+              `[WS] Client unsubscribed${prev ? ` from session ${prev.slice(0, 8)}` : ''}`,
+            )
           }
         }
       } catch {}

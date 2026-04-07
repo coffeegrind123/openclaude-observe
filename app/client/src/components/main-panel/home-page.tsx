@@ -20,25 +20,31 @@ export function HomePage() {
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <div>
           <h1 className="text-sm font-semibold">Recent Sessions</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Across all projects
-          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Across all projects</p>
         </div>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
-              onClick={() => setSessionSortOrder(sessionSortOrder === 'activity' ? 'created' : 'activity')}
+              onClick={() =>
+                setSessionSortOrder(sessionSortOrder === 'activity' ? 'created' : 'activity')
+              }
             >
               {sessionSortOrder === 'activity' ? (
-                <><Clock className="h-3 w-3" /> Recent</>
+                <>
+                  <Clock className="h-3 w-3" /> Recent
+                </>
               ) : (
-                <><CalendarDays className="h-3 w-3" /> Created</>
+                <>
+                  <CalendarDays className="h-3 w-3" /> Created
+                </>
               )}
             </button>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-xs">
-            {sessionSortOrder === 'activity' ? 'Sorted by recent activity' : 'Sorted by creation date'}
+            {sessionSortOrder === 'activity'
+              ? 'Sorted by recent activity'
+              : 'Sorted by creation date'}
           </TooltipContent>
         </Tooltip>
       </div>

@@ -62,9 +62,7 @@ export function EventDetail({ event, agentMap, spawnInfo }: EventDetailProps) {
       />
 
       {/* Error from payload (shown for any event type with an error field) */}
-      {typeof p.error === 'string' && p.error && (
-        <DetailCode label="Error" value={p.error} />
-      )}
+      {typeof p.error === 'string' && p.error && <DetailCode label="Error" value={p.error} />}
 
       {/* Conversation thread for UserPrompt / Stop / SubagentStop events */}
       {showThread && (
@@ -212,8 +210,7 @@ function ToolDetail({
     let errorMessage = payload.error_message as string | undefined
     if (payload.error_details) {
       try {
-        const raw =
-          typeof payload.error_details === 'string' ? payload.error_details : ''
+        const raw = typeof payload.error_details === 'string' ? payload.error_details : ''
         // Strip leading status code (e.g. "400 {..." → "{...")
         const jsonStr = raw.replace(/^\d+\s*/, '')
         const details = jsonStr ? JSON.parse(jsonStr) : payload.error_details
@@ -276,9 +273,7 @@ function ToolDetail({
         {payload.tool_name && <DetailRow label="Tool" value={payload.tool_name as string} />}
         {permTi?.command && <DetailCode label="Command" value={permTi.command} />}
         {permTi?.description && <DetailRow label="Description" value={permTi.description} />}
-        {payload.ruleContent && (
-          <DetailRow label="Rule" value={payload.ruleContent as string} />
-        )}
+        {payload.ruleContent && <DetailRow label="Rule" value={payload.ruleContent as string} />}
         {payload.permission_suggestions && (
           <DetailCode
             label="Permissions"

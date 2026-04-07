@@ -26,20 +26,29 @@ export function useAgents(sessionId: string | null, events: ParsedEvent[] | unde
     if (!events) return []
 
     // Build per-agent stats from events
-    const agentStats = new Map<string, {
-      eventCount: number
-      firstEventAt: number
-      lastEventAt: number
-      lastStoppedAt: number // timestamp of last stop signal, 0 if never
-      cwd: string | null
-    }>()
+    const agentStats = new Map<
+      string,
+      {
+        eventCount: number
+        firstEventAt: number
+        lastEventAt: number
+        lastStoppedAt: number // timestamp of last stop signal, 0 if never
+        cwd: string | null
+      }
+    >()
 
     const stopSubtypes = new Set(['Stop', 'SessionEnd', 'stop_hook_summary'])
 
     for (const e of events) {
       let stats = agentStats.get(e.agentId)
       if (!stats) {
-        stats = { eventCount: 0, firstEventAt: e.timestamp, lastEventAt: e.timestamp, lastStoppedAt: 0, cwd: null }
+        stats = {
+          eventCount: 0,
+          firstEventAt: e.timestamp,
+          lastEventAt: e.timestamp,
+          lastStoppedAt: 0,
+          cwd: null,
+        }
         agentStats.set(e.agentId, stats)
       }
       if (!stats.cwd && typeof (e.payload as any)?.cwd === 'string') {
@@ -78,18 +87,18 @@ export function useAgents(sessionId: string | null, events: ParsedEvent[] | unde
       // Fetch metadata for agents we haven't seen from the server yet
       if (!server && !pendingFetches.has(agentId)) {
         pendingFetches.add(agentId)
-        api.getAgent(agentId).then((agent) => {
-          queryClient.setQueryData<ServerAgent[]>(
-            ['agents', sessionId],
-            (old) => {
+        api
+          .getAgent(agentId)
+          .then((agent) => {
+            queryClient.setQueryData<ServerAgent[]>(['agents', sessionId], (old) => {
               if (!old) return [agent]
               if (old.some((a) => a.id === agent.id)) {
-                return old.map((a) => a.id === agent.id ? agent : a)
+                return old.map((a) => (a.id === agent.id ? agent : a))
               }
               return [...old, agent]
-            },
-          )
-        }).catch(() => {})
+            })
+          })
+          .catch(() => {})
       }
 
       result.push({

@@ -36,10 +36,9 @@ export function PinnedSessions({ collapsed }: { collapsed: boolean }) {
     }
 
     const ids = [...pinnedIds]
-    Promise.all(ids.map((id) => api.getSession(id).catch(() => null)))
-      .then((results) => {
-        setSessions(results.filter(Boolean) as PinnedSessionData[])
-      })
+    Promise.all(ids.map((id) => api.getSession(id).catch(() => null))).then((results) => {
+      setSessions(results.filter(Boolean) as PinnedSessionData[])
+    })
   }, [pinnedIds])
 
   if (pinnedIds.size === 0) return null
@@ -92,7 +91,9 @@ export function PinnedSessions({ collapsed }: { collapsed: boolean }) {
               <span
                 className={cn(
                   'h-2 w-2 shrink-0 rounded-full',
-                  session.status === 'active' ? 'bg-green-500' : 'bg-muted-foreground/60 dark:bg-muted-foreground/40',
+                  session.status === 'active'
+                    ? 'bg-green-500'
+                    : 'bg-muted-foreground/60 dark:bg-muted-foreground/40',
                 )}
               />
               <span className="truncate">{label}</span>

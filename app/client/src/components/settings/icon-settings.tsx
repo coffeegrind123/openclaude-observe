@@ -27,9 +27,9 @@ function getIconComponentName(icon: LucideIcon): string {
 
 // Curated list of logical event keys grouped by category
 interface EventEntry {
-  key: string       // logical key (matches resolveEventKey output, e.g., "Bash", "SessionStart")
-  label: string     // human-readable label
-  category: string  // grouping header
+  key: string // logical key (matches resolveEventKey output, e.g., "Bash", "SessionStart")
+  label: string // human-readable label
+  category: string // grouping header
 }
 
 const CURATED_EVENTS: EventEntry[] = [
@@ -84,7 +84,10 @@ const CURATED_EVENTS: EventEntry[] = [
   { key: 'WorktreeRemove', label: 'Worktree Remove', category: 'Worktrees' },
 ]
 
-const DEFAULT_EVENT_COLOR: [string, string] = ['text-muted-foreground', 'bg-muted-foreground dark:bg-muted-foreground']
+const DEFAULT_EVENT_COLOR: [string, string] = [
+  'text-muted-foreground',
+  'bg-muted-foreground dark:bg-muted-foreground',
+]
 
 // Build resolved event list with defaults from event-icons.ts
 interface ResolvedEventEntry extends EventEntry {
@@ -175,7 +178,9 @@ export function IconSettings() {
                   entry={entry}
                   customization={customizations[entry.key]}
                   onChangeIcon={(iconName) => setCustomization(entry.key, { iconName })}
-                  onChangeColor={(colorName, customHex) => setCustomization(entry.key, { colorName, customHex })}
+                  onChangeColor={(colorName, customHex) =>
+                    setCustomization(entry.key, { colorName, customHex })
+                  }
                   onReset={() => resetCustomization(entry.key)}
                 />
               ))}
@@ -239,7 +244,9 @@ function EventRow({ entry, customization, onChangeIcon, onChangeColor, onReset }
       <div className="flex-1 min-w-0">
         <span className="truncate text-xs">{entry.label}</span>
         {entry.label !== entry.key && (
-          <span className="ml-1.5 truncate font-mono text-[10px] text-muted-foreground/60">{entry.key}</span>
+          <span className="ml-1.5 truncate font-mono text-[10px] text-muted-foreground/60">
+            {entry.key}
+          </span>
         )}
       </div>
 

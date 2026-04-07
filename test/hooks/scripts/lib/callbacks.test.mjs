@@ -5,7 +5,10 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createServer } from 'node:http'
 
-import { handleCallbackRequests, ALL_CALLBACK_HANDLERS } from '../../../../hooks/scripts/lib/callbacks.mjs'
+import {
+  handleCallbackRequests,
+  ALL_CALLBACK_HANDLERS,
+} from '../../../../hooks/scripts/lib/callbacks.mjs'
 
 function makeLog() {
   return {
@@ -44,20 +47,14 @@ describe('handleCallbackRequests', () => {
   it('skips handlers not in allowedCallbacks', async () => {
     const log = makeLog()
     const config = { allowedCallbacks: new Set(), baseOrigin: '' }
-    await handleCallbackRequests(
-      [{ cmd: 'getSessionSlug', args: {} }],
-      { config, log },
-    )
+    await handleCallbackRequests([{ cmd: 'getSessionSlug', args: {} }], { config, log })
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('Blocked callback'))
   })
 
   it('warns on unknown handler', async () => {
     const log = makeLog()
     const config = { allowedCallbacks: new Set(['nonexistent']), baseOrigin: '' }
-    await handleCallbackRequests(
-      [{ cmd: 'nonexistent', args: {} }],
-      { config, log },
-    )
+    await handleCallbackRequests([{ cmd: 'nonexistent', args: {} }], { config, log })
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('No handler'))
   })
 
@@ -90,7 +87,9 @@ describe('getSessionSlug callback', () => {
     const log = makeLog()
     const { server, baseOrigin } = await startTestServer((req, res) => {
       let body = ''
-      req.on('data', (c) => { body += c })
+      req.on('data', (c) => {
+        body += c
+      })
       req.on('end', () => {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true }))
@@ -103,7 +102,13 @@ describe('getSessionSlug callback', () => {
     }
 
     await handleCallbackRequests(
-      [{ cmd: 'getSessionSlug', callback: '/api/sessions/123/metadata', args: { transcript_path: transcriptPath } }],
+      [
+        {
+          cmd: 'getSessionSlug',
+          callback: '/api/sessions/123/metadata',
+          args: { transcript_path: transcriptPath },
+        },
+      ],
       { config, log },
     )
 
@@ -119,10 +124,7 @@ describe('getSessionSlug callback', () => {
       baseOrigin: 'http://localhost',
     }
 
-    await handleCallbackRequests(
-      [{ cmd: 'getSessionSlug', args: {} }],
-      { config, log },
-    )
+    await handleCallbackRequests([{ cmd: 'getSessionSlug', args: {} }], { config, log })
 
     expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('no transcript_path'))
   })

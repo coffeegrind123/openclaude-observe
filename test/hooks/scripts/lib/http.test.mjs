@@ -22,7 +22,9 @@ describe('http', () => {
     const { postJson } = await loadHttp()
     const { server, url } = await startTestServer((req, res) => {
       let body = ''
-      req.on('data', (c) => { body += c })
+      req.on('data', (c) => {
+        body += c
+      })
       req.on('end', () => {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ received: true }))
@@ -44,7 +46,9 @@ describe('http', () => {
     const { server, url } = await startTestServer((req, res) => {
       requestReceived = true
       let body = ''
-      req.on('data', (c) => { body += c })
+      req.on('data', (c) => {
+        body += c
+      })
       req.on('end', () => {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true }))

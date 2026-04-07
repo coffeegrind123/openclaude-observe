@@ -42,11 +42,10 @@ export interface EventRow {
   type: string
   subtype: string | null
   tool_name: string | null
-  summary: string | null
   timestamp: number
+  created_at: number
   payload: string
   tool_use_id: string | null
-  status: string
 }
 
 // === API Response Types ===
@@ -88,8 +87,9 @@ export interface ParsedEvent {
   subtype: string | null
   toolName: string | null
   toolUseId: string | null
-  status: string
+  status: string // derived from subtype, not stored
   timestamp: number
+  createdAt: number
   payload: Record<string, unknown>
 }
 
@@ -101,6 +101,4 @@ export type WSMessage =
   | { type: 'project_update'; data: { id: number; name: string } }
 
 // Messages FROM clients
-export type WSClientMessage =
-  | { type: 'subscribe'; sessionId: string }
-  | { type: 'unsubscribe' }
+export type WSClientMessage = { type: 'subscribe'; sessionId: string } | { type: 'unsubscribe' }

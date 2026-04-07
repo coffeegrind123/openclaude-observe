@@ -82,9 +82,7 @@ beforeEach(() => {
 })
 
 function renderModal() {
-  return renderWithProviders(
-    <ProjectModal project={project} open={true} onOpenChange={() => {}} />,
-  )
+  return renderWithProviders(<ProjectModal project={project} open={true} onOpenChange={() => {}} />)
 }
 
 describe('ProjectModal - Move session', () => {
@@ -128,7 +126,9 @@ describe('ProjectModal - Move session', () => {
     })
 
     // Should not show the current project
-    const moveDialog = screen.getByText('Move 1 session to...').closest('[role="dialog"]') as HTMLElement
+    const moveDialog = screen
+      .getByText('Move 1 session to...')
+      .closest('[role="dialog"]') as HTMLElement
     expect(within(moveDialog).queryByText('Test Project')).not.toBeInTheDocument()
   })
 

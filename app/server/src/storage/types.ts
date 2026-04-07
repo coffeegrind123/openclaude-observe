@@ -6,11 +6,9 @@ export interface InsertEventParams {
   type: string
   subtype: string | null
   toolName: string | null
-  summary: string | null
   timestamp: number
   payload: Record<string, unknown>
   toolUseId?: string | null
-  status?: string
 }
 
 export interface EventFilters {
@@ -30,9 +28,8 @@ export interface StoredEvent {
   subtype: string | null
   tool_name: string | null
   tool_use_id: string | null
-  status: string
-  summary: string | null
   timestamp: number
+  created_at: number
   payload: string // JSON string in DB
 }
 

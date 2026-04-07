@@ -34,7 +34,10 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="w-[640px] max-w-[90vw] max-h-[80vh] flex flex-col p-0">
+      <DialogContent
+        aria-describedby={undefined}
+        className="w-[640px] max-w-[90vw] max-h-[80vh] flex flex-col p-0"
+      >
         <div className="flex items-center px-6 pt-6 pb-0">
           <DialogTitle>Settings</DialogTitle>
           <div className="ml-auto">
@@ -45,7 +48,11 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             </DialogClose>
           </div>
         </div>
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex-1 flex flex-col min-h-0"
+        >
           <div className="px-6 pt-2">
             <TabsList>
               <TabsTrigger value="projects">Projects</TabsTrigger>
@@ -55,7 +62,11 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           <TabsContent value="projects" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
             <ProjectsTab />
           </TabsContent>
-          <TabsContent value="icons" className="flex-1 min-h-0 px-6 pb-6 pt-4" style={{ maxHeight: 'calc(80vh - 140px)' }}>
+          <TabsContent
+            value="icons"
+            className="flex-1 min-h-0 px-6 pb-6 pt-4"
+            style={{ maxHeight: 'calc(80vh - 140px)' }}
+          >
             <IconSettings />
           </TabsContent>
         </Tabs>
@@ -66,9 +77,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             ) : (
               <Monitor className="h-3 w-3 shrink-0" />
             )}
-            <span className="shrink-0">
-              {serverInfo.runtime === 'docker' ? 'Docker' : 'Local'}
-            </span>
+            <span className="shrink-0">{serverInfo.runtime === 'docker' ? 'Docker' : 'Local'}</span>
             <span className="text-muted-foreground/30">|</span>
             <Database className="h-3 w-3 shrink-0" />
             <span className="truncate">{serverInfo.dbPath}</span>

@@ -62,9 +62,7 @@ const DYNAMIC_SUBTYPES = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailu
 
 // All subtypes explicitly covered by at least one static filter.
 // Events with subtypes NOT in this set will appear as dynamic catchall pills.
-const STATIC_COVERED_SUBTYPES = new Set(
-  STATIC_FILTERS.flatMap((f) => f.subtypes ?? []),
-)
+const STATIC_COVERED_SUBTYPES = new Set(STATIC_FILTERS.flatMap((f) => f.subtypes ?? []))
 
 // Display-name overrides for dynamic catchall subtypes.
 // Add entries here to give hook subtypes friendlier pill labels.

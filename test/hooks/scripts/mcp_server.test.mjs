@@ -156,7 +156,11 @@ describe('MCP JSON-RPC protocol', () => {
       // Simulate the Claude Code MCP handshake
       handleMessage({
         method: 'initialize',
-        params: { protocolVersion: '2025-11-25', capabilities: { roots: {}, elicitation: {} }, clientInfo: { name: 'claude-code' } },
+        params: {
+          protocolVersion: '2025-11-25',
+          capabilities: { roots: {}, elicitation: {} },
+          clientInfo: { name: 'claude-code' },
+        },
         jsonrpc: '2.0',
         id: 0,
       })

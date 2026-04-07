@@ -27,7 +27,8 @@ function run(cmd, args) {
  */
 async function getContainerLabel(config) {
   const result = await run('docker', [
-    'inspect', '--format',
+    'inspect',
+    '--format',
     `{{index .Config.Labels "${config.dockerLabel}"}}`,
     config.containerName,
   ])
@@ -49,7 +50,9 @@ async function safeRemoveContainer(config, log) {
   if (!(await isOurContainer(config))) {
     const exists = await run('docker', ['inspect', config.containerName])
     if (exists.ok) {
-      log.warn(`Container "${config.containerName}" exists but is not managed by ${config.dockerLabel} — skipping removal`)
+      log.warn(
+        `Container "${config.containerName}" exists but is not managed by ${config.dockerLabel} — skipping removal`,
+      )
     }
     return false
   }
@@ -66,7 +69,10 @@ async function getContainerState(config) {
   if (!label) return null
 
   const statusResult = await run('docker', [
-    'inspect', '--format', '{{.State.Running}}', config.containerName,
+    'inspect',
+    '--format',
+    '{{.State.Running}}',
+    config.containerName,
   ])
   const running = statusResult.ok && statusResult.stdout === 'true'
   const versionMatch = label === (config.expectedVersion || 'unknown')
@@ -171,12 +177,17 @@ export async function startServer(config, log = console) {
 
   function dockerRunArgs(portMapping) {
     return [
-      'run', '-d',
-      '--name', config.containerName,
-      '--label', `${config.dockerLabel}=${labelValue}`,
-      '-p', portMapping,
+      'run',
+      '-d',
+      '--name',
+      config.containerName,
+      '--label',
+      `${config.dockerLabel}=${labelValue}`,
+      '-p',
+      portMapping,
       ...envArgs,
-      '-v', `${config.dataDir}:/data`,
+      '-v',
+      `${config.dataDir}:/data`,
       config.dockerImage,
     ]
   }
@@ -244,7 +255,9 @@ export async function stopServer(config, log = console) {
   } else {
     const exists = await run('docker', ['inspect', config.containerName])
     if (exists.ok) {
-      log.warn(`Container "${config.containerName}" is not managed by ${config.dockerLabel} — skipping stop`)
+      log.warn(
+        `Container "${config.containerName}" is not managed by ${config.dockerLabel} — skipping stop`,
+      )
     }
   }
   removeServerPortFile(config)

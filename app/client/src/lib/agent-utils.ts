@@ -1,9 +1,9 @@
-import type { Agent } from '@/types';
+import type { Agent } from '@/types'
 
 // Display name for an agent: name (short) → description → truncated ID
 export function getAgentDisplayName(agent: Agent): string {
-  if (!agent.parentAgentId) return 'Main';
-  return agent.name || agent.description || agent.id.slice(0, 8);
+  if (!agent.parentAgentId) return 'Main'
+  return agent.name || agent.description || agent.id.slice(0, 8)
 }
 
 // ── Agent colors ──────────────────────────────────────────────────────

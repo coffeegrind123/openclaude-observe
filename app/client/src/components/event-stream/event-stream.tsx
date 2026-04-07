@@ -41,12 +41,13 @@ export function EventStream() {
   // Dedupe tool events + build spawn map (subagentId → toolUseId of Agent call)
   // spawnInfo: subagentId → { description, prompt } from the Tool:Agent call
   const { deduped, spawnToolUseIds, spawnInfo, mergedIdMap } = useMemo(() => {
-    if (!events) return {
-      deduped: [],
-      spawnToolUseIds: new Map<string, string>(),
-      spawnInfo: new Map<string, { description?: string; prompt?: string }>(),
-      mergedIdMap: new Map<number, number>(),
-    }
+    if (!events)
+      return {
+        deduped: [],
+        spawnToolUseIds: new Map<string, string>(),
+        spawnInfo: new Map<string, { description?: string; prompt?: string }>(),
+        mergedIdMap: new Map<number, number>(),
+      }
     const result: ParsedEvent[] = []
     const toolUseMap = new Map<string, number>() // toolUseId -> index in result
     const spawns = new Map<string, string>() // subagentId -> toolUseId
@@ -57,11 +58,19 @@ export function EventStream() {
       if (e.subtype === 'PreToolUse' && e.toolUseId) {
         toolUseMap.set(e.toolUseId, result.length)
         result.push({ ...e }) // copy so we can mutate status
-      } else if ((e.subtype === 'PostToolUse' || e.subtype === 'PostToolUseFailure') && e.toolUseId && toolUseMap.has(e.toolUseId)) {
+      } else if (
+        (e.subtype === 'PostToolUse' || e.subtype === 'PostToolUseFailure') &&
+        e.toolUseId &&
+        toolUseMap.has(e.toolUseId)
+      ) {
         const idx = toolUseMap.get(e.toolUseId)!
         const preEvent = result[idx]
         const prePayload = preEvent.payload as any
-        result[idx] = { ...preEvent, status: e.subtype === 'PostToolUseFailure' ? 'failed' : 'completed', payload: e.payload }
+        result[idx] = {
+          ...preEvent,
+          status: e.subtype === 'PostToolUseFailure' ? 'failed' : 'completed',
+          payload: e.payload,
+        }
         // Map the PostToolUse ID to the PreToolUse row ID so scroll-to works
         idMap.set(e.id, preEvent.id)
         // Track Agent tool spawns + capture prompt from PreToolUse input
@@ -96,15 +105,18 @@ export function EventStream() {
         const toolUseId = spawnToolUseIds.get(agentId)
         if (toolUseId) spawnIds.add(toolUseId)
       }
-      filtered = filtered.filter((e) =>
-        selectedAgentIds.includes(e.agentId) ||
-        (e.toolUseId != null && spawnIds.has(e.toolUseId))
+      filtered = filtered.filter(
+        (e) =>
+          selectedAgentIds.includes(e.agentId) ||
+          (e.toolUseId != null && spawnIds.has(e.toolUseId)),
       )
     }
 
     // Static + dynamic tool filters
     if (deferredStaticFilters.length > 0 || deferredToolFilters.length > 0) {
-      filtered = filtered.filter((e) => eventMatchesFilters(e, deferredStaticFilters, deferredToolFilters))
+      filtered = filtered.filter((e) =>
+        eventMatchesFilters(e, deferredStaticFilters, deferredToolFilters),
+      )
     }
 
     // Text search — case-insensitive substring match across key fields and payload
@@ -122,7 +134,14 @@ export function EventStream() {
     }
 
     return filtered
-  }, [deduped, selectedAgentIds, spawnToolUseIds, deferredStaticFilters, deferredToolFilters, deferredSearchQuery])
+  }, [
+    deduped,
+    selectedAgentIds,
+    spawnToolUseIds,
+    deferredStaticFilters,
+    deferredToolFilters,
+    deferredSearchQuery,
+  ])
 
   // Resolve scroll targets for merged events (PostToolUse → PreToolUse row)
   const { scrollToEventId, setScrollToEventId } = useUIStore()
@@ -214,7 +233,10 @@ export function EventStream() {
         <span className="text-xs text-muted-foreground">
           Events: <span className="text-foreground">{filteredEvents.length}</span>
           {showRawCount && (
-            <span className="text-muted-foreground/70 dark:text-muted-foreground/50"> / {rawCount} raw</span>
+            <span className="text-muted-foreground/70 dark:text-muted-foreground/50">
+              {' '}
+              / {rawCount} raw
+            </span>
           )}
         </span>
         {firstTs && lastTs && (
