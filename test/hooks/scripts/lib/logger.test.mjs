@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync, readFileSync, rmSync, statSync } from 'node:f
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { createLogger } from '../hooks/scripts/lib/logger.mjs'
+import { createLogger } from '../../../../hooks/scripts/lib/logger.mjs'
 
 // We test createLogger by pointing it at a temp directory
 let testDir

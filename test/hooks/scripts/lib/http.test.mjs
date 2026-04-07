@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { createServer } from 'node:http'
 
 async function loadHttp() {
-  const mod = await import('../hooks/scripts/lib/http.mjs?' + Date.now())
+  const mod = await import('../../../../hooks/scripts/lib/http.mjs?' + Date.now())
   return mod
 }
 
