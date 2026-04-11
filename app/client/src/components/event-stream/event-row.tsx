@@ -75,7 +75,10 @@ export const EventRow = memo(function EventRow({
   // with thousands of rows.
   const isExpanded = useUIStore((s) => s.expandedEventIds.has(event.id))
   const isSelected = useUIStore((s) => s.selectedEventId === event.id)
-  const scrollToEventId = useUIStore((s) => s.scrollToEventId)
+  // Boolean selector (not the raw id) so only the target row re-renders when
+  // scrollToEventId changes. Subscribing to the raw id causes all 1000+ rows
+  // to re-render on every timeline click.
+  const isScrollTarget = useUIStore((s) => s.scrollToEventId === event.id)
   const toggleExpandedEvent = useUIStore((s) => s.toggleExpandedEvent)
   const setScrollToEventId = useUIStore((s) => s.setScrollToEventId)
   const setSelectedEventId = useUIStore((s) => s.setSelectedEventId)
@@ -109,7 +112,7 @@ export const EventRow = memo(function EventRow({
   const displaySummary = getEventSummary(event)
 
   useEffect(() => {
-    if (scrollToEventId === event.id && rowRef.current) {
+    if (isScrollTarget && rowRef.current) {
       const el = rowRef.current
       el.scrollIntoView({ behavior: 'smooth', block: 'center' })
       setScrollToEventId(null)
@@ -135,7 +138,7 @@ export const EventRow = memo(function EventRow({
       // Fallback: disconnect after 5s in case scroll never brings it into view
       setTimeout(() => observer.disconnect(), 5000)
     }
-  }, [scrollToEventId, event.id, setScrollToEventId])
+  }, [isScrollTarget, setScrollToEventId])
 
   const handleRowClick = (e: React.MouseEvent) => {
     // Middle-click or ctrl/meta+click: select/deselect the row
