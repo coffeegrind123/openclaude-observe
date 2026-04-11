@@ -1074,3 +1074,260 @@ describe('SqliteAdapter — deletion', () => {
     expect(agents).toHaveLength(0)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Orphan repair
+// ---------------------------------------------------------------------------
+describe('SqliteAdapter — repairOrphans', () => {
+  // Helper to bypass FK checks and write directly. better-sqlite3 enables FK
+  // by default; we briefly disable it to inject orphaned rows for testing.
+  function withFkOff(fn: () => void) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(store as any).db.pragma('foreign_keys = OFF')
+    try {
+      fn()
+    } finally {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.pragma('foreign_keys = ON')
+    }
+  }
+
+  test('clean database returns zero counts', async () => {
+    await store.createProject('proj1', 'Project 1', null)
+    const result = await store.repairOrphans()
+    expect(result.sessionsReassigned).toBe(0)
+    expect(result.agentsDeleted).toBe(0)
+    expect(result.agentsReparented).toBe(0)
+    expect(result.eventsDeleted).toBe(0)
+  })
+
+  test('reassigns sessions with invalid project_id to unknown project', async () => {
+    const projId = await store.createProject('proj1', 'Project 1', null)
+    await store.upsertSession('sess1', projId, null, null, 1000)
+    // Manually orphan the session by deleting its project (bypass cascade)
+    withFkOff(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.prepare('DELETE FROM projects WHERE id = ?').run(projId)
+    })
+
+    const result = await store.repairOrphans()
+    expect(result.sessionsReassigned).toBe(1)
+
+    // The session should now be reassigned to the 'unknown' project
+    const unknown = await store.getProjectBySlug('unknown')
+    expect(unknown).not.toBeNull()
+    const session = await store.getSessionById('sess1')
+    expect(session.project_id).toBe(unknown.id)
+  })
+
+  test('reuses existing unknown project if it already exists', async () => {
+    const projId = await store.createProject('proj1', 'Project 1', null)
+    const unknownId = await store.createProject('unknown', 'unknown', null)
+    await store.upsertSession('sess1', projId, null, null, 1000)
+    await store.upsertSession('sess2', projId, null, null, 2000)
+    withFkOff(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.prepare('DELETE FROM projects WHERE id = ?').run(projId)
+    })
+
+    const result = await store.repairOrphans()
+    expect(result.sessionsReassigned).toBe(2)
+
+    const sess1 = await store.getSessionById('sess1')
+    const sess2 = await store.getSessionById('sess2')
+    expect(sess1.project_id).toBe(unknownId)
+    expect(sess2.project_id).toBe(unknownId)
+
+    // Should not have created a duplicate unknown project
+    const projects = await store.getProjects()
+    const unknowns = projects.filter((p: { slug: string }) => p.slug === 'unknown')
+    expect(unknowns).toHaveLength(1)
+  })
+
+  test('deletes agents with invalid session_id', async () => {
+    const projId = await store.createProject('proj1', 'Project 1', null)
+    await store.upsertSession('sess1', projId, null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null)
+    // Orphan the agent by deleting the session row
+    withFkOff(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.prepare('DELETE FROM sessions WHERE id = ?').run('sess1')
+    })
+
+    const result = await store.repairOrphans()
+    expect(result.agentsDeleted).toBe(1)
+
+    const agent = await store.getAgentById('a1')
+    expect(agent).toBeNull()
+  })
+
+  test('nulls out parent_agent_id when parent has been deleted', async () => {
+    const projId = await store.createProject('proj1', 'Project 1', null)
+    await store.upsertSession('sess1', projId, null, null, 1000)
+    await store.upsertAgent('parent1', 'sess1', null, null, null)
+    await store.upsertAgent('child1', 'sess1', 'parent1', null, null)
+    // Delete the parent only
+    withFkOff(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.prepare('DELETE FROM agents WHERE id = ?').run('parent1')
+    })
+
+    const result = await store.repairOrphans()
+    expect(result.agentsReparented).toBe(1)
+
+    const child = await store.getAgentById('child1')
+    expect(child).not.toBeNull()
+    expect(child.parent_agent_id).toBeNull()
+  })
+
+  test('deletes events with invalid session_id', async () => {
+    const { sessionId, rootAgentId } = await seedBasic()
+    await store.insertEvent({
+      agentId: rootAgentId,
+      sessionId,
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      timestamp: 1000,
+      payload: {},
+    })
+    // Orphan the event by deleting the session
+    withFkOff(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId)
+    })
+
+    const result = await store.repairOrphans()
+    // Both the event and the agent get deleted
+    expect(result.agentsDeleted).toBe(1)
+    expect(result.eventsDeleted).toBeGreaterThanOrEqual(1)
+  })
+
+  test('deletes events with invalid agent_id', async () => {
+    const projId = await store.createProject('proj1', 'Project 1', null)
+    await store.upsertSession('sess1', projId, null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null)
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      timestamp: 1000,
+      payload: {},
+    })
+    // Orphan the event by deleting only the agent
+    withFkOff(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.prepare('DELETE FROM agents WHERE id = ?').run('a1')
+    })
+
+    const result = await store.repairOrphans()
+    expect(result.eventsDeleted).toBe(1)
+    const events = await store.getEventsForSession('sess1')
+    expect(events).toHaveLength(0)
+  })
+
+  test('recomputes session counts after repair', async () => {
+    const projId = await store.createProject('proj1', 'Project 1', null)
+    await store.upsertSession('sess1', projId, null, null, 1000)
+    await store.upsertAgent('a1', 'sess1', null, null, null)
+    // Insert two events normally (so counts are correct: event_count=2, agent_count=1)
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      timestamp: 1000,
+      payload: {},
+    })
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PostToolUse',
+      toolName: 'Bash',
+      timestamp: 2000,
+      payload: {},
+    })
+
+    let session = await store.getSessionById('sess1')
+    expect(session.event_count).toBe(2)
+    expect(session.agent_count).toBe(1)
+
+    // Orphan one event by deleting its agent
+    withFkOff(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.prepare('DELETE FROM agents WHERE id = ?').run('a1')
+    })
+
+    await store.repairOrphans()
+
+    // After repair: events deleted, counts recomputed
+    session = await store.getSessionById('sess1')
+    expect(session.event_count).toBe(0)
+    expect(session.agent_count).toBe(0)
+  })
+
+  test('handles multiple orphan types in a single pass', async () => {
+    // Project P1 with session S1, agent A1, event E1
+    const p1 = await store.createProject('p1', 'P1', null)
+    await store.upsertSession('s1', p1, null, null, 1000)
+    await store.upsertAgent('a1', 's1', null, null, null)
+    await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 's1',
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      timestamp: 1000,
+      payload: {},
+    })
+
+    // Project P2 with session S2 and a parent/child agent pair
+    const p2 = await store.createProject('p2', 'P2', null)
+    await store.upsertSession('s2', p2, null, null, 2000)
+    await store.upsertAgent('parent2', 's2', null, null, null)
+    await store.upsertAgent('child2', 's2', 'parent2', null, null)
+
+    // Orphan everything via raw deletes
+    withFkOff(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.prepare('DELETE FROM projects WHERE id = ?').run(p1)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.prepare('DELETE FROM agents WHERE id = ?').run('parent2')
+    })
+
+    const result = await store.repairOrphans()
+    // s1's project was deleted but the session row still exists → reassigned
+    expect(result.sessionsReassigned).toBe(1)
+    // child2's parent was deleted → reparented
+    expect(result.agentsReparented).toBe(1)
+    // Sanity: nothing else got deleted unexpectedly
+    expect(result.agentsDeleted).toBe(0)
+  })
+
+  test('orphaned active session is recoverable via getRecentSessions', async () => {
+    // This is the specific bug the user hit: an active session whose project
+    // was deleted should still appear in recent sessions (not silently hidden
+    // by the previous INNER JOIN).
+    const projId = await store.createProject('p1', 'P1', null)
+    await store.upsertSession('s1', projId, 'active-session', null, Date.now())
+    withFkOff(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.prepare('DELETE FROM projects WHERE id = ?').run(projId)
+    })
+
+    // Even before repair, the LEFT JOIN should surface the orphan
+    const recentBefore = await store.getRecentSessions()
+    expect(recentBefore.find((r: { id: string }) => r.id === 's1')).toBeDefined()
+
+    // After repair, the session is reassigned to 'unknown'
+    await store.repairOrphans()
+    const recentAfter = await store.getRecentSessions()
+    const found = recentAfter.find((r: { id: string }) => r.id === 's1')
+    expect(found).toBeDefined()
+    expect(found.project_slug).toBe('unknown')
+  })
+})

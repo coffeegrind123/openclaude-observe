@@ -46,6 +46,11 @@ const pendingAgentMetaQueue = new Map<string, PendingAgentMeta[]>() // sessionId
 const namedAgents = new Map<string, Set<string>>() // sessionId -> set of agent IDs already named via queue
 
 async function ensureRootAgent(store: EventStore, sessionId: string): Promise<string> {
+  // Fast path: trust the in-memory cache. Cache invalidation happens in all
+  // delete paths (DELETE /projects/:id, DELETE /sessions/:id, DELETE /data),
+  // and the startup repairOrphans pass cleans up any pre-existing orphans.
+  // Defensive always-upserting on every event added a measurable per-event
+  // write cost (~500µs) for no benefit in the common case.
   let rootId = sessionRootAgents.get(sessionId)
   if (!rootId) {
     rootId = sessionId
@@ -101,6 +106,26 @@ router.post('/events', async (c) => {
 
     if (existingSession) {
       effectiveProjectId = existingSession.project_id
+      // Auto-repair: if the session's project FK points to a project that
+      // no longer exists (e.g., manual db edit, partial cascade, race
+      // condition during a delete), re-resolve it. Without this, upsertSession
+      // would update the row in place, leaving the bad project_id, and
+      // subsequent queries that JOIN sessions to projects would silently
+      // return null project info.
+      const projectStillExists = await store.getProjectById(effectiveProjectId)
+      if (!projectStillExists) {
+        console.log(
+          `[event] Session ${parsed.sessionId} references missing project ${effectiveProjectId}; re-resolving`,
+        )
+        const projectSlugOverride = meta.env?.AGENTS_OBSERVE_PROJECT_SLUG || null
+        const resolved = await resolveProject(store, {
+          sessionId: parsed.sessionId,
+          slug: projectSlugOverride,
+          transcriptPath: parsed.transcriptPath,
+        })
+        effectiveProjectId = resolved.projectId
+        await store.updateSessionProject(parsed.sessionId, effectiveProjectId)
+      }
     } else {
       const projectSlugOverride = meta.env?.AGENTS_OBSERVE_PROJECT_SLUG || null
       const resolved = await resolveProject(store, {

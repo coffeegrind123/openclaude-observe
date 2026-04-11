@@ -1,7 +1,13 @@
 // app/server/src/storage/sqlite-adapter.ts
 
 import Database from 'better-sqlite3'
-import type { EventStore, InsertEventParams, EventFilters, StoredEvent } from './types'
+import type {
+  EventStore,
+  InsertEventParams,
+  EventFilters,
+  StoredEvent,
+  OrphanRepairResult,
+} from './types'
 
 export class SqliteAdapter implements EventStore {
   private db: Database.Database
@@ -154,6 +160,10 @@ export class SqliteAdapter implements EventStore {
       )
       .run(slug, name, transcriptPath, now, now)
     return result.lastInsertRowid as number
+  }
+
+  async getProjectById(id: number): Promise<any | null> {
+    return this.db.prepare('SELECT * FROM projects WHERE id = ?').get(id) || null
   }
 
   async getProjectBySlug(slug: string): Promise<any | null> {
@@ -507,17 +517,19 @@ export class SqliteAdapter implements EventStore {
     this.db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId)
   }
 
-  async deleteProject(projectId: number): Promise<void> {
+  async deleteProject(projectId: number): Promise<string[]> {
     // Get all session IDs for this project
     const sessions = this.db
       .prepare('SELECT id FROM sessions WHERE project_id = ?')
       .all(projectId) as { id: string }[]
-    for (const session of sessions) {
-      this.db.prepare('DELETE FROM events WHERE session_id = ?').run(session.id)
-      this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(session.id)
+    const sessionIds = sessions.map((s) => s.id)
+    for (const sessionId of sessionIds) {
+      this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId)
+      this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId)
     }
     this.db.prepare('DELETE FROM sessions WHERE project_id = ?').run(projectId)
     this.db.prepare('DELETE FROM projects WHERE id = ?').run(projectId)
+    return sessionIds
   }
 
   async clearAllData(): Promise<void> {
@@ -538,6 +550,10 @@ export class SqliteAdapter implements EventStore {
   }
 
   async getRecentSessions(limit: number = 20): Promise<any[]> {
+    // LEFT JOIN so orphaned sessions (project deleted out from under them)
+    // still appear in the recent list. The repairOrphans pass should make
+    // this rare, but the LEFT JOIN is defensive — without it, an orphaned
+    // active session would silently disappear from the UI.
     return this.db
       .prepare(
         `
@@ -545,12 +561,126 @@ export class SqliteAdapter implements EventStore {
         p.slug as project_slug,
         p.name as project_name
       FROM sessions s
-      JOIN projects p ON p.id = s.project_id
+      LEFT JOIN projects p ON p.id = s.project_id
       ORDER BY COALESCE(s.last_activity, s.started_at) DESC
       LIMIT ?
     `,
       )
       .all(limit)
+  }
+
+  async repairOrphans(): Promise<OrphanRepairResult> {
+    const result: OrphanRepairResult = {
+      sessionsReassigned: 0,
+      agentsDeleted: 0,
+      agentsReparented: 0,
+      eventsDeleted: 0,
+    }
+
+    // 1. Sessions with invalid project_id (project doesn't exist or is null).
+    //    Reassign to the 'unknown' project, creating it if needed.
+    const orphanedSessions = this.db
+      .prepare(
+        `SELECT s.id FROM sessions s
+         LEFT JOIN projects p ON p.id = s.project_id
+         WHERE p.id IS NULL`,
+      )
+      .all() as { id: string }[]
+
+    if (orphanedSessions.length > 0) {
+      // Get-or-create the 'unknown' project
+      let unknownProject = this.db
+        .prepare('SELECT id FROM projects WHERE slug = ?')
+        .get('unknown') as { id: number } | undefined
+      if (!unknownProject) {
+        const now = Date.now()
+        const ins = this.db
+          .prepare(
+            'INSERT INTO projects (slug, name, transcript_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+          )
+          .run('unknown', 'unknown', null, now, now)
+        unknownProject = { id: Number(ins.lastInsertRowid) }
+      }
+      const update = this.db.prepare(
+        'UPDATE sessions SET project_id = ?, updated_at = ? WHERE id = ?',
+      )
+      const now = Date.now()
+      for (const s of orphanedSessions) {
+        update.run(unknownProject.id, now, s.id)
+        result.sessionsReassigned++
+      }
+    }
+
+    // 2. Agents with invalid session_id → delete (no recovery possible since
+    //    the session and all its events are gone).
+    //    Note: we have to delete events for these agents first or the events
+    //    table FK from agents would also fail when something tries to read them.
+    const orphanedAgents = this.db
+      .prepare(
+        `SELECT a.id FROM agents a
+         LEFT JOIN sessions s ON s.id = a.session_id
+         WHERE s.id IS NULL`,
+      )
+      .all() as { id: string }[]
+    if (orphanedAgents.length > 0) {
+      const deleteEvents = this.db.prepare('DELETE FROM events WHERE agent_id = ?')
+      const deleteAgent = this.db.prepare('DELETE FROM agents WHERE id = ?')
+      for (const a of orphanedAgents) {
+        const eventDel = deleteEvents.run(a.id)
+        result.eventsDeleted += eventDel.changes
+        deleteAgent.run(a.id)
+        result.agentsDeleted++
+      }
+    }
+
+    // 3. Agents with invalid parent_agent_id (parent has been deleted but
+    //    the child remains). Null out the parent rather than deleting — the
+    //    agent itself is still meaningful, just no longer part of a hierarchy.
+    const reparented = this.db
+      .prepare(
+        `UPDATE agents
+         SET parent_agent_id = NULL, updated_at = ?
+         WHERE parent_agent_id IS NOT NULL
+         AND parent_agent_id NOT IN (SELECT id FROM agents)`,
+      )
+      .run(Date.now())
+    result.agentsReparented = reparented.changes
+
+    // 4. Events with invalid session_id → delete. Also covers events that
+    //    survived an interrupted delete cascade.
+    //    Note: this is a NOT IN subquery against the full events table, so
+    //    it scans all events. For very large databases (100k+ events) it
+    //    may take a few hundred ms — acceptable since this only runs once
+    //    on server startup.
+    const orphanedSessionEvents = this.db
+      .prepare(
+        `DELETE FROM events
+         WHERE session_id NOT IN (SELECT id FROM sessions)`,
+      )
+      .run()
+    result.eventsDeleted += orphanedSessionEvents.changes
+
+    // 5. Events with invalid agent_id → delete (similar to above).
+    const orphanedAgentEvents = this.db
+      .prepare(
+        `DELETE FROM events
+         WHERE agent_id NOT IN (SELECT id FROM agents)`,
+      )
+      .run()
+    result.eventsDeleted += orphanedAgentEvents.changes
+
+    // 6. Recompute cached counts on sessions if anything was repaired,
+    //    since insertEvent/upsertAgent maintain these incrementally.
+    if (result.sessionsReassigned > 0 || result.agentsDeleted > 0 || result.eventsDeleted > 0) {
+      this.db.exec(`
+        UPDATE sessions SET
+          event_count = (SELECT COUNT(*) FROM events WHERE session_id = sessions.id),
+          agent_count = (SELECT COUNT(*) FROM agents WHERE session_id = sessions.id),
+          last_activity = (SELECT MAX(timestamp) FROM events WHERE session_id = sessions.id)
+      `)
+    }
+
+    return result
   }
 
   async healthCheck(): Promise<{ ok: boolean; error?: string }> {

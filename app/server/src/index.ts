@@ -10,6 +10,25 @@ import { startConsumerSweep } from './consumer-tracker'
 const store = createStore()
 const PORT = config.port
 
+// Repair any rows with broken foreign keys before serving traffic.
+// Logs what it found so the user knows if state was unexpected.
+store.repairOrphans().then((result) => {
+  const total =
+    result.sessionsReassigned +
+    result.agentsDeleted +
+    result.agentsReparented +
+    result.eventsDeleted
+  if (total > 0) {
+    console.log(
+      `[startup] Repaired orphaned rows: ` +
+        `${result.sessionsReassigned} sessions reassigned to 'unknown', ` +
+        `${result.agentsDeleted} agents deleted, ` +
+        `${result.agentsReparented} agents reparented, ` +
+        `${result.eventsDeleted} events deleted`,
+    )
+  }
+})
+
 const app = createApp(store, broadcastToSession, broadcastToAll)
 
 function start(retries = 3) {

@@ -35,11 +35,13 @@ export interface StoredEvent {
 
 export interface EventStore {
   createProject(slug: string, name: string, transcriptPath: string | null): Promise<number>
+  getProjectById(id: number): Promise<any | null>
   getProjectBySlug(slug: string): Promise<any | null>
   getProjectByTranscriptPath(transcriptPath: string): Promise<any | null>
   updateProjectName(projectId: number, name: string): Promise<void>
   isSlugAvailable(slug: string): Promise<boolean>
-  deleteProject(projectId: number): Promise<void>
+  /** Returns the IDs of sessions that were deleted as part of the cascade */
+  deleteProject(projectId: number): Promise<string[]>
   upsertSession(
     id: string,
     projectId: number,
@@ -77,4 +79,21 @@ export interface EventStore {
   clearSessionEvents(sessionId: string): Promise<void>
   getRecentSessions(limit?: number): Promise<any[]>
   healthCheck(): Promise<{ ok: boolean; error?: string }>
+  /**
+   * Scan all tables for rows with broken foreign keys and repair them.
+   * - Sessions with invalid project_id → reassigned to the 'unknown' project
+   * - Agents with invalid session_id → deleted
+   * - Agents with invalid parent_agent_id → parent_agent_id set to NULL
+   * - Events with invalid session_id or agent_id → deleted
+   *
+   * Returns a summary of what was repaired.
+   */
+  repairOrphans(): Promise<OrphanRepairResult>
+}
+
+export interface OrphanRepairResult {
+  sessionsReassigned: number
+  agentsDeleted: number
+  agentsReparented: number
+  eventsDeleted: number
 }
