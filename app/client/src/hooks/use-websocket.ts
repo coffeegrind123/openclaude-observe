@@ -45,6 +45,9 @@ export function useWebSocket(sessionId: string | null) {
         console.log('[WS] Unsubscribed (no session selected)')
       }
     }
+    // Drop any pending buffered events from the previous session — they'd
+    // otherwise be written to the new session's cache when the next flush runs.
+    eventBufferRef.current = []
   }, [sessionId, connected, sendMessage])
 
   // Batch incoming events to avoid O(N) array copies per event.

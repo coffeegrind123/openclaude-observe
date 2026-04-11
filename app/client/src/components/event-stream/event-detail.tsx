@@ -600,8 +600,15 @@ function DetailRow({ label, value }: { label: string; value?: string }) {
   )
 }
 
+// Skip markdown rendering for very large content. react-markdown builds an AST
+// in memory that can be 5-10x the source size, and the AST is held by React's
+// render output until the row collapses. Falling back to <pre> for big payloads
+// keeps memory bounded.
+const MAX_MARKDOWN_SIZE = 50_000
+
 /** Heuristic: does the text contain enough markdown signals to render? */
 function looksLikeMarkdown(s: string): boolean {
+  if (s.length > MAX_MARKDOWN_SIZE) return false
   const trimmed = s.trimStart()
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) return false
 

@@ -2,7 +2,6 @@
 
 ## QUEUED TASKS
 
-
 ## COMPLETED TASKS
 
 - [x] Add transcript_path to agents table
@@ -10,6 +9,7 @@
 - [x] Show SubagentStop with the Stop filter
 - [x] Add AGENTS_OBSERVE_SHUTDOWN_DELAY_MS env var, refactor isDev to config
 - [x] Audit editable data auto-update (pinned sessions, breadcrumb, project names)
+- [x] Guard against orphaned sessions (FK auto-repair + startup orphan repair)
 
 ---
 
