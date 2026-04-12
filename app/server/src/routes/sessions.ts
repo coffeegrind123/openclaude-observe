@@ -178,7 +178,7 @@ router.patch('/sessions/:id', async (c) => {
   }
 })
 
-// POST /sessions/:id/metadata
+// POST /sessions/:id/metadata — full replace of slug (legacy) or metadata
 router.post('/sessions/:id/metadata', async (c) => {
   const store = c.get('store')
   const broadcastToAll = c.get('broadcastToAll')
@@ -198,6 +198,25 @@ router.post('/sessions/:id/metadata', async (c) => {
       broadcastToAll({ type: 'session_update', data: { id: sessionId, slug: data.slug } as any })
     }
 
+    return c.json({ ok: true })
+  } catch {
+    return c.json({ error: 'Invalid request' }, 400)
+  }
+})
+
+// PATCH /sessions/:id/metadata — merge keys into existing metadata
+router.patch('/sessions/:id/metadata', async (c) => {
+  const store = c.get('store')
+
+  try {
+    const sessionId = decodeURIComponent(c.req.param('id'))
+    const patch = (await c.req.json()) as Record<string, unknown>
+
+    if (!patch || typeof patch !== 'object' || Object.keys(patch).length === 0) {
+      return c.json({ error: 'Provide at least one key to patch' }, 400)
+    }
+
+    await store.patchSessionMetadata(sessionId, patch)
     return c.json({ ok: true })
   } catch {
     return c.json({ error: 'Invalid request' }, 400)

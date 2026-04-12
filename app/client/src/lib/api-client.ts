@@ -126,6 +126,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slug }),
     }),
+  patchSessionMetadata: (sessionId: string, patch: Record<string, unknown>) =>
+    fetchVoid(`/sessions/${encodeURIComponent(sessionId)}/metadata`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
   moveSession: (sessionId: string, projectId: number) =>
     fetchVoid(`/sessions/${encodeURIComponent(sessionId)}`, {
       method: 'PATCH',

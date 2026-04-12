@@ -1,9 +1,12 @@
 import { useMemo, useRef, useEffect, useDeferredValue, useCallback } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { useQuery } from '@tanstack/react-query'
 import { useEffectiveEvents } from '@/hooks/use-effective-events'
 import { useAgents } from '@/hooks/use-agents'
 import { useDedupedEvents } from '@/hooks/use-deduped-events'
+import { usePermissionModeBackfill } from '@/hooks/use-permission-mode-backfill'
 import { getTimelineScrollTo, registerEventStreamScroll, withSyncLock } from '@/lib/scroll-sync'
+import { api } from '@/lib/api-client'
 import { useUIStore } from '@/stores/ui-store'
 import { EventRow } from './event-row'
 import { eventMatchesFilters } from '@/config/filters'
@@ -53,6 +56,15 @@ export function EventStream() {
   )
 
   const agents = useAgents(selectedSessionId, events)
+
+  // Backfill permission_mode into session metadata if missing
+  const { data: sessionForBackfill } = useQuery({
+    queryKey: ['session', selectedSessionId],
+    queryFn: () => api.getSession(selectedSessionId!),
+    enabled: !!selectedSessionId,
+    staleTime: 30_000,
+  })
+  usePermissionModeBackfill(sessionForBackfill, events, agents)
 
   const agentMap = useMemo(() => {
     const map = new Map<string, Agent>()

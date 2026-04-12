@@ -29,6 +29,7 @@ import {
   CalendarDays,
   Hash,
   Terminal,
+  Shield,
 } from 'lucide-react'
 import { MoveSessionModal } from './project-modal'
 import type { Project } from '@/types'
@@ -266,6 +267,11 @@ export function SessionEditModal() {
                   onCopy={() => copyToClipboard('cwd', cwd)}
                 />
               )}
+              {permissionMode && (
+                <DetailRow icon={<Shield className="h-3.5 w-3.5" />} label="Permissions">
+                  <span>{permissionMode}</span>
+                </DetailRow>
+              )}
               <CopyRow
                 icon={<Hash className="h-3.5 w-3.5" />}
                 label="Session ID"
@@ -314,6 +320,7 @@ export function SessionEditModal() {
                   value={resumeCmd}
                   copied={copiedField === 'resume'}
                   onCopy={() => copyToClipboard('resume', resumeCmd)}
+                  wrap
                 />
               )}
             </div>
@@ -422,6 +429,7 @@ function CopyRow({
   display,
   copied,
   onCopy,
+  wrap,
 }: {
   icon: React.ReactNode
   label: string
@@ -429,25 +437,29 @@ function CopyRow({
   display?: string
   copied: boolean
   onCopy: () => void
+  wrap?: boolean
 }) {
   return (
-    <div className="flex items-center gap-2 min-w-0 group/copy">
-      <span className="text-muted-foreground/60 shrink-0">{icon}</span>
+    <div
+      className="flex items-start gap-2 min-w-0 group/copy cursor-pointer hover:text-foreground transition-colors"
+      onClick={onCopy}
+      title={copied ? 'Copied!' : 'Click to copy'}
+    >
+      <span className="text-muted-foreground/60 shrink-0 mt-px">{icon}</span>
       <span className="text-muted-foreground w-24 shrink-0">{label}</span>
-      <span className="flex-1 min-w-0 truncate font-mono text-[11px]" title={value}>
+      <span
+        className={`flex-1 min-w-0 font-mono text-[11px] ${wrap ? 'break-all' : 'truncate'}`}
+        title={wrap ? undefined : value}
+      >
         {display ?? value}
       </span>
-      <button
-        className="shrink-0 w-4 flex items-center justify-center cursor-pointer text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-        onClick={onCopy}
-        title={copied ? 'Copied!' : 'Copy'}
-      >
+      <span className="shrink-0 w-4 flex items-center justify-center text-muted-foreground/40 group-hover/copy:text-muted-foreground transition-colors mt-px">
         {copied ? (
           <Check className="h-3 w-3 text-green-500" />
         ) : (
           <Copy className="h-3 w-3" />
         )}
-      </button>
+      </span>
     </div>
   )
 }
