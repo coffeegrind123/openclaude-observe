@@ -157,14 +157,16 @@ router.patch('/sessions/:id', async (c) => {
     const sessionId = decodeURIComponent(c.req.param('id'))
     const data = (await c.req.json()) as Record<string, unknown>
 
-    if (data.slug && typeof data.slug === 'string') {
-      await store.updateSessionSlug(sessionId, data.slug)
+    if (typeof data.slug === 'string') {
+      const slug = data.slug.trim()
+      if (!slug) return apiError(c, 400, 'slug must not be empty')
+      await store.updateSessionSlug(sessionId, slug)
 
       if (LOG_LEVEL === 'debug') {
-        console.log(`[METADATA] Session ${sessionId.slice(0, 8)} slug: ${data.slug}`)
+        console.log(`[METADATA] Session ${sessionId.slice(0, 8)} slug: ${slug}`)
       }
 
-      broadcastToAll({ type: 'session_update', data: { id: sessionId, slug: data.slug } as any })
+      broadcastToAll({ type: 'session_update', data: { id: sessionId, slug } as any })
     }
 
     if (data.projectId && typeof data.projectId === 'number') {

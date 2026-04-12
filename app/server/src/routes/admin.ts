@@ -46,7 +46,7 @@ router.delete('/data', async (c) => {
   const store = c.get('store')
   const policy = config.allowDbReset
 
-  if (policy === 'deny') {
+  if (policy !== 'allow' && policy !== 'backup') {
     return apiError(c, 403, 'Database reset is disabled', {
       code: 'DB_RESET_DENIED',
       details: 'Set AGENTS_OBSERVE_ALLOW_DB_RESET=allow or backup to enable',

@@ -25,17 +25,18 @@ router.post('/callbacks/session-slug/:sessionId', async (c) => {
     const sessionId = decodeURIComponent(c.req.param('sessionId'))
     const data = (await c.req.json()) as Record<string, unknown>
 
-    if (!data.slug || typeof data.slug !== 'string') {
+    if (typeof data.slug !== 'string' || !data.slug.trim()) {
       return apiError(c, 400, 'Missing slug')
     }
 
-    await store.updateSessionSlug(sessionId, data.slug)
+    const slug = data.slug.trim()
+    await store.updateSessionSlug(sessionId, slug)
 
     if (LOG_LEVEL === 'debug') {
-      console.log(`[CALLBACK] Session ${sessionId.slice(0, 8)} slug: ${data.slug}`)
+      console.log(`[CALLBACK] Session ${sessionId.slice(0, 8)} slug: ${slug}`)
     }
 
-    broadcastToAll({ type: 'session_update', data: { id: sessionId, slug: data.slug } as any })
+    broadcastToAll({ type: 'session_update', data: { id: sessionId, slug } as any })
 
     return c.json({ ok: true })
   } catch {

@@ -44,11 +44,12 @@ export const config = {
   clientDistPath: process.env.AGENTS_OBSERVE_CLIENT_DIST_PATH || '',
   devClientPort: parseInt(process.env.AGENTS_OBSERVE_DEV_CLIENT_PORT || '5174', 10),
 
-  // DB reset policy: 'allow' = permit, 'deny' = reject, 'backup' = backup then reset
-  allowDbReset: (process.env.AGENTS_OBSERVE_ALLOW_DB_RESET || 'backup') as
-    | 'allow'
-    | 'deny'
-    | 'backup',
+  // DB reset policy: 'allow' = permit, 'deny' = reject, 'backup' (default) = backup then reset
+  // Unrecognized values are treated as 'deny' to prevent misconfiguration
+  allowDbReset:
+    ({ allow: 'allow', backup: 'backup' } as Record<string, 'allow' | 'backup'>)[
+      (process.env.AGENTS_OBSERVE_ALLOW_DB_RESET || 'backup').toLowerCase()
+    ] ?? ('deny' as const),
 
   // Auto-shutdown: <= 0 disables, > 0 is delay in ms after last consumer disconnects
   shutdownDelayMs: parseInt(process.env.AGENTS_OBSERVE_SHUTDOWN_DELAY_MS || '30000', 10),

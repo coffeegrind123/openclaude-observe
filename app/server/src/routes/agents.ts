@@ -65,8 +65,10 @@ router.patch('/agents/:id', async (c) => {
 
     const data = (await c.req.json()) as Record<string, unknown>
 
-    if (data.name && typeof data.name === 'string') {
-      await store.updateAgentName(agentId, data.name)
+    if (typeof data.name === 'string') {
+      const name = data.name.trim()
+      if (!name) return apiError(c, 400, 'name must not be empty')
+      await store.updateAgentName(agentId, name)
 
       if (LOG_LEVEL === 'debug') {
         console.log(`[METADATA] Agent ${agentId.slice(0, 8)} name: ${data.name}`)
