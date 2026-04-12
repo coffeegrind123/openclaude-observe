@@ -44,6 +44,12 @@ export const config = {
   clientDistPath: process.env.AGENTS_OBSERVE_CLIENT_DIST_PATH || '',
   devClientPort: parseInt(process.env.AGENTS_OBSERVE_DEV_CLIENT_PORT || '5174', 10),
 
+  // DB reset policy: 'allow' = permit, 'deny' = reject, 'backup' = backup then reset
+  allowDbReset: (process.env.AGENTS_OBSERVE_ALLOW_DB_RESET || 'backup') as
+    | 'allow'
+    | 'deny'
+    | 'backup',
+
   // Auto-shutdown: <= 0 disables, > 0 is delay in ms after last consumer disconnects
   shutdownDelayMs: parseInt(process.env.AGENTS_OBSERVE_SHUTDOWN_DELAY_MS || '30000', 10),
   // Consumer tracker tuning

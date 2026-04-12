@@ -23,10 +23,16 @@ describe('admin routes — DELETE endpoints return counts', () => {
     vi.resetModules()
     Object.values(mockStore).forEach((fn) => fn.mockReset())
 
-    // Mock events module to avoid import issues
+    // Mock events module and config
     vi.doMock('./events', () => ({
       removeSessionRootAgent: vi.fn(),
       clearSessionRootAgents: vi.fn(),
+    }))
+    vi.doMock('../config', () => ({
+      config: {
+        allowDbReset: 'allow',
+        dbPath: '/tmp/test.db',
+      },
     }))
 
     const { default: adminRouter } = await import('./admin')
@@ -94,5 +100,50 @@ describe('admin routes — DELETE endpoints return counts', () => {
   test('DELETE /projects/:id returns 400 for non-numeric ID', async () => {
     const res = await app.request('/api/projects/abc', { method: 'DELETE' })
     expect(res.status).toBe(400)
+  })
+})
+
+describe('admin routes — DELETE /data policy', () => {
+  const mockStore = {
+    clearAllData: vi.fn(),
+  }
+
+  async function buildApp(policy: string) {
+    vi.resetModules()
+    vi.doMock('./events', () => ({
+      removeSessionRootAgent: vi.fn(),
+      clearSessionRootAgents: vi.fn(),
+    }))
+    vi.doMock('../config', () => ({
+      config: { allowDbReset: policy, dbPath: '/tmp/test.db' },
+    }))
+
+    const { default: adminRouter } = await import('./admin')
+    const app = new Hono<Env>()
+    app.use('*', async (c, next) => {
+      c.set('store', mockStore as unknown as EventStore)
+      c.set('broadcastToAll', vi.fn())
+      c.set('broadcastToSession', vi.fn())
+      await next()
+    })
+    app.route('/api', adminRouter)
+    return app
+  }
+
+  test('denies reset when policy is deny', async () => {
+    const app = await buildApp('deny')
+    const res = await app.request('/api/data', { method: 'DELETE' })
+    expect(res.status).toBe(403)
+    const body = await res.json()
+    expect(body.error.code).toBe('DB_RESET_DENIED')
+    expect(mockStore.clearAllData).not.toHaveBeenCalled()
+  })
+
+  test('allows reset when policy is allow', async () => {
+    mockStore.clearAllData.mockResolvedValue({ projects: 1, sessions: 2, agents: 3, events: 4 })
+    const app = await buildApp('allow')
+    const res = await app.request('/api/data', { method: 'DELETE' })
+    expect(res.status).toBe(200)
+    expect(mockStore.clearAllData).toHaveBeenCalled()
   })
 })
