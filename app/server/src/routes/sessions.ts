@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import type { EventStore } from '../storage/types'
 import type { ParsedEvent } from '../types'
 import { config } from '../config'
+import { apiError } from '../errors'
 
 function deriveEventStatus(subtype: string | null): string {
   if (subtype === 'PreToolUse') return 'running'
@@ -49,7 +50,7 @@ router.get('/sessions/:id', async (c) => {
   const store = c.get('store')
   const sessionId = decodeURIComponent(c.req.param('id'))
   const row = await store.getSessionById(sessionId)
-  if (!row) return c.json({ error: 'Session not found' }, 404)
+  if (!row) return apiError(c, 404, 'Session not found')
   return c.json({
     id: row.id,
     projectId: row.project_id,
@@ -176,7 +177,7 @@ router.patch('/sessions/:id', async (c) => {
 
     return c.json({ ok: true })
   } catch {
-    return c.json({ error: 'Invalid request' }, 400)
+    return apiError(c, 400, 'Invalid request')
   }
 })
 
@@ -189,13 +190,13 @@ router.patch('/sessions/:id/metadata', async (c) => {
     const patch = (await c.req.json()) as Record<string, unknown>
 
     if (!patch || typeof patch !== 'object' || Object.keys(patch).length === 0) {
-      return c.json({ error: 'Provide at least one key to patch' }, 400)
+      return apiError(c, 400, 'Provide at least one key to patch')
     }
 
     await store.patchSessionMetadata(sessionId, patch)
     return c.json({ ok: true })
   } catch {
-    return c.json({ error: 'Invalid request' }, 400)
+    return apiError(c, 400, 'Invalid request')
   }
 })
 

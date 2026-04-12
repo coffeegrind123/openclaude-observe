@@ -56,7 +56,7 @@ describe('callback routes', () => {
       })
       expect(res.status).toBe(400)
       const body = await res.json()
-      expect(body.error).toBe('Missing slug')
+      expect(body.error.message).toBe('Missing slug')
       expect(updateSessionSlug).not.toHaveBeenCalled()
     })
 

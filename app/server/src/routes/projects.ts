@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { EventStore } from '../storage/types'
 import type { Project } from '../types'
+import { apiError } from '../errors'
 
 type Env = {
   Variables: {
@@ -28,7 +29,7 @@ router.get('/projects', async (c) => {
 router.get('/projects/:id/sessions', async (c) => {
   const store = c.get('store')
   const projectId = Number(c.req.param('id'))
-  if (isNaN(projectId)) return c.json({ error: 'Invalid project ID' }, 400)
+  if (isNaN(projectId)) return apiError(c, 400, 'Invalid project ID')
 
   const rows = await store.getSessionsForProject(projectId)
   const sessions = rows.map((r: any) => ({
@@ -52,21 +53,21 @@ router.patch('/projects/:id', async (c) => {
   const store = c.get('store')
   const broadcastToAll = c.get('broadcastToAll')
   const projectId = Number(c.req.param('id'))
-  if (isNaN(projectId)) return c.json({ error: 'Invalid project ID' }, 400)
+  if (isNaN(projectId)) return apiError(c, 400, 'Invalid project ID')
 
   try {
     const data = (await c.req.json()) as Record<string, unknown>
 
     if (data.name && typeof data.name === 'string') {
       const trimmed = data.name.trim()
-      if (!trimmed) return c.json({ error: 'name must not be empty' }, 400)
+      if (!trimmed) return apiError(c, 400, 'name must not be empty')
       await store.updateProjectName(projectId, trimmed)
       broadcastToAll({ type: 'project_update', data: { id: projectId, name: trimmed } })
     }
 
     return c.json({ ok: true })
   } catch {
-    return c.json({ error: 'Invalid request' }, 400)
+    return apiError(c, 400, 'Invalid request')
   }
 })
 

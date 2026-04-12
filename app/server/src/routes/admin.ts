@@ -1,6 +1,7 @@
 // app/server/src/routes/admin.ts
 import { Hono } from 'hono'
 import type { EventStore } from '../storage/types'
+import { apiError } from '../errors'
 import { removeSessionRootAgent, clearSessionRootAgents } from './events'
 
 type Env = { Variables: { store: EventStore } }
@@ -29,7 +30,7 @@ router.delete('/sessions/:id/events', async (c) => {
 router.delete('/projects/:id', async (c) => {
   const store = c.get('store')
   const projectId = Number(c.req.param('id'))
-  if (isNaN(projectId)) return c.json({ error: 'Invalid project ID' }, 400)
+  if (isNaN(projectId)) return apiError(c, 400, 'Invalid project ID')
   const { sessionIds, ...deleted } = await store.deleteProject(projectId)
   for (const sessionId of sessionIds) {
     removeSessionRootAgent(sessionId)

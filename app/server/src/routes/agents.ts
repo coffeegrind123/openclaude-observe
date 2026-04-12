@@ -2,6 +2,7 @@
 import { Hono } from 'hono'
 import type { EventStore } from '../storage/types'
 import type { ParsedEvent } from '../types'
+import { apiError } from '../errors'
 import { config } from '../config'
 
 type Env = { Variables: { store: EventStore } }
@@ -42,7 +43,7 @@ router.get('/agents/:id', async (c) => {
   const store = c.get('store')
   const agentId = decodeURIComponent(c.req.param('id'))
   const row = await store.getAgentById(agentId)
-  if (!row) return c.json({ error: 'Agent not found' }, 404)
+  if (!row) return apiError(c, 404, 'Agent not found')
   return c.json({
     id: row.id,
     sessionId: row.session_id,
@@ -60,7 +61,7 @@ router.patch('/agents/:id', async (c) => {
   try {
     const agentId = decodeURIComponent(c.req.param('id'))
     const agent = await store.getAgentById(agentId)
-    if (!agent) return c.json({ error: 'Agent not found' }, 404)
+    if (!agent) return apiError(c, 404, 'Agent not found')
 
     const data = (await c.req.json()) as Record<string, unknown>
 
@@ -78,7 +79,7 @@ router.patch('/agents/:id', async (c) => {
 
     return c.json({ ok: true })
   } catch {
-    return c.json({ error: 'Invalid request' }, 400)
+    return apiError(c, 400, 'Invalid request')
   }
 })
 

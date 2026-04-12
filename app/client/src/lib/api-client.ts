@@ -24,8 +24,13 @@ async function parseErrorBody(res: Response): Promise<string | undefined> {
   try {
     const body = await res.json()
     if (typeof body === 'object' && body !== null) {
-      // Server convention: { error: 'short label', message: 'detailed message' }
-      if (typeof body.message === 'string') return body.message
+      // Server convention: { error: { message, details?, ... } }
+      if (typeof body.error === 'object' && body.error !== null) {
+        const err = body.error
+        if (err.details) return `${err.message}: ${err.details}`
+        return err.message
+      }
+      // Legacy fallback
       if (typeof body.error === 'string') return body.error
     }
   } catch {

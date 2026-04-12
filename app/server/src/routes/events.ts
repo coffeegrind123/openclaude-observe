@@ -5,6 +5,7 @@ import type { ParsedEvent } from '../types'
 import { parseRawEvent } from '../parser'
 import { resolveProject } from '../services/project-resolver'
 import { config } from '../config'
+import { apiError } from '../errors'
 
 type Env = {
   Variables: {
@@ -70,7 +71,7 @@ router.post('/events', async (c) => {
     const body = await c.req.json()
 
     if (!body.hook_payload) {
-      return c.json({ error: 'Missing hook_payload in request body' }, 400)
+      return apiError(c, 400, 'Missing hook_payload in request body')
     }
 
     const hookPayload = body.hook_payload as Record<string, unknown>
@@ -328,13 +329,7 @@ router.post('/events', async (c) => {
     // Return 500 (not 400) for genuine processing errors so the client
     // knows it's a server-side issue, not a malformed request. Include
     // the full error message so the dashboard can surface it via toast.
-    return c.json(
-      {
-        error: 'Failed to process event',
-        message,
-      },
-      500,
-    )
+    return apiError(c, 500, 'Failed to process event', { details: message })
   }
 })
 

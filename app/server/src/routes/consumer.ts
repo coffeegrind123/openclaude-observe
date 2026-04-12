@@ -2,6 +2,7 @@
 
 import { Hono } from 'hono'
 import { heartbeat, deregister } from '../consumer-tracker'
+import { apiError } from '../errors'
 
 const router = new Hono()
 
@@ -9,7 +10,7 @@ const router = new Hono()
 router.post('/consumer/heartbeat', async (c) => {
   const body = await c.req.json<{ id?: string }>()
   if (!body.id) {
-    return c.json({ error: 'id is required' }, 400)
+    return apiError(c, 400, 'id is required')
   }
   const activeConsumers = heartbeat(body.id)
   return c.json({ ok: true, activeConsumers })
@@ -19,7 +20,7 @@ router.post('/consumer/heartbeat', async (c) => {
 router.post('/consumer/deregister', async (c) => {
   const body = await c.req.json<{ id?: string }>()
   if (!body.id) {
-    return c.json({ error: 'id is required' }, 400)
+    return apiError(c, 400, 'id is required')
   }
   const counts = deregister(body.id)
   return c.json({ ok: true, ...counts })

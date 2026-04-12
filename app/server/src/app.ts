@@ -60,10 +60,11 @@ export function createApp(
     const message = err instanceof Error ? err.message : String(err)
     return c.json(
       {
-        error: 'Internal server error',
-        message,
-        // Include the route so the user knows where the failure happened
-        path: c.req.path,
+        error: {
+          message: 'Internal server error',
+          details: message,
+          path: c.req.path,
+        },
       },
       500,
     )

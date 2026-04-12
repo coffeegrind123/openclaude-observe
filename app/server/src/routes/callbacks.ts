@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import type { EventStore } from '../storage/types'
+import { apiError } from '../errors'
 import { config } from '../config'
 
 type Env = {
@@ -25,7 +26,7 @@ router.post('/callbacks/session-slug/:sessionId', async (c) => {
     const data = (await c.req.json()) as Record<string, unknown>
 
     if (!data.slug || typeof data.slug !== 'string') {
-      return c.json({ error: 'Missing slug' }, 400)
+      return apiError(c, 400, 'Missing slug')
     }
 
     await store.updateSessionSlug(sessionId, data.slug)
@@ -38,7 +39,7 @@ router.post('/callbacks/session-slug/:sessionId', async (c) => {
 
     return c.json({ ok: true })
   } catch {
-    return c.json({ error: 'Invalid request' }, 400)
+    return apiError(c, 400, 'Invalid request')
   }
 })
 

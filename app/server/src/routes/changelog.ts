@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { resolve, dirname } from 'path'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
+import { apiError } from '../errors'
 
 const router = new Hono()
 
@@ -27,7 +28,7 @@ function readChangelog(): string | null {
 router.get('/changelog', (c) => {
   const markdown = readChangelog()
   if (!markdown) {
-    return c.json({ error: 'Changelog not found' }, 404)
+    return apiError(c, 404, 'Changelog not found')
   }
   return c.json({ markdown })
 })

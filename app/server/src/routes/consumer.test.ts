@@ -47,7 +47,7 @@ describe('consumer routes', () => {
       })
       expect(res.status).toBe(400)
       const body = await res.json()
-      expect(body.error).toBe('id is required')
+      expect(body.error.message).toBe('id is required')
     })
   })
 
