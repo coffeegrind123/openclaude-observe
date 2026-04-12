@@ -2,9 +2,7 @@
 
 ## QUEUED TASKS
 
-- [ ] Review CPU usage of timeline - for large sessions with lots of events, i'm seeing consistent 30% cpu usage
-  - not sure if this is related to running in dev mode or if something else is going on
-  - this is not a huge issue, just worth investigating for bugs and potential quick wins - not worth any refactors
+(empty)
 
 ## COMPLETED TASKS
 
