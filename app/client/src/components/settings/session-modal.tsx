@@ -107,9 +107,9 @@ export function SessionEditModal() {
       : typeof session?.metadata?.permissionMode === 'string'
         ? session.metadata.permissionMode
         : null
-  const resumeCmd = session
-    ? `claude --resume ${session.id}${permissionMode ? ` --permission-mode ${permissionMode}` : ''}`
-    : null
+  const permFlag = permissionMode ? ` --permission-mode ${permissionMode}` : ''
+  const resumeCmd = session ? `claude --resume ${session.id}${permFlag}` : null
+  const forkCmd = session ? `claude --fork ${session.id}${permFlag}` : null
 
   function copyToClipboard(field: string, text: string) {
     navigator.clipboard.writeText(text)
@@ -347,6 +347,16 @@ export function SessionEditModal() {
                   value={resumeCmd}
                   copied={copiedField === 'resume'}
                   onCopy={() => copyToClipboard('resume', resumeCmd)}
+                  wrap
+                />
+              )}
+              {forkCmd && (
+                <CopyRow
+                  icon={<Terminal className="h-3.5 w-3.5" />}
+                  label="Fork"
+                  value={forkCmd}
+                  copied={copiedField === 'fork'}
+                  onCopy={() => copyToClipboard('fork', forkCmd)}
                   wrap
                 />
               )}
