@@ -197,12 +197,14 @@ export function AgentLane({
       </button>
 
       <div className="flex-1 relative h-full overflow-hidden">
-        <DotContainer
-          events={visibleEvents}
-          rangeMs={rangeMs}
-          generation={generation}
-          setScrollToEventId={setScrollToEventId}
-        />
+        {visibleEvents.length > 0 && (
+          <DotContainer
+            events={visibleEvents}
+            rangeMs={rangeMs}
+            generation={generation}
+            setScrollToEventId={setScrollToEventId}
+          />
+        )}
 
         {/* Time tick marks — outside the animated container so they stay fixed */}
         {ticks.map(({ pct, label }, i) => (

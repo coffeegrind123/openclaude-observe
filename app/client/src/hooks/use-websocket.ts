@@ -77,10 +77,15 @@ export function useWebSocket(sessionId: string | null) {
         if (currentSessionId && event.sessionId === currentSessionId) {
           eventBufferRef.current.push(event)
           if (!flushTimerRef.current) {
+            // Adaptive flush interval: fast for small sessions, slower for large
+            // ones to avoid O(n) recomputation storms every 100ms on 10k+ events.
+            const cacheSize =
+              queryClient.getQueryData<ParsedEvent[]>(['events', currentSessionId])?.length ?? 0
+            const flushMs = cacheSize > 5000 ? 1000 : cacheSize > 1000 ? 500 : 100
             flushTimerRef.current = setTimeout(() => {
               flushTimerRef.current = undefined
               flushEventBuffer()
-            }, 100)
+            }, flushMs)
           }
           if (logLevel === 'trace') {
             console.debug(

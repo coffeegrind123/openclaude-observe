@@ -38,16 +38,12 @@ export function EventStream() {
   const eventsQuery = useEffectiveEvents(selectedSessionId)
   // Defer the event list so React can yield to the browser during the heavy
   // dedupe/filter/render pipeline. On the initial transition from undefined
-  // to a large array, React's urgent render uses the old value (undefined),
-  // keeping the spinner visible while a background render processes the
-  // new events. This also makes filter toggles feel snappier on large
-  // sessions.
+  // to a large array, React keeps the spinner visible while processing.
+  // During streaming, React can skip intermediate values to batch updates.
   const events = useDeferredValue(eventsQuery.data)
   const displayQuery = useMemo(
     () => ({
       data: events,
-      // Stay in "loading" while the deferred render is catching up — this
-      // keeps the spinner mounted and animating during the heavy render.
       isLoading: eventsQuery.isLoading || (eventsQuery.data !== undefined && events === undefined),
       isError: eventsQuery.isError,
       error: eventsQuery.error,
