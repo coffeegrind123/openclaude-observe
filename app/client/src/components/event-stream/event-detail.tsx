@@ -791,21 +791,43 @@ function DetailCode({ label, value, diff }: { label: string; value?: string; dif
   const hasDiff = diff ?? false
   const hasMd = !hasDiff && looksLikeMarkdown(value)
   const [showRaw, setShowRaw] = useState(!hasMd && !hasDiff)
+  const [copied, setCopied] = useState(false)
 
   return (
     <div className="flex gap-2">
       <span className="text-muted-foreground shrink-0 w-20 text-right">{label}:</span>
       <div className="flex-1 min-w-0">
-        {(hasMd || hasDiff) && (
+        <div className="flex items-center gap-1 mb-0.5">
+          {(hasMd || hasDiff) && (
+            <button
+              type="button"
+              className="flex items-center gap-1 text-[9px] text-muted-foreground/70 hover:text-muted-foreground transition-colors cursor-pointer"
+              onClick={() => setShowRaw(!showRaw)}
+            >
+              {showRaw ? <Code className="h-2.5 w-2.5" /> : <FileText className="h-2.5 w-2.5" />}
+              {showRaw ? 'raw' : hasDiff ? 'diff' : 'markdown'}
+            </button>
+          )}
           <button
             type="button"
-            className="flex items-center gap-1 text-[9px] text-muted-foreground/70 hover:text-muted-foreground mb-0.5 transition-colors"
-            onClick={() => setShowRaw(!showRaw)}
+            className="flex items-center gap-1 text-[9px] text-muted-foreground/70 hover:text-muted-foreground transition-colors cursor-pointer ml-auto"
+            onClick={() => {
+              navigator.clipboard.writeText(value)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1500)
+            }}
           >
-            {showRaw ? <Code className="h-2.5 w-2.5" /> : <FileText className="h-2.5 w-2.5" />}
-            {showRaw ? 'raw' : hasDiff ? 'diff' : 'markdown'}
+            {copied ? (
+              <>
+                Copied <Check className="h-2.5 w-2.5 text-green-500" />
+              </>
+            ) : (
+              <>
+                Copy <Copy className="h-2.5 w-2.5" />
+              </>
+            )}
           </button>
-        )}
+        </div>
         {showRaw ? (
           <pre className="overflow-x-auto rounded bg-muted/50 p-1.5 font-mono text-[10px] leading-relaxed max-h-40 overflow-y-auto">
             {value}
