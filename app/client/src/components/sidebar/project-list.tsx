@@ -316,7 +316,7 @@ function SessionList({ projectId }: { projectId: number }) {
                   session={session}
                   isSelected={isSelected}
                   isPinned={pinnedSessionIds.has(session.id)}
-                  onSelect={() => setSelectedSessionId(isSelected ? null : session.id)}
+                  onSelect={() => setSelectedSessionId(session.id)}
                   onTogglePin={() => togglePinnedSession(session.id)}
                   onRename={handleRename}
                   onEdit={() => setEditingSessionId(session.id)}

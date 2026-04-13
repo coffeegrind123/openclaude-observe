@@ -25,13 +25,8 @@ export function PinnedSessions({ collapsed }: { collapsed: boolean }) {
   const sessions = queries.map((q) => q.data).filter(Boolean) as Session[]
 
   function selectSession(session: Session) {
-    const isSelected = selectedSessionId === session.id
-    if (isSelected) {
-      useUIStore.getState().setSelectedSessionId(null)
-    } else {
-      useUIStore.getState().setSelectedProject(session.projectId, session.projectSlug || null)
-      useUIStore.getState().setSelectedSessionId(session.id)
-    }
+    useUIStore.getState().setSelectedProject(session.projectId, session.projectSlug || null)
+    useUIStore.getState().setSelectedSessionId(session.id)
   }
 
   const handleRename = useCallback(
