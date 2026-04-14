@@ -9,8 +9,11 @@
 - `f1ff5ec` Fixed new event dots not appearing in timeline mid-animation cycle
 - `b7d5f8a` Added multi-instance event detail handlers, filters, and instance badges
 - `4320404` Added all OpenClaude event types to settings menu, summaries, and detail views — LLM, Daemon, Pipes, Coordinator, Bridge categories; PermissionDenied support; event summaries for 20+ new types
-- Fixed copy-all button in raw event logs (clipboard API fallback for non-HTTPS)
-- Changed versioning from semver to date-based (DD.MM.YYYY + git hash)
+- `b5ce48b` Fixed copy-all button in raw event logs (clipboard API fallback for non-HTTPS)
+- `b5ce48b` Changed versioning from semver to date-based (DD.MM.YYYY + git hash)
+- `0b301c3` Added server-side token tracking — 6 new columns on sessions table, auto-increment on LLMGeneration, backfill migration, `/sessions/:id/usage` API endpoint, WebSocket broadcast, sidebar token badge
+- `492a000` Removed obsolete hook/plugin files — deleted test/hooks/, check-hooks.ts, .mcp.json, vitest; updated docs for native OTel
+- `a372eeb` Reverted session lifecycle change — only SessionEnd marks stopped (Stop per-turn would cause flicker)
 
 ---
 
