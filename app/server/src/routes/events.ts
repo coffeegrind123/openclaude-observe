@@ -248,14 +248,15 @@ router.post('/events', async (c) => {
       }
     }
 
-    // Session lifecycle: SessionEnd stops the session, any other event reactivates a stopped session.
-    if (parsed.subtype === 'SessionEnd') {
+    // Session lifecycle: Stop/SessionEnd mark session stopped.
+    // SessionStart/UserPromptSubmit reactivate a stopped session (new turn).
+    if (parsed.subtype === 'SessionEnd' || parsed.subtype === 'Stop') {
       await store.updateSessionStatus(parsed.sessionId, 'stopped')
       broadcastToAll({
         type: 'session_update',
         data: { id: parsed.sessionId, status: 'stopped' },
       })
-    } else {
+    } else if (parsed.subtype === 'SessionStart' || parsed.subtype === 'UserPromptSubmit') {
       const session = await store.getSessionById(parsed.sessionId)
       if (session && session.status === 'stopped') {
         await store.updateSessionStatus(parsed.sessionId, 'active')
