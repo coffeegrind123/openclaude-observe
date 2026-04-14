@@ -14,6 +14,13 @@
 - `0b301c3` Added server-side token tracking — 6 new columns on sessions table, auto-increment on LLMGeneration, backfill migration, `/sessions/:id/usage` API endpoint, WebSocket broadcast, sidebar token badge
 - `492a000` Removed obsolete hook/plugin files — deleted test/hooks/, check-hooks.ts, .mcp.json, vitest; updated docs for native OTel
 - `a372eeb` Reverted session lifecycle change — only SessionEnd marks stopped (Stop per-turn would cause flicker)
+- `47a8da9` Fixed FK constraint error on project/session delete — delete instances before sessions
+- `d2cebb9` Fixed test mock Session objects missing token fields (TS build error)
+- `42de22f` Fixed git hash in Docker image — baked via GIT_HASH file instead of build arg
+- `7ced6a3` Fixed vite reading GIT_HASH from file for client bundle injection
+- `27c90e7` Simplified GIT_HASH to COPY from build context, removed ARG
+- `9cdb359` Added token badge to Recent Sessions page cards (blue "22.0k tok" badge)
+- `37fa3ed` Fixed token fields missing from `GET /projects/:id/sessions` response — sidebar was getting sessions without token data
 
 ---
 
