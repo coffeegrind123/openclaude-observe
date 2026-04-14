@@ -33,8 +33,10 @@ COPY app/server/src server/src
 COPY app/server/tsconfig.json server/
 COPY app/server/package.json server/
 
-# Copy VERSION file for /api/health endpoint
+# Copy VERSION and GIT_HASH files for /api/health endpoint
 COPY VERSION /app/VERSION
+ARG GIT_HASH=unknown
+RUN echo "$GIT_HASH" > /app/GIT_HASH
 
 # Copy CHANGELOG for /api/changelog endpoint
 COPY CHANGELOG.md /app/CHANGELOG.md

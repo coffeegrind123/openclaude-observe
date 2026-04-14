@@ -37,7 +37,13 @@ export const config = {
   runtime: detectRuntime(),
   isDev: process.env.AGENTS_OBSERVE_RUNTIME_DEV === '1',
   version: readVersion(),
-  gitHash: (() => { try { return execSync('git rev-parse --short HEAD').toString().trim() } catch { return process.env.GIT_HASH || 'unknown' } })(),
+  gitHash: (() => {
+    const dir = dirname(fileURLToPath(import.meta.url))
+    for (const p of [resolve(dir, '../../../GIT_HASH'), resolve(dir, '../../GIT_HASH'), '/app/GIT_HASH']) {
+      try { const v = readFileSync(p, 'utf8').trim(); if (v) return v } catch {}
+    }
+    try { return execSync('git rev-parse --short HEAD').toString().trim() } catch { return 'unknown' }
+  })(),
   port: parseInt(process.env.AGENTS_OBSERVE_SERVER_PORT || '4981', 10),
   logLevel,
   verbose: logLevel === 'debug' || logLevel === 'trace',
