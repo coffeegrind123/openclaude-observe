@@ -103,6 +103,15 @@ export function useWebSocket(sessionId: string | null) {
         if (logLevel === 'trace') {
           console.debug(`[WS] Session update → invalidating sessions + session ${sessionData.id?.slice(0, 8) ?? '?'}`)
         }
+      } else if (msg.type === 'instance_update') {
+        queryClient.invalidateQueries({ queryKey: ['instances'] })
+        const instanceData = msg.data as { sessionId?: string }
+        if (instanceData.sessionId) {
+          queryClient.invalidateQueries({ queryKey: ['instances', instanceData.sessionId] })
+        }
+        if (logLevel === 'trace') {
+          console.debug(`[WS] Instance update → invalidating instances`)
+        }
       } else if (msg.type === 'project_update') {
         queryClient.invalidateQueries({ queryKey: ['projects'] })
         if (logLevel === 'trace') {

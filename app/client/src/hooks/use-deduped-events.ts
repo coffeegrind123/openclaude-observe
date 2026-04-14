@@ -65,6 +65,32 @@ export function useDedupedEvents(events: ParsedEvent[] | undefined): DedupedEven
       } else if (
         (e.subtype === 'PostToolUse' || e.subtype === 'PostToolUseFailure') &&
         e.toolUseId &&
+        !toolUseMap.has(e.toolUseId)
+      ) {
+        // Standalone PostToolUse with no matching PreToolUse — treat as its own row
+        toolUseMap.set(e.toolUseId, result.length)
+        result.push({
+          ...e,
+          status: e.subtype === 'PostToolUseFailure' ? 'failed' : 'completed',
+        })
+        pairedPayloads.set(e.id, {
+          pre: {
+            subtype: e.subtype!,
+            timestamp: e.timestamp,
+            payload: e.payload,
+          },
+          post: null,
+        })
+        // Track Agent tool spawns from standalone PostToolUse
+        if (e.toolName === 'Agent') {
+          const agentId = (e.payload as any)?.tool_response?.agentId
+          if (agentId) {
+            spawns.set(agentId, e.toolUseId)
+          }
+        }
+      } else if (
+        (e.subtype === 'PostToolUse' || e.subtype === 'PostToolUseFailure') &&
+        e.toolUseId &&
         toolUseMap.has(e.toolUseId)
       ) {
         const idx = toolUseMap.get(e.toolUseId)!

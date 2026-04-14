@@ -8,6 +8,7 @@ import type {
   StoredEvent,
   OrphanRepairResult,
 } from './types'
+import type { InstanceRow } from '../types'
 
 export class SqliteAdapter implements EventStore {
   private db: Database.Database
@@ -134,6 +135,24 @@ export class SqliteAdapter implements EventStore {
     if (eventCols.some((c) => c.name === 'status')) {
       this.db.exec('ALTER TABLE events DROP COLUMN status')
     }
+    if (!eventCols.some((c) => c.name === 'instance_id')) {
+      this.db.exec('ALTER TABLE events ADD COLUMN instance_id TEXT')
+    }
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS instances (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'main',
+        name TEXT,
+        machine_id TEXT,
+        pid INTEGER,
+        first_seen INTEGER NOT NULL,
+        last_heartbeat INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        FOREIGN KEY (session_id) REFERENCES sessions(id)
+      )
+    `)
 
     // Create indexes
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug)')
@@ -150,6 +169,8 @@ export class SqliteAdapter implements EventStore {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_agent_id)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_instances_session ON instances(session_id)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_events_instance ON events(instance_id)')
   }
 
   async createProject(slug: string, name: string, transcriptPath: string | null): Promise<number> {
@@ -323,8 +344,8 @@ export class SqliteAdapter implements EventStore {
     const result = this.db
       .prepare(
         `
-      INSERT INTO events (agent_id, session_id, type, subtype, tool_name, timestamp, created_at, payload, tool_use_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO events (agent_id, session_id, type, subtype, tool_name, timestamp, created_at, payload, tool_use_id, instance_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       )
       .run(
@@ -337,6 +358,7 @@ export class SqliteAdapter implements EventStore {
         now,
         JSON.stringify(params.payload),
         params.toolUseId || null,
+        params.instanceId || null,
       )
 
     // Update cached counters on session
@@ -708,6 +730,35 @@ export class SqliteAdapter implements EventStore {
     return result
   }
 
+  upsertInstance(id: string, sessionId: string, role: string, name: string | null, machineId: string | null, pid: number | null): void {
+    const now = Date.now()
+    this.db
+      .prepare(
+        `INSERT INTO instances (id, session_id, role, name, machine_id, pid, first_seen, last_heartbeat, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+         ON CONFLICT(id) DO UPDATE SET
+           role = excluded.role,
+           name = COALESCE(excluded.name, instances.name),
+           machine_id = COALESCE(excluded.machine_id, instances.machine_id),
+           pid = COALESCE(excluded.pid, instances.pid),
+           last_heartbeat = excluded.last_heartbeat,
+           status = 'active'`,
+      )
+      .run(id, sessionId, role, name, machineId, pid, now, now)
+  }
+
+  updateInstanceHeartbeat(id: string, timestamp: number): void {
+    this.db
+      .prepare('UPDATE instances SET last_heartbeat = ?, status = ? WHERE id = ?')
+      .run(timestamp, 'active', id)
+  }
+
+  getInstancesForSession(sessionId: string): InstanceRow[] {
+    return this.db
+      .prepare('SELECT * FROM instances WHERE session_id = ? ORDER BY first_seen ASC')
+      .all(sessionId) as InstanceRow[]
+  }
+
   async healthCheck(): Promise<{ ok: boolean; error?: string }> {
     try {
       const row = this.db.prepare('SELECT 1 AS ok').get() as { ok: number } | undefined
@@ -716,11 +767,11 @@ export class SqliteAdapter implements EventStore {
       // Verify tables exist
       const tables = this.db
         .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('projects','sessions','events','agents')",
+          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('projects','sessions','events','agents','instances')",
         )
         .all() as { name: string }[]
-      if (tables.length < 4) {
-        const missing = ['projects', 'sessions', 'events', 'agents'].filter(
+      if (tables.length < 5) {
+        const missing = ['projects', 'sessions', 'events', 'agents', 'instances'].filter(
           (t) => !tables.some((r) => r.name === t),
         )
         return { ok: false, error: `Missing tables: ${missing.join(', ')}` }

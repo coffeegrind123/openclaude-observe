@@ -276,7 +276,26 @@ router.post('/events', async (c) => {
       timestamp: parsed.timestamp,
       payload: parsed.raw,
       toolUseId: parsed.toolUseId,
+      instanceId: parsed.instanceId,
     })
+
+    if (parsed.instanceId) {
+      const instanceRole = (hookPayload.instance_role as string) || 'main'
+      const instanceName = (hookPayload.instance_name as string) || null
+      const machineId = (hookPayload.machine_id as string) || null
+      const pid = typeof hookPayload.pid === 'number' ? hookPayload.pid : null
+      store.upsertInstance(parsed.instanceId, parsed.sessionId, instanceRole, instanceName, machineId, pid)
+
+      if (parsed.subtype === 'DaemonHeartbeat') {
+        store.updateInstanceHeartbeat(parsed.instanceId, parsed.timestamp)
+      }
+
+      const instances = store.getInstancesForSession(parsed.sessionId)
+      const instanceRow = instances.find((i) => i.id === parsed.instanceId)
+      if (instanceRow) {
+        broadcastToSession(parsed.sessionId, { type: 'instance_update', data: instanceRow })
+      }
+    }
 
     const event: ParsedEvent = {
       id: eventId,
@@ -286,6 +305,7 @@ router.post('/events', async (c) => {
       subtype: parsed.subtype,
       toolName: parsed.toolName,
       toolUseId: parsed.toolUseId,
+      instanceId: parsed.instanceId,
       status: deriveEventStatus(parsed.subtype),
       timestamp: parsed.timestamp,
       createdAt: now,
@@ -346,6 +366,7 @@ router.get('/events/:id/thread', async (c) => {
     subtype: r.subtype,
     toolName: r.tool_name,
     toolUseId: r.tool_use_id || null,
+    instanceId: r.instance_id || null,
     status: deriveEventStatus(r.subtype),
     timestamp: r.timestamp,
     createdAt: r.created_at || r.timestamp,

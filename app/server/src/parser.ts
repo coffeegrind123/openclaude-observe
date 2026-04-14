@@ -18,6 +18,7 @@ export interface ParsedRawEvent {
   subAgentId: string | null
   subAgentName: string | null
   subAgentDescription: string | null
+  instanceId: string | null
   metadata: Record<string, unknown>
   raw: Record<string, unknown>
 }
@@ -41,16 +42,18 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
   let subAgentDescription: string | null = null
 
   const hookEventName = raw.hook_event_name as string | undefined
+  const hookToolName = raw.tool_name as string | undefined
+  const toolInput = raw.tool_input as Record<string, unknown> | undefined
 
   if (hookEventName) {
-    // === HOOK FORMAT ===
-    const hookToolName = raw.tool_name as string | undefined
-    const toolInput = raw.tool_input as Record<string, unknown> | undefined
-
     switch (hookEventName) {
       case 'SessionStart':
         type = 'session'
         subtype = 'SessionStart'
+        break
+      case 'Stop':
+        type = 'system'
+        subtype = 'Stop'
         break
       case 'UserPromptSubmit':
         type = 'user'
@@ -69,7 +72,6 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
         type = 'tool'
         subtype = 'PostToolUse'
         toolName = hookToolName || null
-        // Extract subagent info from Agent tool response
         if (toolName === 'Agent') {
           const toolResponse = raw.tool_response as Record<string, unknown> | undefined
           if (toolResponse) {
@@ -79,19 +81,96 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
           }
         }
         break
-      case 'Stop':
+      case 'PostToolUseFailure':
+        type = 'tool'
+        subtype = 'PostToolUseFailure'
+        toolName = hookToolName || null
+        break
+      case 'ToolBatch':
+        type = 'tool'
+        subtype = 'ToolBatch'
+        break
+      case 'LLMGeneration':
+        type = 'llm'
+        subtype = 'LLMGeneration'
+        break
+      case 'CompactionRun':
         type = 'system'
-        subtype = 'Stop'
+        subtype = 'CompactionRun'
+        break
+      case 'CostUpdate':
+        type = 'system'
+        subtype = 'CostUpdate'
+        break
+      case 'SubagentStart':
+        type = 'system'
+        subtype = 'SubagentStart'
+        subAgentId = (raw.agent_id as string) || null
         break
       case 'SubagentStop':
         type = 'system'
         subtype = 'SubagentStop'
         subAgentId = (raw.agent_id as string) || null
         break
-      case 'PostToolUseFailure':
-        type = 'tool'
-        subtype = 'PostToolUseFailure'
-        toolName = hookToolName || null
+      case 'DaemonStart':
+        type = 'daemon'
+        subtype = 'DaemonStart'
+        break
+      case 'DaemonStop':
+        type = 'daemon'
+        subtype = 'DaemonStop'
+        break
+      case 'DaemonHeartbeat':
+        type = 'daemon'
+        subtype = 'DaemonHeartbeat'
+        break
+      case 'PipeRoleAssigned':
+        type = 'pipe'
+        subtype = 'PipeRoleAssigned'
+        break
+      case 'PipeAttach':
+        type = 'pipe'
+        subtype = 'PipeAttach'
+        break
+      case 'PipeDetach':
+        type = 'pipe'
+        subtype = 'PipeDetach'
+        break
+      case 'PipePromptRouted':
+        type = 'pipe'
+        subtype = 'PipePromptRouted'
+        break
+      case 'PipePermissionForward':
+        type = 'pipe'
+        subtype = 'PipePermissionForward'
+        break
+      case 'PipeLanPeerDiscovered':
+        type = 'pipe'
+        subtype = 'PipeLanPeerDiscovered'
+        break
+      case 'CoordinatorDispatch':
+        type = 'coordinator'
+        subtype = 'CoordinatorDispatch'
+        break
+      case 'CoordinatorResult':
+        type = 'coordinator'
+        subtype = 'CoordinatorResult'
+        break
+      case 'BridgeConnected':
+        type = 'bridge'
+        subtype = 'BridgeConnected'
+        break
+      case 'BridgeDisconnected':
+        type = 'bridge'
+        subtype = 'BridgeDisconnected'
+        break
+      case 'BridgeWorkReceived':
+        type = 'bridge'
+        subtype = 'BridgeWorkReceived'
+        break
+      case 'SuperModeToggle':
+        type = 'system'
+        subtype = 'SuperModeToggle'
         break
       case 'Notification':
         type = 'system'
@@ -103,66 +182,9 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
         break
     }
   } else {
-    // === TRANSCRIPT JSONL FORMAT ===
     type = (raw.type as string) || 'unknown'
-
     if (raw.subtype) {
       subtype = raw.subtype as string
-    }
-
-    const data = raw.data as Record<string, unknown> | undefined
-    const message = raw.message as Record<string, unknown> | undefined
-    const toolUseResult = raw.toolUseResult as Record<string, unknown> | undefined
-
-    if (type === 'progress' && data) {
-      const dataType = data.type as string
-
-      if (dataType === 'hook_progress') {
-        subtype = (data.hookEvent as string) || null
-        const hookName = data.hookName as string
-        if (hookName && hookName.includes(':')) {
-          toolName = hookName.split(':').slice(1).join(':')
-        }
-      }
-
-      if (dataType === 'agent_progress') {
-        subtype = 'agent_progress'
-        subAgentId = (data.agentId as string) || null
-        const nestedMsg = data.message as Record<string, unknown> | undefined
-        if (nestedMsg?.message) {
-          const innerMsg = nestedMsg.message as Record<string, unknown>
-          const content = innerMsg.content
-          if (Array.isArray(content)) {
-            const toolUse = content.find((c: any) => c.type === 'tool_use') as
-              | Record<string, unknown>
-              | undefined
-            if (toolUse) {
-              toolName = (toolUse.name as string) || null
-            }
-          }
-        }
-      }
-    }
-
-    if (type === 'assistant' && message) {
-      const content = message.content
-      if (Array.isArray(content)) {
-        const toolUse = content.find((c: any) => c.type === 'tool_use') as
-          | Record<string, unknown>
-          | undefined
-        if (toolUse) {
-          toolName = (toolUse.name as string) || null
-          if (toolName === 'Agent') {
-            const input = toolUse.input as Record<string, unknown> | undefined
-            subAgentName = (input?.name as string) || null
-            subAgentDescription = (input?.description as string) || null
-          }
-        }
-      }
-    }
-
-    if (toolUseResult) {
-      subAgentId = (toolUseResult.agentId as string) || subAgentId
     }
   }
 
@@ -175,9 +197,21 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
     'permissionMode',
     'userType',
     'permission_mode',
+    'model',
+    'provider',
+    'input_tokens',
+    'output_tokens',
+    'cache_read_tokens',
+    'cache_creation_tokens',
+    'ttft_ms',
+    'duration_ms',
+    'instance_id',
+    'instance_role',
   ]) {
     if (raw[key] !== undefined) metadata[key] = raw[key]
   }
+
+  const instanceId = (raw.instance_id as string) || null
 
   return {
     projectName,
@@ -193,6 +227,7 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
     subAgentId,
     subAgentName,
     subAgentDescription,
+    instanceId,
     metadata,
     raw,
   }

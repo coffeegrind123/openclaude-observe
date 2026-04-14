@@ -41,10 +41,23 @@ export interface Agent extends ServerAgent {
   cwd?: string | null
 }
 
+export interface Instance {
+  id: string
+  sessionId: string
+  role: string
+  name: string | null
+  machineId: string | null
+  pid: number | null
+  firstSeen: number
+  lastHeartbeat: number
+  status: string
+}
+
 export interface ParsedEvent {
   id: number
   agentId: string
   sessionId: string
+  instanceId?: string
   type: string
   subtype: string | null
   toolName: string | null
@@ -74,5 +87,6 @@ export type WSMessage =
   | { type: 'event'; data: ParsedEvent }
   | { type: 'session_update'; data: Session }
   | { type: 'project_update'; data: { id: number; name: string } }
+  | { type: 'instance_update'; data: Instance }
 
 export type WSClientMessage = { type: 'subscribe'; sessionId: string } | { type: 'unsubscribe' }

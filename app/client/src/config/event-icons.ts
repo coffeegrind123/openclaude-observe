@@ -28,12 +28,27 @@ import {
   Settings,
   FolderOpen,
   Minimize,
+  Minimize2,
   CircleHelp,
   GitBranch,
+  GitMerge,
   Trash,
   Hourglass,
   User,
   Pin,
+  Brain,
+  Server,
+  Network,
+  Shield,
+  ShieldCheck,
+  DollarSign,
+  Layers,
+  Heart,
+  Link,
+  Unlink,
+  Send,
+  Wifi,
+  Download,
 } from 'lucide-react'
 import { getIconCustomization, COLOR_PRESETS } from '@/hooks/use-icon-customizations'
 
@@ -107,6 +122,37 @@ export const eventIcons: Record<string, LucideIcon> = {
   stop_hook_summary: CircleStop,
   user: User,
   assistant: Bot,
+
+  // OpenClaude: LLM & cost
+  LLMGeneration: Brain,
+  CompactionRun: Minimize2,
+  CostUpdate: DollarSign,
+  ToolBatch: Layers,
+
+  // OpenClaude: Daemon
+  DaemonStart: Server,
+  DaemonStop: Server,
+  DaemonHeartbeat: Heart,
+
+  // OpenClaude: Pipe
+  PipeRoleAssigned: Network,
+  PipeAttach: Link,
+  PipeDetach: Unlink,
+  PipePromptRouted: Send,
+  PipePermissionForward: ShieldCheck,
+  PipeLanPeerDiscovered: Wifi,
+
+  // OpenClaude: Coordinator
+  CoordinatorDispatch: GitBranch,
+  CoordinatorResult: GitMerge,
+
+  // OpenClaude: Bridge
+  BridgeConnected: Globe,
+  BridgeDisconnected: Globe,
+  BridgeWorkReceived: Download,
+
+  // OpenClaude: Super mode
+  SuperModeToggle: Shield,
 }
 
 export const defaultEventIcon: LucideIcon = Pin
@@ -183,6 +229,37 @@ export const eventColors: Record<string, [string, string]> = {
 
   // Progress — amber
   progress: ['text-amber-600 dark:text-amber-400', 'bg-amber-600 dark:bg-amber-500'],
+
+  // OpenClaude: LLM & cost
+  LLMGeneration: ['text-blue-600 dark:text-blue-400', 'bg-blue-600 dark:bg-blue-500'],
+  CompactionRun: ['text-gray-500 dark:text-gray-400', 'bg-gray-500 dark:bg-gray-400'],
+  CostUpdate: ['text-green-600 dark:text-green-400', 'bg-green-600 dark:bg-green-500'],
+  ToolBatch: ['text-blue-600 dark:text-blue-400', 'bg-blue-600 dark:bg-blue-500'],
+
+  // OpenClaude: Daemon — orange
+  DaemonStart: ['text-orange-600 dark:text-orange-400', 'bg-orange-600 dark:bg-orange-500'],
+  DaemonStop: ['text-red-600 dark:text-red-400', 'bg-red-600 dark:bg-red-500'],
+  DaemonHeartbeat: ['text-orange-600 dark:text-orange-400', 'bg-orange-600 dark:bg-orange-500'],
+
+  // OpenClaude: Pipe — teal
+  PipeRoleAssigned: ['text-teal-600 dark:text-teal-400', 'bg-teal-600 dark:bg-teal-500'],
+  PipeAttach: ['text-teal-600 dark:text-teal-400', 'bg-teal-600 dark:bg-teal-500'],
+  PipeDetach: ['text-teal-600 dark:text-teal-400', 'bg-teal-600 dark:bg-teal-500'],
+  PipePromptRouted: ['text-teal-600 dark:text-teal-400', 'bg-teal-600 dark:bg-teal-500'],
+  PipePermissionForward: ['text-teal-600 dark:text-teal-400', 'bg-teal-600 dark:bg-teal-500'],
+  PipeLanPeerDiscovered: ['text-teal-600 dark:text-teal-400', 'bg-teal-600 dark:bg-teal-500'],
+
+  // OpenClaude: Coordinator — purple
+  CoordinatorDispatch: ['text-purple-600 dark:text-purple-400', 'bg-purple-600 dark:bg-purple-500'],
+  CoordinatorResult: ['text-purple-600 dark:text-purple-400', 'bg-purple-600 dark:bg-purple-500'],
+
+  // OpenClaude: Bridge — cyan
+  BridgeConnected: ['text-cyan-600 dark:text-cyan-400', 'bg-cyan-600 dark:bg-cyan-500'],
+  BridgeDisconnected: ['text-red-600 dark:text-red-400', 'bg-red-600 dark:bg-red-500'],
+  BridgeWorkReceived: ['text-cyan-600 dark:text-cyan-400', 'bg-cyan-600 dark:bg-cyan-500'],
+
+  // OpenClaude: Super mode — yellow
+  SuperModeToggle: ['text-yellow-600 dark:text-yellow-400', 'bg-yellow-600 dark:bg-yellow-500'],
 }
 
 const defaultEventColor: [string, string] = [

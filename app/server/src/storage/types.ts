@@ -1,5 +1,7 @@
 // app/server/src/storage/types.ts
 
+import type { InstanceRow } from '../types'
+
 export interface InsertEventParams {
   agentId: string
   sessionId: string
@@ -9,6 +11,7 @@ export interface InsertEventParams {
   timestamp: number
   payload: Record<string, unknown>
   toolUseId?: string | null
+  instanceId?: string | null
 }
 
 export interface EventFilters {
@@ -28,6 +31,7 @@ export interface StoredEvent {
   subtype: string | null
   tool_name: string | null
   tool_use_id: string | null
+  instance_id: string | null
   timestamp: number
   created_at: number
   payload: string // JSON string in DB
@@ -67,6 +71,9 @@ export interface EventStore {
   updateSessionProject(sessionId: string, projectId: number): Promise<void>
   updateAgentName(agentId: string, name: string): Promise<void>
   insertEvent(params: InsertEventParams): Promise<number>
+  upsertInstance(id: string, sessionId: string, role: string, name: string | null, machineId: string | null, pid: number | null): void
+  updateInstanceHeartbeat(id: string, timestamp: number): void
+  getInstancesForSession(sessionId: string): InstanceRow[]
   getProjects(): Promise<any[]>
   getSessionsForProject(projectId: number): Promise<any[]>
   getSessionById(sessionId: string): Promise<any | null>

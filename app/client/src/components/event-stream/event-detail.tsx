@@ -452,6 +452,82 @@ function ToolDetail({
     )
   }
 
+  if (event.subtype === 'LLMGeneration') {
+    const model = payload.model as string | undefined
+    const provider = payload.provider as string | undefined
+    const inputTokens = (payload.input_tokens as number) || 0
+    const outputTokens = (payload.output_tokens as number) || 0
+    const cacheRead = (payload.cache_read_tokens as number) || 0
+    const cacheCreation = (payload.cache_creation_tokens as number) || 0
+    const ttftMs = payload.ttft_ms as number | undefined
+    const durationMs = payload.duration_ms as number | undefined
+    const totalTokens = inputTokens + outputTokens + cacheRead + cacheCreation || 1
+    const cacheHitRatio =
+      cacheRead + inputTokens > 0
+        ? Math.round((cacheRead / (cacheRead + inputTokens)) * 100)
+        : 0
+    return (
+      <div className="space-y-2">
+        <div className="flex gap-2 flex-wrap">
+          {model && (
+            <span className="inline-flex items-center rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-400">
+              {model}
+            </span>
+          )}
+          {provider && (
+            <span className="inline-flex items-center rounded bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-medium text-purple-700 dark:text-purple-400">
+              {provider}
+            </span>
+          )}
+        </div>
+        <div className="space-y-1">
+          <DetailRow label="Input" value={inputTokens.toLocaleString()} />
+          <DetailRow label="Output" value={outputTokens.toLocaleString()} />
+          <DetailRow label="Cache read" value={cacheRead.toLocaleString()} />
+          <DetailRow label="Cache create" value={cacheCreation.toLocaleString()} />
+        </div>
+        <div className="space-y-1">
+          <div className="text-muted-foreground text-[10px] mb-0.5">Token distribution</div>
+          <div className="flex h-3 rounded overflow-hidden bg-muted/50">
+            <div
+              className="bg-blue-500/70"
+              style={{ width: `${(inputTokens / totalTokens) * 100}%` }}
+              title={`Input: ${inputTokens.toLocaleString()}`}
+            />
+            <div
+              className="bg-green-500/70"
+              style={{ width: `${(outputTokens / totalTokens) * 100}%` }}
+              title={`Output: ${outputTokens.toLocaleString()}`}
+            />
+            <div
+              className="bg-amber-500/70"
+              style={{ width: `${(cacheRead / totalTokens) * 100}%` }}
+              title={`Cache read: ${cacheRead.toLocaleString()}`}
+            />
+            <div
+              className="bg-purple-500/70"
+              style={{ width: `${(cacheCreation / totalTokens) * 100}%` }}
+              title={`Cache creation: ${cacheCreation.toLocaleString()}`}
+            />
+          </div>
+          <div className="flex gap-3 text-[9px] text-muted-foreground">
+            <span><span className="inline-block w-2 h-2 rounded-sm bg-blue-500/70 mr-0.5" />Input</span>
+            <span><span className="inline-block w-2 h-2 rounded-sm bg-green-500/70 mr-0.5" />Output</span>
+            <span><span className="inline-block w-2 h-2 rounded-sm bg-amber-500/70 mr-0.5" />Cache read</span>
+            <span><span className="inline-block w-2 h-2 rounded-sm bg-purple-500/70 mr-0.5" />Cache create</span>
+          </div>
+        </div>
+        <div className="space-y-1">
+          {ttftMs != null && <DetailRow label="TTFT" value={`${ttftMs}ms`} />}
+          {durationMs != null && (
+            <DetailRow label="Duration" value={`${(durationMs / 1000).toFixed(2)}s`} />
+          )}
+          <DetailRow label="Cache hit" value={`${cacheHitRatio}%`} />
+        </div>
+      </div>
+    )
+  }
+
   // Tool events
   if (event.subtype !== 'PreToolUse' && event.subtype !== 'PostToolUse') return null
 

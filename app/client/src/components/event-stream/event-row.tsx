@@ -57,6 +57,52 @@ const LABEL_MAP: Record<string, string> = {
   ElicitationResult: 'MCP',
   WorktreeCreate: 'Worktree',
   WorktreeRemove: 'Worktree',
+  LLMGeneration: 'LLM',
+  DaemonStart: 'Daemon\u2191',
+  DaemonStop: 'Daemon\u2193',
+  DaemonHeartbeat: 'Heartbeat',
+  PipeRoleAssigned: 'PipeRole',
+  PipeAttach: 'Pipe\u2194',
+  PipeDetach: 'Pipe\u2715',
+  PipePromptRouted: 'Route',
+  PipePermissionForward: 'PipePerm',
+  PipeLanPeerDiscovered: 'LANPeer',
+  CoordinatorDispatch: 'Dispatch',
+  CoordinatorResult: 'Result',
+  BridgeConnected: 'Bridge\u2191',
+  BridgeDisconnected: 'Bridge\u2193',
+  BridgeWorkReceived: 'BridgeWork',
+  SuperModeToggle: 'Super',
+  CompactionRun: 'Compact',
+  CostUpdate: 'Cost',
+  ToolBatch: 'Batch',
+}
+
+function formatTokens(n: unknown): string {
+  if (typeof n !== 'number' || n === 0) return '0'
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
+  return String(n)
+}
+
+function llmSummary(payload: Record<string, unknown>): string | null {
+  const model = payload.model as string | undefined
+  const inputTokens = payload.input_tokens as number | undefined
+  const outputTokens = payload.output_tokens as number | undefined
+  const cacheRead = payload.cache_read_tokens as number | undefined
+  const durationMs = payload.duration_ms as number | undefined
+  if (!model && inputTokens == null) return null
+  const parts: string[] = []
+  if (model) parts.push(model)
+  const tokenParts: string[] = []
+  if (inputTokens != null) tokenParts.push(`in:${formatTokens(inputTokens)}`)
+  if (outputTokens != null) tokenParts.push(`out:${formatTokens(outputTokens)}`)
+  if (cacheRead != null && inputTokens != null && (cacheRead + inputTokens) > 0) {
+    const pct = Math.round((cacheRead / (cacheRead + inputTokens)) * 100)
+    tokenParts.push(`cache:${pct}%`)
+  }
+  if (tokenParts.length) parts.push(tokenParts.join(' '))
+  if (durationMs != null) parts.push(`${(durationMs / 1000).toFixed(1)}s`)
+  return parts.join(' | ')
 }
 
 export const EventRow = memo(function EventRow({
@@ -99,6 +145,7 @@ export const EventRow = memo(function EventRow({
   const rawLabel = isTool ? 'Tool' : event.subtype || event.type
   const displayLabel = LABEL_MAP[rawLabel] || rawLabel
   const displaySummary = getEventSummary(event)
+  const isLLM = event.subtype === 'LLMGeneration'
 
   const handleRowClick = (e: React.MouseEvent) => {
     // Middle-click or ctrl/meta+click: select/deselect the row
@@ -187,7 +234,11 @@ export const EventRow = memo(function EventRow({
               {event.toolName}
             </span>
           )}
-          {displaySummary.includes('\n') ? (
+          {isLLM ? (
+            <span className="text-xs text-muted-foreground truncate flex-1 min-w-0 font-mono tabular-nums">
+              {llmSummary(event.payload) || displaySummary}
+            </span>
+          ) : displaySummary.includes('\n') ? (
             <div className="text-xs text-muted-foreground flex-1 min-w-0">
               {displaySummary.split('\n').map((line, i) => (
                 <div key={i} className="truncate">
