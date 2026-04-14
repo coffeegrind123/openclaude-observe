@@ -3,8 +3,8 @@
   "version": "0.8.6",
   "description": "Real-time observability dashboard for Claude Code agents",
   "license": "MIT",
-  "repository": "https://github.com/coffeegrind123/claude-observe",
-  "homepage": "https://github.com/coffeegrind123/claude-observe",
+  "repository": "https://github.com/coffeegrind123/openclaude-observe",
+  "homepage": "https://github.com/coffeegrind123/openclaude-observe",
   "private": true,
   "scripts": {
     "start": "node start.mjs",
