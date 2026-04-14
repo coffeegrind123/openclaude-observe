@@ -6,7 +6,14 @@ import { readFileSync } from 'fs'
 import { execSync } from 'child_process'
 
 const rootPkg = JSON.parse(readFileSync(path.resolve(__dirname, '../../package.json'), 'utf-8'))
-const gitHash = (() => { try { return execSync('git rev-parse --short HEAD', { cwd: path.resolve(__dirname, '../..') }).toString().trim() } catch { return 'unknown' } })()
+const gitHash = (() => {
+  // Try GIT_HASH file first (Docker builds), then env var, then git command (dev)
+  for (const p of ['/GIT_HASH', path.resolve(__dirname, '../../GIT_HASH')]) {
+    try { const v = readFileSync(p, 'utf8').trim(); if (v && v !== 'unknown') return v } catch {}
+  }
+  if (process.env.GIT_HASH && process.env.GIT_HASH !== 'unknown') return process.env.GIT_HASH
+  try { return execSync('git rev-parse --short HEAD', { cwd: path.resolve(__dirname, '../..') }).toString().trim() } catch { return 'unknown' }
+})()
 
 const serverPort = Number(process.env.AGENTS_OBSERVE_SERVER_PORT || '4981')
 const clientPort = Number(process.env.AGENTS_OBSERVE_DEV_CLIENT_PORT || '5174')

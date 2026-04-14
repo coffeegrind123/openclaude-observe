@@ -1,5 +1,8 @@
 FROM node:22-slim AS builder
 
+ARG GIT_HASH=unknown
+ENV GIT_HASH=$GIT_HASH
+
 WORKDIR /app
 
 # Build tools for native addons (better-sqlite3 via node-gyp)
@@ -15,6 +18,8 @@ RUN cd client && npm install
 COPY app/client/ client/
 # vite.config.ts reads ../../package.json (resolves to /package.json inside image)
 COPY package.json /package.json
+# Write GIT_HASH so vite.config.ts can read it (no .git dir in Docker)
+RUN echo "$GIT_HASH" > /GIT_HASH
 RUN cd client && npm run build
 
 # --- Production image (no build tools) ---
