@@ -44,6 +44,26 @@ export const STATIC_FILTERS: StaticFilter[] = [
   { label: 'Stop', subtypes: ['Stop', 'StopFailure', 'SubagentStop'] },
   { label: 'Compaction', subtypes: ['PreCompact', 'PostCompact'] },
   {
+    label: 'LLM',
+    subtypes: ['LLMGeneration', 'CostUpdate', 'CompactionRun'],
+  },
+  {
+    label: 'Daemon',
+    subtypes: ['DaemonStart', 'DaemonStop', 'DaemonHeartbeat'],
+  },
+  {
+    label: 'Pipes',
+    subtypes: ['PipeRoleAssigned', 'PipeAttach', 'PipeDetach', 'PipePromptRouted', 'PipePermissionForward', 'PipeLanPeerDiscovered'],
+  },
+  {
+    label: 'Coordinator',
+    subtypes: ['CoordinatorDispatch', 'CoordinatorResult'],
+  },
+  {
+    label: 'Bridge',
+    subtypes: ['BridgeConnected', 'BridgeDisconnected', 'BridgeWorkReceived'],
+  },
+  {
     label: 'Errors',
     match: (e) => {
       const payload = e.payload

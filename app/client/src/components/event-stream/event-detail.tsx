@@ -53,6 +53,21 @@ export function EventDetail({ event, agentMap, spawnInfo, pairedPayloads }: Even
         spawnInfo={spawnInfo}
       />
 
+      {/* Instance badge */}
+      {p.instance_id && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-muted-foreground">Instance:</span>
+          <span className="inline-flex items-center rounded bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-medium text-cyan-700 dark:text-cyan-400">
+            {p.instance_id as string}
+          </span>
+          {p.instance_role && (
+            <span className="inline-flex items-center rounded bg-gray-500/15 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400">
+              {p.instance_role as string}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Error from payload (shown for any event type with an error field) */}
       {typeof p.error === 'string' && p.error && <DetailCode label="Error" value={p.error} />}
 
@@ -524,6 +539,135 @@ function ToolDetail({
           )}
           <DetailRow label="Cache hit" value={`${cacheHitRatio}%`} />
         </div>
+        {payload.prompt_preview && (
+          <DetailCode label="Prompt" value={payload.prompt_preview as string} />
+        )}
+        {payload.response_preview && (
+          <DetailCode label="Response" value={payload.response_preview as string} />
+        )}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'SuperModeToggle') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Enabled" value={String(payload.enabled)} />
+        <DetailRow label="Permissions bypassed" value={String(payload.permissionsBypassed)} />
+      </div>
+    )
+  }
+
+  if (event.subtype === 'DaemonStart' || event.subtype === 'DaemonStop') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Worker" value={payload.workerName as string} />
+        <DetailRow label="PID" value={String(payload.pid)} />
+        {payload.tmuxSession && <DetailRow label="tmux" value={payload.tmuxSession as string} />}
+        {payload.restartCount != null && <DetailRow label="Restarts" value={String(payload.restartCount)} />}
+        {payload.exitCode != null && <DetailRow label="Exit code" value={String(payload.exitCode)} />}
+        {payload.uptimeMs != null && <DetailRow label="Uptime" value={`${Math.round((payload.uptimeMs as number) / 1000)}s`} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'DaemonHeartbeat') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Worker" value={payload.workerName as string} />
+        <DetailRow label="PID" value={String(payload.pid)} />
+        {payload.memoryMb != null && <DetailRow label="Memory" value={`${payload.memoryMb}MB`} />}
+        {payload.activeTask && <DetailRow label="Active task" value={payload.activeTask as string} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'PipeRoleAssigned') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Role" value={payload.role as string} />
+        <DetailRow label="Machine" value={payload.machineId as string} />
+        <DetailRow label="Pipe" value={payload.pipeName as string} />
+        {payload.tcpPort && <DetailRow label="TCP port" value={String(payload.tcpPort)} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'PipeAttach' || event.subtype === 'PipeDetach') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Master" value={payload.masterName as string} />
+        <DetailRow label="Sub" value={payload.slaveName as string} />
+        {payload.transport && <DetailRow label="Transport" value={payload.transport as string} />}
+        {payload.reason && <DetailRow label="Reason" value={payload.reason as string} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'PipePromptRouted') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Targets" value={payload.targets as string} />
+        {payload.promptPreview && <DetailCode label="Prompt" value={payload.promptPreview as string} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'PipePermissionForward') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Sub" value={payload.slaveName as string} />
+        <DetailRow label="Tool" value={payload.toolName as string} />
+        <DetailRow label="Decision" value={payload.decision as string} />
+      </div>
+    )
+  }
+
+  if (event.subtype === 'PipeLanPeerDiscovered') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Peer" value={payload.peerName as string} />
+        <DetailRow label="Hostname" value={payload.hostname as string} />
+        <DetailRow label="IP" value={payload.ip as string} />
+        {payload.tcpPort && <DetailRow label="TCP port" value={String(payload.tcpPort)} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'CoordinatorDispatch') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Worker" value={payload.workerId as string} />
+        {payload.taskSummary && <DetailCode label="Task" value={payload.taskSummary as string} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'CoordinatorResult') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Worker" value={payload.workerId as string} />
+        {payload.durationMs != null && <DetailRow label="Duration" value={`${((payload.durationMs as number) / 1000).toFixed(2)}s`} />}
+        {payload.resultPreview && <DetailCode label="Result" value={payload.resultPreview as string} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'BridgeConnected' || event.subtype === 'BridgeDisconnected') {
+    return (
+      <div className="space-y-1">
+        {payload.sessionUrl && <DetailRow label="Session URL" value={payload.sessionUrl as string} />}
+        {payload.environmentId && <DetailRow label="Environment" value={payload.environmentId as string} />}
+        {payload.reason && <DetailRow label="Reason" value={payload.reason as string} />}
+      </div>
+    )
+  }
+
+  if (event.subtype === 'BridgeWorkReceived') {
+    return (
+      <div className="space-y-1">
+        <DetailRow label="Work ID" value={payload.workId as string} />
+        {payload.promptPreview && <DetailCode label="Preview" value={payload.promptPreview as string} />}
       </div>
     )
   }
