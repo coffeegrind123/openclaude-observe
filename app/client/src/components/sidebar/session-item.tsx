@@ -177,16 +177,11 @@ export function SessionItem({
               </Badge>
             )}
             {!isEditing && totalTokens > 0 && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  'text-[9px] h-3.5 px-1 shrink-0 hidden @[200px]:inline-flex group-hover:!hidden',
-                  'text-blue-500/70 border-blue-500/30',
-                  relativeTime ? '' : !eventCount ? 'ml-auto' : '',
-                )}
+              <span
+                className="text-[9px] text-blue-500/70 shrink-0 group-hover:hidden"
               >
                 {formatTokens(totalTokens)}
-              </Badge>
+              </span>
             )}
             {!isEditing && (
               <Pencil
