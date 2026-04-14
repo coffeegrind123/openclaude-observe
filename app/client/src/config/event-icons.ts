@@ -49,6 +49,7 @@ import {
   Send,
   Wifi,
   Download,
+  ShieldOff,
 } from 'lucide-react'
 import { getIconCustomization, COLOR_PRESETS } from '@/hooks/use-icon-customizations'
 
@@ -153,6 +154,9 @@ export const eventIcons: Record<string, LucideIcon> = {
 
   // OpenClaude: Super mode
   SuperModeToggle: Shield,
+
+  // Permissions
+  PermissionDenied: ShieldOff,
 }
 
 export const defaultEventIcon: LucideIcon = Pin
@@ -260,6 +264,9 @@ export const eventColors: Record<string, [string, string]> = {
 
   // OpenClaude: Super mode — yellow
   SuperModeToggle: ['text-yellow-600 dark:text-yellow-400', 'bg-yellow-600 dark:bg-yellow-500'],
+
+  // Permissions — red
+  PermissionDenied: ['text-red-600 dark:text-red-400', 'bg-red-600 dark:bg-red-500'],
 }
 
 const defaultEventColor: [string, string] = [

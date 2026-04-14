@@ -76,6 +76,7 @@ const LABEL_MAP: Record<string, string> = {
   CompactionRun: 'Compact',
   CostUpdate: 'Cost',
   ToolBatch: 'Batch',
+  PermissionDenied: 'Denied',
 }
 
 function formatTokens(n: unknown): string {

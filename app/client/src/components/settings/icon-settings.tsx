@@ -82,6 +82,37 @@ const CURATED_EVENTS: EventEntry[] = [
   // Worktrees
   { key: 'WorktreeCreate', label: 'Worktree Create', category: 'Worktrees' },
   { key: 'WorktreeRemove', label: 'Worktree Remove', category: 'Worktrees' },
+
+  // LLM
+  { key: 'LLMGeneration', label: 'LLM Generation', category: 'LLM' },
+  { key: 'CostUpdate', label: 'Cost Update', category: 'LLM' },
+  { key: 'CompactionRun', label: 'Compaction Run', category: 'LLM' },
+
+  // Daemon
+  { key: 'DaemonStart', label: 'Daemon Start', category: 'Daemon' },
+  { key: 'DaemonStop', label: 'Daemon Stop', category: 'Daemon' },
+  { key: 'DaemonHeartbeat', label: 'Daemon Heartbeat', category: 'Daemon' },
+
+  // Pipes
+  { key: 'PipeRoleAssigned', label: 'Role Assigned', category: 'Pipes' },
+  { key: 'PipeAttach', label: 'Pipe Attach', category: 'Pipes' },
+  { key: 'PipeDetach', label: 'Pipe Detach', category: 'Pipes' },
+  { key: 'PipePromptRouted', label: 'Prompt Routed', category: 'Pipes' },
+  { key: 'PipePermissionForward', label: 'Permission Forward', category: 'Pipes' },
+  { key: 'PipeLanPeerDiscovered', label: 'LAN Peer Discovered', category: 'Pipes' },
+
+  // Coordinator
+  { key: 'CoordinatorDispatch', label: 'Dispatch', category: 'Coordinator' },
+  { key: 'CoordinatorResult', label: 'Result', category: 'Coordinator' },
+
+  // Bridge
+  { key: 'BridgeConnected', label: 'Connected', category: 'Bridge' },
+  { key: 'BridgeDisconnected', label: 'Disconnected', category: 'Bridge' },
+  { key: 'BridgeWorkReceived', label: 'Work Received', category: 'Bridge' },
+
+  // Super Mode
+  { key: 'SuperModeToggle', label: 'Super Mode Toggle', category: 'System' },
+  { key: 'PermissionDenied', label: 'Permission Denied', category: 'System' },
 ]
 
 const DEFAULT_EVENT_COLOR: [string, string] = [

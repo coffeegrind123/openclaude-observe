@@ -88,6 +88,59 @@ export function getEventSummary(event: ParsedEvent): string {
     case 'WorktreeRemove':
       return p.branch || p.path || 'Worktree removed'
 
+    case 'PermissionDenied': {
+      const tool = p.tool_name as string | undefined
+      return tool ? `Denied: ${tool}` : 'Permission denied'
+    }
+
+    case 'LLMGeneration': {
+      const model = p.model as string | undefined
+      const inp = p.input_tokens as number | undefined
+      const out = p.output_tokens as number | undefined
+      if (model && inp != null && out != null) return `${model} | in:${inp} out:${out}`
+      return model || 'LLM call'
+    }
+
+    case 'SuperModeToggle':
+      return p.enabled ? 'Super mode ON' : 'Super mode OFF'
+
+    case 'DaemonStart':
+      return `Started: ${p.workerName || 'worker'}`
+    case 'DaemonStop':
+      return `Stopped: ${p.workerName || 'worker'}`
+    case 'DaemonHeartbeat':
+      return p.workerName || 'Heartbeat'
+
+    case 'PipeRoleAssigned':
+      return `Role: ${p.role || 'unknown'}`
+    case 'PipeAttach':
+      return `${p.masterName || '?'} ↔ ${p.slaveName || '?'}`
+    case 'PipeDetach':
+      return `Detached: ${p.slaveName || '?'}`
+    case 'PipePromptRouted':
+      return oneLine(p.promptPreview || p.targets || '')
+    case 'PipePermissionForward':
+      return `${p.toolName || 'tool'} → ${p.slaveName || '?'}`
+    case 'PipeLanPeerDiscovered':
+      return `${p.peerName || 'peer'} at ${p.ip || '?'}`
+
+    case 'CoordinatorDispatch':
+      return oneLine(p.taskSummary || p.workerId || 'Dispatched')
+    case 'CoordinatorResult':
+      return oneLine(p.resultPreview || p.workerId || 'Result')
+
+    case 'BridgeConnected':
+      return 'Bridge connected'
+    case 'BridgeDisconnected':
+      return p.reason ? `Disconnected: ${oneLine(p.reason)}` : 'Bridge disconnected'
+    case 'BridgeWorkReceived':
+      return p.workId || 'Work received'
+
+    case 'CostUpdate':
+      return 'Cost updated'
+    case 'CompactionRun':
+      return 'Compaction run'
+
     default:
       return ''
   }

@@ -549,6 +549,16 @@ function ToolDetail({
     )
   }
 
+  if (event.subtype === 'PermissionDenied') {
+    return (
+      <div className="space-y-1">
+        {payload.tool_name && <DetailRow label="Tool" value={payload.tool_name as string} />}
+        {payload.reason && <DetailRow label="Reason" value={payload.reason as string} />}
+        {payload.tool_input && <DetailCode label="Input" value={typeof payload.tool_input === 'string' ? payload.tool_input : JSON.stringify(payload.tool_input, null, 2)} />}
+      </div>
+    )
+  }
+
   if (event.subtype === 'SuperModeToggle') {
     return (
       <div className="space-y-1">
