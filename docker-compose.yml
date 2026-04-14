@@ -6,11 +6,11 @@
 # Recommended to use the `just start` and `just dev` commands instead.
 #
 services:
-  agents-observe:
+  openclaude-observe:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: agents-observe
+    container_name: openclaude-observe
     environment:
       AGENTS_OBSERVE_SERVER_PORT: "${AGENTS_OBSERVE_SERVER_PORT:-4981}"
       AGENTS_OBSERVE_DB_PATH: /data/observe.db

@@ -1,4 +1,4 @@
-# Contributing to Claude Observe
+# Contributing to OpenClaude Observe
 
 Thanks for your interest in contributing!
 

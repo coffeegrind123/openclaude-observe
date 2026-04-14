@@ -32,7 +32,7 @@ function readVersion(): string {
 }
 
 export const config = {
-  apiId: 'agents-observe',
+  apiId: 'openclaude-observe',
   runtime: detectRuntime(),
   isDev: process.env.AGENTS_OBSERVE_RUNTIME_DEV === '1',
   version: readVersion(),

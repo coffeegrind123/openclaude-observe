@@ -1,12 +1,13 @@
-# Agents Observe
+# OpenClaude Observe
 
-Real-time observability dashboard for Claude Code agents. Captures every hook event and streams it to a live dashboard.
+Real-time observability dashboard for OpenClaude. Receives OTel trace events via native in-process integration — LLM calls, tool executions, agent hierarchy, and multi-instance topology (daemon, pipes, coordinator, bridge).
 
-## Install as Plugin
+## Quick Start
 
 ```bash
-claude plugin marketplace add simple10/agents-observe
-claude plugin install agents-observe
+docker compose up openclaude-observe
+# Dashboard at http://localhost:4981
+# Set CLAUDE_OBSERVE_URL=http://localhost:4981 in OpenClaude
 ```
 
 Restart Claude Code. The server auto-starts as a Docker container and the dashboard is at **http://localhost:4981**.

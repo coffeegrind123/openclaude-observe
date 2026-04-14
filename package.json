@@ -1,10 +1,10 @@
 {
-  "name": "agents-observe",
+  "name": "openclaude-observe",
   "version": "0.8.6",
   "description": "Real-time observability dashboard for Claude Code agents",
   "license": "MIT",
-  "repository": "https://github.com/simple10/agents-observe",
-  "homepage": "https://github.com/simple10/agents-observe",
+  "repository": "https://github.com/coffeegrind123/claude-observe",
+  "homepage": "https://github.com/coffeegrind123/claude-observe",
   "private": true,
   "scripts": {
     "start": "node start.mjs",
