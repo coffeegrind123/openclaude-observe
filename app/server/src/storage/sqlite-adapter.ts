@@ -589,6 +589,7 @@ export class SqliteAdapter implements EventStore {
   }
 
   async deleteSession(sessionId: string): Promise<{ events: number; agents: number }> {
+    this.db.prepare('DELETE FROM instances WHERE session_id = ?').run(sessionId)
     const events = this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId).changes
     const agents = this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId).changes
     this.db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId)
@@ -605,6 +606,7 @@ export class SqliteAdapter implements EventStore {
     let events = 0
     let agents = 0
     for (const sessionId of sessionIds) {
+      this.db.prepare('DELETE FROM instances WHERE session_id = ?').run(sessionId)
       events += this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId).changes
       agents += this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId).changes
     }
@@ -621,6 +623,7 @@ export class SqliteAdapter implements EventStore {
     agents: number
     events: number
   }> {
+    this.db.prepare('DELETE FROM instances WHERE 1=1').run()
     const events = this.db.prepare('DELETE FROM events WHERE 1=1').run().changes
     const agents = this.db.prepare('DELETE FROM agents WHERE 1=1').run().changes
     const sessions = this.db.prepare('DELETE FROM sessions WHERE 1=1').run().changes
