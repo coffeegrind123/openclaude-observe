@@ -44,6 +44,12 @@ router.get('/projects/:id/sessions', async (c) => {
     agentCount: r.agent_count,
     eventCount: r.event_count,
     lastActivity: r.last_activity,
+    totalInputTokens: r.total_input_tokens || 0,
+    totalOutputTokens: r.total_output_tokens || 0,
+    totalCacheReadTokens: r.total_cache_read_tokens || 0,
+    totalCacheCreationTokens: r.total_cache_creation_tokens || 0,
+    totalDurationMs: r.total_duration_ms || 0,
+    llmCallCount: r.llm_call_count || 0,
   }))
   return c.json(sessions)
 })
