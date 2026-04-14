@@ -67,6 +67,12 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     agentCount: 1,
     eventCount: 5,
     lastActivity: null,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalCacheReadTokens: 0,
+    totalCacheCreationTokens: 0,
+    totalDurationMs: 0,
+    llmCallCount: 0,
     ...overrides,
   }
 }
