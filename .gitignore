@@ -44,3 +44,4 @@ bak/
 
 .claude/worktrees/
 .worktrees/
+GIT_HASH
