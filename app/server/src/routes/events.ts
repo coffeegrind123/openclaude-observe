@@ -297,6 +297,25 @@ router.post('/events', async (c) => {
       }
     }
 
+    // Broadcast token update for LLM events so sidebar updates in real-time
+    if (parsed.subtype === 'LLMGeneration') {
+      const session = await store.getSessionById(parsed.sessionId)
+      if (session) {
+        broadcastToAll({
+          type: 'session_update',
+          data: {
+            id: parsed.sessionId,
+            totalInputTokens: session.total_input_tokens || 0,
+            totalOutputTokens: session.total_output_tokens || 0,
+            totalCacheReadTokens: session.total_cache_read_tokens || 0,
+            totalCacheCreationTokens: session.total_cache_creation_tokens || 0,
+            totalDurationMs: session.total_duration_ms || 0,
+            llmCallCount: session.llm_call_count || 0,
+          },
+        })
+      }
+    }
+
     const event: ParsedEvent = {
       id: eventId,
       agentId,

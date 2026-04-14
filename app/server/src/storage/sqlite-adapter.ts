@@ -79,6 +79,25 @@ export class SqliteAdapter implements EventStore {
       `)
     }
 
+    if (!sessionCols.some((c) => c.name === 'total_input_tokens')) {
+      this.db.exec('ALTER TABLE sessions ADD COLUMN total_input_tokens INTEGER NOT NULL DEFAULT 0')
+      this.db.exec('ALTER TABLE sessions ADD COLUMN total_output_tokens INTEGER NOT NULL DEFAULT 0')
+      this.db.exec('ALTER TABLE sessions ADD COLUMN total_cache_read_tokens INTEGER NOT NULL DEFAULT 0')
+      this.db.exec('ALTER TABLE sessions ADD COLUMN total_cache_creation_tokens INTEGER NOT NULL DEFAULT 0')
+      this.db.exec('ALTER TABLE sessions ADD COLUMN total_duration_ms INTEGER NOT NULL DEFAULT 0')
+      this.db.exec('ALTER TABLE sessions ADD COLUMN llm_call_count INTEGER NOT NULL DEFAULT 0')
+      // Backfill from existing LLMGeneration events
+      this.db.exec(`
+        UPDATE sessions SET
+          total_input_tokens = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.input_tokens'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
+          total_output_tokens = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.output_tokens'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
+          total_cache_read_tokens = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.cache_read_tokens'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
+          total_cache_creation_tokens = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.cache_creation_tokens'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
+          total_duration_ms = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.duration_ms'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
+          llm_call_count = COALESCE((SELECT COUNT(*) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0)
+      `)
+    }
+
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS agents (
         id TEXT PRIMARY KEY,
@@ -371,6 +390,30 @@ export class SqliteAdapter implements EventStore {
       )
       .run(params.timestamp, params.sessionId)
 
+    // Accumulate token counters for LLM events
+    if (params.subtype === 'LLMGeneration') {
+      const p = params.payload as Record<string, any>
+      this.db
+        .prepare(
+          `UPDATE sessions SET
+            total_input_tokens = total_input_tokens + ?,
+            total_output_tokens = total_output_tokens + ?,
+            total_cache_read_tokens = total_cache_read_tokens + ?,
+            total_cache_creation_tokens = total_cache_creation_tokens + ?,
+            total_duration_ms = total_duration_ms + ?,
+            llm_call_count = llm_call_count + 1
+          WHERE id = ?`,
+        )
+        .run(
+          (p.input_tokens as number) || 0,
+          (p.output_tokens as number) || 0,
+          (p.cache_read_tokens as number) || 0,
+          (p.cache_creation_tokens as number) || 0,
+          (p.duration_ms as number) || 0,
+          params.sessionId,
+        )
+    }
+
     return Number(result.lastInsertRowid)
   }
 
@@ -590,10 +633,74 @@ export class SqliteAdapter implements EventStore {
     const agents = this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId).changes
     this.db
       .prepare(
-        'UPDATE sessions SET event_count = 0, agent_count = 0, last_activity = NULL WHERE id = ?',
+        'UPDATE sessions SET event_count = 0, agent_count = 0, last_activity = NULL, total_input_tokens = 0, total_output_tokens = 0, total_cache_read_tokens = 0, total_cache_creation_tokens = 0, total_duration_ms = 0, llm_call_count = 0 WHERE id = ?',
       )
       .run(sessionId)
     return { events, agents }
+  }
+
+  async getSessionUsage(sessionId: string): Promise<{
+    sessionId: string
+    totalInputTokens: number
+    totalOutputTokens: number
+    totalCacheReadTokens: number
+    totalCacheCreationTokens: number
+    totalDurationMs: number
+    llmCallCount: number
+    agentUsage: Array<{
+      agentId: string
+      agentName: string | null
+      inputTokens: number
+      outputTokens: number
+      cacheReadTokens: number
+      cacheCreationTokens: number
+      durationMs: number
+      llmCallCount: number
+    }>
+  } | null> {
+    const session = this.db
+      .prepare('SELECT * FROM sessions WHERE id = ?')
+      .get(sessionId) as any
+    if (!session) return null
+
+    const agentRows = this.db
+      .prepare(
+        `SELECT
+          e.agent_id,
+          a.name as agent_name,
+          COALESCE(SUM(COALESCE(json_extract(e.payload, '$.input_tokens'), 0)), 0) as input_tokens,
+          COALESCE(SUM(COALESCE(json_extract(e.payload, '$.output_tokens'), 0)), 0) as output_tokens,
+          COALESCE(SUM(COALESCE(json_extract(e.payload, '$.cache_read_tokens'), 0)), 0) as cache_read_tokens,
+          COALESCE(SUM(COALESCE(json_extract(e.payload, '$.cache_creation_tokens'), 0)), 0) as cache_creation_tokens,
+          COALESCE(SUM(COALESCE(json_extract(e.payload, '$.duration_ms'), 0)), 0) as duration_ms,
+          COUNT(*) as llm_call_count
+        FROM events e
+        LEFT JOIN agents a ON a.id = e.agent_id
+        WHERE e.session_id = ? AND e.subtype = 'LLMGeneration'
+        GROUP BY e.agent_id
+        ORDER BY input_tokens DESC`,
+      )
+      .all(sessionId) as any[]
+
+    return {
+      sessionId,
+      totalInputTokens: session.total_input_tokens || 0,
+      totalOutputTokens: session.total_output_tokens || 0,
+      totalCacheReadTokens: session.total_cache_read_tokens || 0,
+      totalCacheCreationTokens: session.total_cache_creation_tokens || 0,
+      totalDurationMs: session.total_duration_ms || 0,
+      llmCallCount: session.llm_call_count || 0,
+      agentUsage: agentRows.map((r: any) => ({
+        agentId: r.agent_id,
+        agentName: r.agent_name,
+        inputTokens: r.input_tokens,
+        outputTokens: r.output_tokens,
+        cacheReadTokens: r.cache_read_tokens,
+        cacheCreationTokens: r.cache_creation_tokens,
+        durationMs: r.duration_ms,
+        llmCallCount: r.llm_call_count,
+      })),
+    }
   }
 
   async getRecentSessions(limit: number = 20): Promise<any[]> {

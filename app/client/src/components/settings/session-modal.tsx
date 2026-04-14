@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
+import { formatTokens } from '@/lib/format-utils'
 import { useUIStore } from '@/stores/ui-store'
 import { Dialog, DialogContent, DialogClose, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -654,11 +655,6 @@ function formatDuration(ms: number): string {
   return `${Math.round(ms / 60_000)}m`
 }
 
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
-  return String(n)
-}
 
 function SessionStats({ sessionId }: { sessionId: string }) {
   const setEditingSessionId = useUIStore((s) => s.setEditingSessionId)

@@ -113,6 +113,26 @@ export const api = {
     )
   },
   getThread: (eventId: number) => fetchJson<ParsedEvent[]>(`/events/${eventId}/thread`),
+  getSessionUsage: (sessionId: string) =>
+    fetchJson<{
+      sessionId: string
+      totalInputTokens: number
+      totalOutputTokens: number
+      totalCacheReadTokens: number
+      totalCacheCreationTokens: number
+      totalDurationMs: number
+      llmCallCount: number
+      agentUsage: Array<{
+        agentId: string
+        agentName: string | null
+        inputTokens: number
+        outputTokens: number
+        cacheReadTokens: number
+        cacheCreationTokens: number
+        durationMs: number
+        llmCallCount: number
+      }>
+    }>(`/sessions/${encodeURIComponent(sessionId)}/usage`),
   deleteSession: (sessionId: string) =>
     fetchVoid(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
   clearSessionEvents: (sessionId: string) =>

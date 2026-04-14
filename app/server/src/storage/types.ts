@@ -86,6 +86,25 @@ export interface EventStore {
   deleteSession(sessionId: string): Promise<{ events: number; agents: number }>
   clearAllData(): Promise<{ projects: number; sessions: number; agents: number; events: number }>
   clearSessionEvents(sessionId: string): Promise<{ events: number; agents: number }>
+  getSessionUsage(sessionId: string): Promise<{
+    sessionId: string
+    totalInputTokens: number
+    totalOutputTokens: number
+    totalCacheReadTokens: number
+    totalCacheCreationTokens: number
+    totalDurationMs: number
+    llmCallCount: number
+    agentUsage: Array<{
+      agentId: string
+      agentName: string | null
+      inputTokens: number
+      outputTokens: number
+      cacheReadTokens: number
+      cacheCreationTokens: number
+      durationMs: number
+      llmCallCount: number
+    }>
+  } | null>
   getRecentSessions(limit?: number): Promise<any[]>
   healthCheck(): Promise<{ ok: boolean; error?: string }>
   /**

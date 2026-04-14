@@ -20,6 +20,12 @@ export interface Session {
   agentCount: number
   eventCount: number
   lastActivity: number | null
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalCacheReadTokens: number
+  totalCacheCreationTokens: number
+  totalDurationMs: number
+  llmCallCount: number
 }
 
 /** Agent metadata from the server — no derived state */
@@ -81,6 +87,12 @@ export interface RecentSession {
   agentCount: number
   eventCount: number
   lastActivity: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalCacheReadTokens: number
+  totalCacheCreationTokens: number
+  totalDurationMs: number
+  llmCallCount: number
 }
 
 export type WSMessage =

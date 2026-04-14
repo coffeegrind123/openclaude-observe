@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
+import { formatTokens } from '@/lib/format-utils'
 import { Pin, Pencil } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -86,6 +87,7 @@ export function SessionItem({
 
   const statusLabel = session.status === 'active' ? 'Active' : 'Ended'
   const eventCount = eventCountOverride ?? session.eventCount
+  const totalTokens = (session.totalInputTokens || 0) + (session.totalOutputTokens || 0)
   const lastActivityTs = session.lastActivity ?? session.startedAt
 
   return (
@@ -172,6 +174,18 @@ export function SessionItem({
                 )}
               >
                 {eventCount}
+              </Badge>
+            )}
+            {!isEditing && totalTokens > 0 && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  'text-[9px] h-3.5 px-1 shrink-0 hidden @[240px]:inline-flex group-hover:!hidden',
+                  'text-blue-500/70 border-blue-500/30',
+                  relativeTime ? '' : !eventCount ? 'ml-auto' : '',
+                )}
+              >
+                {formatTokens(totalTokens)}
               </Badge>
             )}
             {!isEditing && (

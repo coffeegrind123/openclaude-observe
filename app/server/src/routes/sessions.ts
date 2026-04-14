@@ -41,6 +41,12 @@ router.get('/sessions/recent', async (c) => {
     agentCount: r.agent_count,
     eventCount: r.event_count,
     lastActivity: r.last_activity,
+    totalInputTokens: r.total_input_tokens || 0,
+    totalOutputTokens: r.total_output_tokens || 0,
+    totalCacheReadTokens: r.total_cache_read_tokens || 0,
+    totalCacheCreationTokens: r.total_cache_creation_tokens || 0,
+    totalDurationMs: r.total_duration_ms || 0,
+    llmCallCount: r.llm_call_count || 0,
   }))
   return c.json(sessions)
 })
@@ -65,6 +71,12 @@ router.get('/sessions/:id', async (c) => {
     agentCount: row.agent_count,
     eventCount: row.event_count,
     lastActivity: row.last_activity,
+    totalInputTokens: row.total_input_tokens || 0,
+    totalOutputTokens: row.total_output_tokens || 0,
+    totalCacheReadTokens: row.total_cache_read_tokens || 0,
+    totalCacheCreationTokens: row.total_cache_creation_tokens || 0,
+    totalDurationMs: row.total_duration_ms || 0,
+    llmCallCount: row.llm_call_count || 0,
   })
 })
 
@@ -146,6 +158,15 @@ router.get('/sessions/:id/events', async (c) => {
   }
 
   return c.json(events)
+})
+
+// GET /sessions/:id/usage
+router.get('/sessions/:id/usage', async (c) => {
+  const store = c.get('store')
+  const sessionId = decodeURIComponent(c.req.param('id'))
+  const usage = await store.getSessionUsage(sessionId)
+  if (!usage) return apiError(c, 404, 'Session not found')
+  return c.json(usage)
 })
 
 // PATCH /sessions/:id — update session table fields (slug, projectId)
