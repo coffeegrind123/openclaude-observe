@@ -1,5 +1,21 @@
 # Changelog
 
+## 14.04.2026
+
+- `8792a8f` Refactored for native OpenClaude OTel integration — stripped hooks-based plugin, added 22 event types, instances table, LLM metrics
+- `df3d385` Renamed to OpenClaude Observe — updated all user-facing branding
+- `17bae47` Updated repo URLs to coffeegrind123/openclaude-observe
+- `ca3ddc0` Added fork command to session modal details tab
+- `f1ff5ec` Fixed new event dots not appearing in timeline mid-animation cycle
+- `b7d5f8a` Added multi-instance event detail handlers, filters, and instance badges
+- `4320404` Added all OpenClaude event types to settings menu, summaries, and detail views — LLM, Daemon, Pipes, Coordinator, Bridge categories; PermissionDenied support; event summaries for 20+ new types
+- Fixed copy-all button in raw event logs (clipboard API fallback for non-HTTPS)
+- Changed versioning from semver to date-based (DD.MM.YYYY + git hash)
+
+---
+
+*Previous releases used semver versioning (v0.x.y)*
+
 ## v0.8.6 — Session stats and UI polish
 
 This release introduces a new session stats tab showing sub-agent token usage and session metrics at a glance. It also adds convenient copy buttons for event details and improves overall UI responsiveness with smoother scrolling and better click interactions.

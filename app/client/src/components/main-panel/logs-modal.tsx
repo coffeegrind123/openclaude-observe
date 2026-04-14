@@ -21,6 +21,25 @@ import {
 import { cn } from '@/lib/utils'
 import type { ParsedEvent } from '@/types'
 
+function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text).catch(() => fallbackCopy(text))
+  }
+  return fallbackCopy(text)
+}
+
+function fallbackCopy(text: string): Promise<void> {
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand('copy')
+  document.body.removeChild(textarea)
+  return Promise.resolve()
+}
+
 export function LogsModal() {
   const { selectedSessionId } = useUIStore()
   const { data: events } = useEvents(selectedSessionId)
@@ -60,17 +79,20 @@ export function LogsModal() {
   const loading = open && readyEvents === null
 
   const handleCopy = (id: number, payload: Record<string, unknown>) => {
-    navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
-    setCopiedId(id)
-    setTimeout(() => setCopiedId(null), 2000)
+    copyToClipboard(JSON.stringify(payload, null, 2)).then(() => {
+      setCopiedId(id)
+      setTimeout(() => setCopiedId(null), 2000)
+    })
   }
 
   const handleCopyAll = () => {
-    if (!events?.length) return
-    const allLogs = events.map((e) => JSON.stringify(e.payload)).join('\n')
-    navigator.clipboard.writeText(allLogs)
-    setCopiedAll(true)
-    setTimeout(() => setCopiedAll(false), 2000)
+    const source = readyEvents ?? events
+    if (!source?.length) return
+    const allLogs = source.map((e) => JSON.stringify(e.payload, null, 2)).join('\n\n')
+    copyToClipboard(allLogs).then(() => {
+      setCopiedAll(true)
+      setTimeout(() => setCopiedAll(false), 2000)
+    })
   }
 
   const scrollToBottom = () => {

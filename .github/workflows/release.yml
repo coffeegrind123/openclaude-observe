@@ -61,14 +61,15 @@ jobs:
         id: changelog
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          # Extract the section for this version from CHANGELOG.md
-          # Matches from "## vX.Y.Z" until the next "## v" heading or EOF
-          BODY=$(awk "/^## ${TAG}( |$)/{found=1; next} found && /^## v/{exit} found{print}" CHANGELOG.md)
+          # Strip v prefix and any hash suffix for changelog lookup
+          VERSION="${TAG#v}"
+          VERSION="${VERSION%%-*}"
+          # Extract section: matches "## DD.MM.YYYY" or "## vX.Y.Z" until next "## " heading or EOF
+          BODY=$(awk "/^## ${VERSION}( |$)/{found=1; next} /^## v?${VERSION}( |$)/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)
           if [ -z "$BODY" ]; then
-            echo "Warning: no changelog entry found for $TAG, falling back to auto-generated notes"
+            echo "Warning: no changelog entry found for $VERSION, falling back to auto-generated notes"
             echo "found=false" >> "$GITHUB_OUTPUT"
           else
-            # Use delimiter for multiline output
             echo "found=true" >> "$GITHUB_OUTPUT"
             {
               echo "body<<CHANGELOG_EOF"

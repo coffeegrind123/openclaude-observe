@@ -3,6 +3,7 @@
 
 import { resolve, dirname } from 'path'
 import { readFileSync, existsSync } from 'fs'
+import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
 
 const logLevel = (process.env.AGENTS_OBSERVE_LOG_LEVEL || 'debug').toLowerCase()
@@ -36,6 +37,7 @@ export const config = {
   runtime: detectRuntime(),
   isDev: process.env.AGENTS_OBSERVE_RUNTIME_DEV === '1',
   version: readVersion(),
+  gitHash: (() => { try { return execSync('git rev-parse --short HEAD').toString().trim() } catch { return process.env.GIT_HASH || 'unknown' } })(),
   port: parseInt(process.env.AGENTS_OBSERVE_SERVER_PORT || '4981', 10),
   logLevel,
   verbose: logLevel === 'debug' || logLevel === 'trace',

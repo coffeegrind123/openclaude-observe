@@ -151,7 +151,7 @@ export function Sidebar({ connected }: SidebarProps) {
                     : 'text-muted-foreground/50',
               )}
             >
-              v{__APP_VERSION__}
+              v{__APP_VERSION__} ({__APP_GIT_HASH__})
             </span>
           </button>
         )}

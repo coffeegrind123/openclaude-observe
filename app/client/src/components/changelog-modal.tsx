@@ -71,7 +71,7 @@ export function ChangelogModal({ open, onOpenChange }: ChangelogModalProps) {
       >
         <div className="flex items-center px-6 pt-6 pb-0">
           <DialogTitle>Changelog</DialogTitle>
-          <span className="ml-2 text-xs text-muted-foreground">v{__APP_VERSION__}</span>
+          <span className="ml-2 text-xs text-muted-foreground">v{__APP_VERSION__} ({__APP_GIT_HASH__})</span>
           {latestVersion && !versionMismatch && !outdated && (
             <span className="ml-1.5 text-[10px] text-green-600 dark:text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded-full">
               up to date
@@ -102,8 +102,8 @@ export function ChangelogModal({ open, onOpenChange }: ChangelogModalProps) {
           <div className="mx-6 mt-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-sm">
             <span className="text-red-600 dark:text-red-400">
               Version mismatch: the dashboard is <strong>v{__APP_VERSION__}</strong> but the server
-              is <strong>v{serverVersion}</strong>. Some features may not work correctly. Restart
-              the server or reinstall the plugin to fix this.
+              is <strong>v{serverVersion}</strong>. Some features may not work correctly. Rebuild
+              the observe container to fix this.
               {__GITHUB_REPO_URL__ && (
                 <>
                   {' '}
