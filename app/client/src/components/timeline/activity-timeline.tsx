@@ -22,6 +22,7 @@ export function ActivityTimeline() {
     setTimelineHeight,
     setTimeRange,
     rewindMode,
+    frozenEvents,
     enterRewindMode,
     exitRewindMode,
   } = useUIStore()
@@ -193,7 +194,7 @@ export function ActivityTimeline() {
           style={{ height: timelineHeight - 32 }}
         >
           {rewindMode ? (
-            <TimelineRewind events={events || []} agents={agents} />
+            <TimelineRewind events={frozenEvents || events || []} agents={agents} />
           ) : (
             <>
               {flatAgents.map(({ agent, isSubagent }) => (
