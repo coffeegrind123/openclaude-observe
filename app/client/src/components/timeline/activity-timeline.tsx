@@ -31,6 +31,11 @@ export function ActivityTimeline() {
   const effectiveSessionId = selectedSessionId || sessions?.[0]?.id || null
   const events = useEffectiveEvents(effectiveSessionId).data
   const agents = useAgents(effectiveSessionId, events)
+  // Freeze agents snapshot when entering rewind so TimelineRewind doesn't
+  // re-render on every live agent update.
+  const frozenAgentsRef = useRef(agents)
+  if (!rewindMode) frozenAgentsRef.current = agents
+
   const resizing = useRef(false)
   const startY = useRef(0)
   const startHeight = useRef(0)
@@ -194,7 +199,7 @@ export function ActivityTimeline() {
           style={{ height: timelineHeight - 32 }}
         >
           {rewindMode ? (
-            <TimelineRewind events={frozenEvents || events || []} agents={agents} />
+            <TimelineRewind events={frozenEvents || events || []} agents={frozenAgentsRef.current} />
           ) : (
             <>
               {flatAgents.map(({ agent, isSubagent }) => (
