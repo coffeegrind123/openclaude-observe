@@ -21,6 +21,8 @@
 - `27c90e7` Simplified GIT_HASH to COPY from build context, removed ARG
 - `9cdb359` Added token badge to Recent Sessions page cards (blue "22.0k tok" badge)
 - `37fa3ed` Fixed token fields missing from `GET /projects/:id/sessions` response — sidebar was getting sessions without token data
+- Fixed `claude --fork` command in session modal — uses `--fork-session --resume` (matches upstream `185d7bc`)
+- Added "Newest events on top" setting (Settings → Display, default on) — reverses the event feed so new events spawn at the top and existing events fall downwards; auto-follow icon flips to indicate direction; persisted to localStorage
 
 ---
 
