@@ -136,12 +136,29 @@ export function ActivityTimeline() {
 
   const ranges = TIME_RANGE_KEYS
 
+  const transitionSpinnerRef = useRef<HTMLDivElement>(null)
+
   const handleToggleRewind = () => {
-    if (rewindMode) {
-      exitRewindMode()
-    } else {
-      enterRewindMode(events || [])
+    // Show spinner via direct DOM manipulation (bypasses React scheduling)
+    const spinner = transitionSpinnerRef.current
+    if (spinner) {
+      spinner.style.width = '12px'
+      spinner.style.marginRight = '4px'
+      spinner.style.visibility = 'visible'
     }
+    // setTimeout lets the browser paint the spinner before the main thread locks
+    setTimeout(() => {
+      if (rewindMode) {
+        exitRewindMode()
+      } else {
+        enterRewindMode(events || [])
+      }
+      if (spinner) {
+        spinner.style.width = '0'
+        spinner.style.marginRight = '0'
+        spinner.style.visibility = 'hidden'
+      }
+    }, 50)
   }
 
   return (
@@ -157,6 +174,22 @@ export function ActivityTimeline() {
             )}
           </div>
           <div className="flex gap-1 items-center">
+            {/* GPU-animated spinner — always in DOM, shown/hidden via direct DOM manipulation */}
+            <div
+              ref={transitionSpinnerRef}
+              style={{
+                width: 0,
+                height: 12,
+                border: '2px solid currentColor',
+                borderTopColor: 'transparent',
+                borderRadius: '50%',
+                willChange: 'transform',
+                animation: 'spin 1s linear infinite',
+                visibility: 'hidden',
+                overflow: 'hidden',
+              }}
+              className="text-muted-foreground"
+            />
             <Button
               variant="outline"
               size="sm"
