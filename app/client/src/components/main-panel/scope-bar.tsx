@@ -2,7 +2,14 @@ import { useUIStore } from '@/stores/ui-store'
 import { Button } from '@/components/ui/button'
 import { LogsModal } from './logs-modal'
 import { AgentCombobox } from './agent-combobox'
-import { ArrowDownToLine, Pencil, BarChart3, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
+import {
+  ArrowDownToLine,
+  ArrowUpToLine,
+  Pencil,
+  BarChart3,
+  ChevronsDownUp,
+  ChevronsUpDown,
+} from 'lucide-react'
 
 export function ScopeBar() {
   const {
@@ -14,6 +21,7 @@ export function ScopeBar() {
     collapseAllEvents,
     requestExpandAll,
     setEditingSessionId,
+    reverseFeed,
   } = useUIStore()
 
   if (!selectedProjectId || !selectedSessionId) return null
@@ -23,7 +31,7 @@ export function ScopeBar() {
       <AgentCombobox />
 
       <div className="flex items-center gap-1 shrink-0">
-        {/* Follow */}
+        {/* Follow — icon mirrors feed direction (top vs bottom) */}
         <Button
           variant={autoFollow ? 'default' : 'ghost'}
           size="icon"
@@ -31,7 +39,11 @@ export function ScopeBar() {
           onClick={() => setAutoFollow(!autoFollow)}
           title={autoFollow ? 'Auto-follow enabled' : 'Auto-follow disabled'}
         >
-          <ArrowDownToLine className="h-3.5 w-3.5" />
+          {reverseFeed ? (
+            <ArrowUpToLine className="h-3.5 w-3.5" />
+          ) : (
+            <ArrowDownToLine className="h-3.5 w-3.5" />
+          )}
         </Button>
         {/* Expand/Collapse */}
         <Button

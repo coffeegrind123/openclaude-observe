@@ -28,6 +28,7 @@ export function EventStream() {
     expandAllEvents,
     selectedEventId,
     rewindMode,
+    reverseFeed,
   } = useUIStore()
 
   // Defer filter values so the UI stays responsive during filter changes
@@ -124,6 +125,14 @@ export function EventStream() {
     deferredSearchQuery,
   ])
 
+  // The list actually fed to the virtualizer. When reverseFeed is on, we show
+  // newest at top by reversing the chronological array. All virtualizer-index
+  // operations (scrollToIndex, findIndex, getItemKey, render) must use this.
+  const displayedEvents = useMemo(
+    () => (reverseFeed ? [...filteredEvents].reverse() : filteredEvents),
+    [filteredEvents, reverseFeed],
+  )
+
   const expandedEventIds = useUIStore((s) => s.expandedEventIds)
   const scrollToEventId = useUIStore((s) => s.scrollToEventId)
   const setScrollToEventId = useUIStore((s) => s.setScrollToEventId)
@@ -135,43 +144,53 @@ export function EventStream() {
   // Virtualizer: only renders rows in (and near) the viewport, so sessions
   // with thousands of events don't destroy performance.
   const virtualizer = useVirtualizer({
-    count: filteredEvents.length,
+    count: displayedEvents.length,
     getScrollElement: () => scrollRef.current,
     // Better height estimate for expanded rows reduces layout shift when
     // scrolling through many expanded items (the gap between 36px estimate
     // and 200px+ actual caused visible jumps as items were measured).
     estimateSize: (index) => {
-      const event = filteredEvents[index]
+      const event = displayedEvents[index]
       return event && expandedEventIds.has(event.id) ? 200 : 36
     },
     overscan: 10,
     // Keep a stable key per event so height measurements survive list changes
-    getItemKey: (index) => filteredEvents[index]?.id ?? index,
+    getItemKey: (index) => displayedEvents[index]?.id ?? index,
   })
 
   const virtualItems = virtualizer.getVirtualItems()
   const totalSize = virtualizer.getTotalSize()
 
-  // Auto-scroll to bottom on first load of a session
+  // Re-anchor the initial scroll on session change OR feed-direction change.
   useEffect(() => {
     hasInitiallyScrolled.current = false
-  }, [selectedSessionId])
+  }, [selectedSessionId, reverseFeed])
 
+  // Initial scroll to whichever end holds the newest event.
   useEffect(() => {
-    if (!hasInitiallyScrolled.current && filteredEvents.length > 0) {
-      virtualizer.scrollToIndex(filteredEvents.length - 1, { align: 'end' })
+    if (!hasInitiallyScrolled.current && displayedEvents.length > 0) {
+      if (reverseFeed) {
+        virtualizer.scrollToIndex(0, { align: 'start' })
+      } else {
+        virtualizer.scrollToIndex(displayedEvents.length - 1, { align: 'end' })
+      }
       hasInitiallyScrolled.current = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredEvents.length])
+  }, [displayedEvents.length, reverseFeed])
 
-  // Auto-scroll to bottom when new events arrive (if autoFollow is enabled)
+  // Auto-follow the newest event. With reverseFeed on, "newest" lives at index 0
+  // (top of viewport); otherwise it's the last index (bottom).
   useEffect(() => {
-    if (autoFollow && filteredEvents.length > 0) {
-      virtualizer.scrollToIndex(filteredEvents.length - 1, { align: 'end' })
+    if (autoFollow && displayedEvents.length > 0) {
+      if (reverseFeed) {
+        virtualizer.scrollToIndex(0, { align: 'start' })
+      } else {
+        virtualizer.scrollToIndex(displayedEvents.length - 1, { align: 'end' })
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoFollow, filteredEvents.length])
+  }, [autoFollow, displayedEvents.length, reverseFeed])
 
   // Expand all events when requested from the scope bar
   useEffect(() => {
@@ -192,7 +211,7 @@ export function EventStream() {
     const items = virtualizer.getVirtualItems()
     for (const item of items) {
       if (item.start + item.size > top) {
-        const event = filteredEvents[item.index]
+        const event = displayedEvents[item.index]
         if (event) {
           getTimelineScrollTo()?.(event.timestamp)
         }
@@ -200,7 +219,7 @@ export function EventStream() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredEvents])
+  }, [displayedEvents])
 
   // Attach scroll listener only while in rewind mode
   useEffect(() => {
@@ -225,7 +244,7 @@ export function EventStream() {
       return
     }
     registerEventStreamScroll((eventId) => {
-      const idx = filteredEvents.findIndex((e) => e.id === eventId)
+      const idx = displayedEvents.findIndex((e) => e.id === eventId)
       if (idx >= 0) {
         virtualizer.scrollToIndex(idx, { align: 'start' })
       }
@@ -233,7 +252,7 @@ export function EventStream() {
     return () => registerEventStreamScroll(null)
     // virtualizer is stable across renders; intentionally omitted.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rewindMode, filteredEvents])
+  }, [rewindMode, displayedEvents])
 
   // Initial sync when entering rewind mode: wait for timeline to mount, then
   // sync timeline to match current event stream scroll position.
@@ -252,18 +271,19 @@ export function EventStream() {
     }
   }, [rewindMode, syncTimelineFromScroll])
 
-  // Auto-scroll to the selected event when filteredEvents change (i.e. filters change)
-  const prevFilteredRef = useRef(filteredEvents)
+  // Auto-scroll to the selected event when the displayed list changes (filters
+  // toggled, or feed direction flipped).
+  const prevDisplayedRef = useRef(displayedEvents)
   useEffect(() => {
-    if (selectedEventId != null && filteredEvents !== prevFilteredRef.current) {
-      const idx = filteredEvents.findIndex((e) => e.id === selectedEventId)
+    if (selectedEventId != null && displayedEvents !== prevDisplayedRef.current) {
+      const idx = displayedEvents.findIndex((e) => e.id === selectedEventId)
       if (idx >= 0) {
         virtualizer.scrollToIndex(idx, { align: 'center' })
       }
     }
-    prevFilteredRef.current = filteredEvents
+    prevDisplayedRef.current = displayedEvents
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredEvents, selectedEventId])
+  }, [displayedEvents, selectedEventId])
 
   // Scroll to a requested event (set via setScrollToEventId — e.g. timeline dot click).
   // Resolves merged events (PostToolUse → displayed PreToolUse row), scrolls the
@@ -278,7 +298,7 @@ export function EventStream() {
     // Resolve merged event IDs (PostToolUse id → PreToolUse row id) inline,
     // so a single render handles both the remap and the scroll.
     const resolvedId = mergedIdMap.get(scrollToEventId) ?? scrollToEventId
-    const idx = filteredEvents.findIndex((e) => e.id === resolvedId)
+    const idx = displayedEvents.findIndex((e) => e.id === resolvedId)
     if (idx < 0) return
     virtualizer.scrollToIndex(idx, { align: 'center' })
     setFlashingEventId(resolvedId)
@@ -292,7 +312,7 @@ export function EventStream() {
     return () => clearTimeout(timeout)
     // virtualizer is stable; intentionally omitted from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scrollToEventId, filteredEvents, mergedIdMap, setScrollToEventId, setFlashingEventId])
+  }, [scrollToEventId, displayedEvents, mergedIdMap, setScrollToEventId, setFlashingEventId])
 
   if (!selectedSessionId) {
     return (
@@ -342,12 +362,12 @@ export function EventStream() {
               )}
             </div>
             <div ref={scrollRef} className="flex-1 overflow-y-auto">
-              {filteredEvents.length === 0 ? (
+              {displayedEvents.length === 0 ? (
                 <EmptyState text="No events match the current filters" />
               ) : (
                 <div className="relative" style={{ height: `${totalSize}px`, width: '100%' }}>
                   {virtualItems.map((virtualItem) => {
-                    const event = filteredEvents[virtualItem.index]
+                    const event = displayedEvents[virtualItem.index]
                     if (!event) return null
                     return (
                       <div

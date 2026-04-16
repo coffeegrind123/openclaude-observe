@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogClose, DialogTitle } from '@/components/ui
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ProjectsTab } from './projects-tab'
 import { IconSettings } from './icon-settings'
+import { DisplayTab } from './display-tab'
 import { Button } from '@/components/ui/button'
 import { API_BASE } from '@/config/api'
 import { Database, Container, Monitor, X } from 'lucide-react'
@@ -56,11 +57,15 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           <div className="px-6 pt-2">
             <TabsList>
               <TabsTrigger value="projects">Projects</TabsTrigger>
+              <TabsTrigger value="display">Display</TabsTrigger>
               <TabsTrigger value="icons">Icons</TabsTrigger>
             </TabsList>
           </div>
           <TabsContent value="projects" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
             <ProjectsTab />
+          </TabsContent>
+          <TabsContent value="display" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
+            <DisplayTab />
           </TabsContent>
           <TabsContent
             value="icons"

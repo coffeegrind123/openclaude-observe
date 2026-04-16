@@ -121,6 +121,11 @@ interface UIState {
   togglePinnedSession: (id: string) => void
   isSessionPinned: (id: string) => boolean
 
+  // Feed direction (persisted to localStorage). When true, newest events appear
+  // at the top and older events flow downwards. Default is true.
+  reverseFeed: boolean
+  setReverseFeed: (enabled: boolean) => void
+
   // Icon customization reactivity
   iconCustomizationVersion: number
   bumpIconCustomizationVersion: () => void
@@ -133,6 +138,7 @@ interface UIState {
 }
 
 const PINNED_STORAGE_KEY = 'agents-observe-pinned-sessions'
+const REVERSE_FEED_STORAGE_KEY = 'agents-observe-reverse-feed'
 
 function loadPinnedSessions(): Set<string> {
   try {
@@ -145,6 +151,15 @@ function loadPinnedSessions(): Set<string> {
 
 function savePinnedSessions(ids: Set<string>) {
   localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify([...ids]))
+}
+
+function loadReverseFeed(): boolean {
+  try {
+    const raw = localStorage.getItem(REVERSE_FEED_STORAGE_KEY)
+    return raw === null ? true : raw === 'true'
+  } catch {
+    return true
+  }
 }
 
 const { projectSlug: initialProjectSlug, sessionId: initialSessionId } = parseHash()
@@ -289,7 +304,8 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   editingSessionId: null,
   editingSessionTab: 'details',
-  setEditingSessionId: (id, tab) => set({ editingSessionId: id, editingSessionTab: tab ?? 'details' }),
+  setEditingSessionId: (id, tab) =>
+    set({ editingSessionId: id, editingSessionTab: tab ?? 'details' }),
 
   autoFollow: true,
   setAutoFollow: (enabled) => set({ autoFollow: enabled }),
@@ -324,6 +340,14 @@ export const useUIStore = create<UIState>((set, get) => ({
       return { pinnedSessionIds: next }
     }),
   isSessionPinned: (id) => get().pinnedSessionIds.has(id),
+
+  reverseFeed: loadReverseFeed(),
+  setReverseFeed: (enabled) => {
+    try {
+      localStorage.setItem(REVERSE_FEED_STORAGE_KEY, String(enabled))
+    } catch {}
+    set({ reverseFeed: enabled })
+  },
 
   iconCustomizationVersion: 0,
   bumpIconCustomizationVersion: () =>
