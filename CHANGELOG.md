@@ -1,5 +1,11 @@
 # Changelog
 
+## 17.04.2026
+
+- `c686fd1` Merged upstream `simple10/agents-observe` (commit `185d7bc`) so the fork no longer shows behind on GitHub
+- `ebb284a` Fixed `claude --fork` command in session modal — uses `--fork-session --resume` (matches upstream `185d7bc`)
+- `e4e7b78` Added "Newest events on top" setting (Settings → Display, default on) — reverses the event feed so new events spawn at the top and existing events fall downwards; auto-follow icon flips to indicate direction; persisted to localStorage
+
 ## 14.04.2026
 
 - `8792a8f` Refactored for native OpenClaude OTel integration — stripped hooks-based plugin, added 22 event types, instances table, LLM metrics
@@ -21,8 +27,6 @@
 - `27c90e7` Simplified GIT_HASH to COPY from build context, removed ARG
 - `9cdb359` Added token badge to Recent Sessions page cards (blue "22.0k tok" badge)
 - `37fa3ed` Fixed token fields missing from `GET /projects/:id/sessions` response — sidebar was getting sessions without token data
-- Fixed `claude --fork` command in session modal — uses `--fork-session --resume` (matches upstream `185d7bc`)
-- Added "Newest events on top" setting (Settings → Display, default on) — reverses the event feed so new events spawn at the top and existing events fall downwards; auto-follow icon flips to indicate direction; persisted to localStorage
 
 ---
 
