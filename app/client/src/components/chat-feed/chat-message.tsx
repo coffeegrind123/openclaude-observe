@@ -85,9 +85,22 @@ export const ChatMessage = memo(function ChatMessage({
 
   const selectedEventId = useUIStore((s) => s.selectedEventId)
   const setSelectedEventId = useUIStore((s) => s.setSelectedEventId)
+  const setScrollToEventId = useUIStore((s) => s.setScrollToEventId)
   const isFlashing = useUIStore((s) => s.flashingEventId === event.id)
   const isSelected = selectedEventId === event.id
-  const onSelect = () => setSelectedEventId(isSelected ? null : event.id)
+  // Toggle selection AND scroll the event panel to the matching row so the
+  // chat→event link is useful even when the event is off-screen. The event
+  // stream's scrollToEventId effect resolves the row, scrolls the
+  // virtualizer, and pulses flashingEventId on the matched row. Skip the
+  // scroll on a deselect click — leaving the user where they are.
+  const onSelect = () => {
+    if (isSelected) {
+      setSelectedEventId(null)
+    } else {
+      setSelectedEventId(event.id)
+      setScrollToEventId(event.id)
+    }
+  }
 
   const displayName = agent ? getAgentDisplayName(agent) : event.agentId.slice(0, 8)
 
