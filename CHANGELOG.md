@@ -3,6 +3,8 @@
 ## 18.04.2026
 
 - Added split event/chat view — the session pane now shows the existing event stream on the left and a new chat feed on the right, rendering the same OTel events as conversation bubbles (user prompts, assistant responses, subagent spawns/returns, task cards, teammate idle). Panel is resizable (280–800px), collapsible to a thin rail, and persists width/collapsed state to localStorage; shares the React Query cache so no extra network is used. Inspired by [DheerG/agent-chat](https://github.com/DheerG/agent-chat)
+- Added markdown rendering in chat bubbles — user, assistant, and subagent-return messages now render headings, lists, bold/italic, inline and fenced code, blockquotes, tables, and links via `react-markdown`
+- Added sticky-to-newest auto-follow — both the event stream and chat panels now engage auto-follow automatically when scrolled to the edge where newest events land (top in reverse-feed mode, bottom in chronological), and disengage as soon as you scroll away. You no longer have to keep scrolling up to keep up with live events, but breaking off to inspect history still parks the view where you left it
 - Fixed fresh-DB startup crash — token-column backfill referenced the `events` table before it was created, so containers with an empty `/data` volume refused to start. Backfill now runs after all tables are in place
 - Bumped version to 18.04.2026 to resync `package.json` (client) and `VERSION` (server) after the 17.04.2026 release left them mismatched
 

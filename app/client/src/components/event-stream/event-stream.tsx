@@ -233,6 +233,29 @@ export function EventStream() {
     return () => container.removeEventListener('scroll', onScroll)
   }, [rewindMode, syncTimelineFromScroll])
 
+  // Sticky-to-newest-edge: auto-follow turns on when the user scrolls to the
+  // edge where newest events land (top in reverseFeed mode, bottom in
+  // chronological), and off as soon as they scroll away. Skipped in rewind
+  // mode — autoFollow is frozen there and the timeline-sync listener owns
+  // scroll events.
+  const setAutoFollow = useUIStore((s) => s.setAutoFollow)
+  useEffect(() => {
+    if (rewindMode) return
+    const container = scrollRef.current
+    if (!container) return
+    const THRESHOLD = 4
+    const onScroll = () => {
+      const atNewest = reverseFeed
+        ? container.scrollTop <= THRESHOLD
+        : container.scrollHeight - container.scrollTop - container.clientHeight <= THRESHOLD
+      if (useUIStore.getState().autoFollow !== atNewest) {
+        setAutoFollow(atNewest)
+      }
+    }
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
+  }, [reverseFeed, rewindMode, setAutoFollow])
+
   // Register the event-stream scroll-to callback for reverse sync.
   // Uses virtualizer.scrollToIndex so the target row gets mounted and measured.
   // Must re-register when filteredEvents changes so the callback sees the

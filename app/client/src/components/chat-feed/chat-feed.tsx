@@ -35,6 +35,8 @@ export function ChatFeed() {
   const reverseFeed = useUIStore((s) => s.reverseFeed)
   const setChatPanelCollapsed = useUIStore((s) => s.setChatPanelCollapsed)
   const autoFollow = useUIStore((s) => s.autoFollow)
+  const setAutoFollow = useUIStore((s) => s.setAutoFollow)
+  const rewindMode = useUIStore((s) => s.rewindMode)
 
   const eventsQuery = useEffectiveEvents(selectedSessionId)
   const events = useDeferredValue(eventsQuery.data)
@@ -118,6 +120,27 @@ export function ChatFeed() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFollow, displayedEntries.length, reverseFeed])
+
+  // Sticky-to-newest-edge: auto-follow turns on when the user scrolls to the
+  // edge where newest messages land (top in reverseFeed mode, bottom in
+  // chronological), and off as soon as they scroll away. This lets the panel
+  // live-follow while still letting the user break off to inspect history.
+  useEffect(() => {
+    if (rewindMode) return
+    const container = scrollRef.current
+    if (!container) return
+    const THRESHOLD = 4
+    const onScroll = () => {
+      const atNewest = reverseFeed
+        ? container.scrollTop <= THRESHOLD
+        : container.scrollHeight - container.scrollTop - container.clientHeight <= THRESHOLD
+      if (useUIStore.getState().autoFollow !== atNewest) {
+        setAutoFollow(atNewest)
+      }
+    }
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
+  }, [reverseFeed, rewindMode, setAutoFollow])
 
   // ── Header controls ───────────────────────────────────────────────────
   const hasAgentFilter = agentFilter.size > 0

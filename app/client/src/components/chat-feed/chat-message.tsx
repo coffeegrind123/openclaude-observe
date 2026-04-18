@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import type { Agent, ParsedEvent } from '@/types'
 import type { ChatEntry } from '@/lib/chat-events'
+import { ChatMarkdown } from './chat-markdown'
 
 interface ChatMessageProps {
   entry: ChatEntry
@@ -109,8 +110,8 @@ export const ChatMessage = memo(function ChatMessage({
             <UserRound className="h-3 w-3" />
           </span>
         </div>
-        <div className="max-w-[85%] rounded-lg bg-primary/10 dark:bg-primary/15 px-2.5 py-1.5 text-xs whitespace-pre-wrap break-words text-foreground">
-          {message.text}
+        <div className="max-w-[85%] rounded-lg bg-primary/10 dark:bg-primary/15 px-2.5 py-1.5 text-xs break-words text-foreground overflow-hidden">
+          <ChatMarkdown text={message.text} />
         </div>
       </div>
     )
@@ -136,13 +137,13 @@ export const ChatMessage = memo(function ChatMessage({
         />
         <div
           className={cn(
-            'max-w-[90%] rounded-lg border px-2.5 py-1.5 text-xs whitespace-pre-wrap break-words text-foreground bg-card',
+            'max-w-[90%] rounded-lg border px-2.5 py-1.5 text-xs break-words text-foreground bg-card overflow-hidden',
             message.failed
               ? 'border-red-500/40 bg-red-500/5'
               : cn(agentColors.border, 'bg-muted/30'),
           )}
         >
-          {message.text}
+          <ChatMarkdown text={message.text} />
         </div>
       </div>
     )
@@ -206,11 +207,11 @@ export const ChatMessage = memo(function ChatMessage({
         {message.text ? (
           <div
             className={cn(
-              'mt-1 max-w-[90%] rounded-lg border bg-card px-2.5 py-1.5 text-xs whitespace-pre-wrap break-words',
+              'mt-1 max-w-[90%] rounded-lg border bg-card px-2.5 py-1.5 text-xs break-words overflow-hidden',
               agentColors.border,
             )}
           >
-            {message.text}
+            <ChatMarkdown text={message.text} />
           </div>
         ) : (
           <div className="mt-1 text-[11px] text-muted-foreground italic">
