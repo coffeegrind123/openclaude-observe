@@ -87,8 +87,14 @@ export function SessionList({
               <span className="text-sm font-medium truncate">{label}</span>
               <div className="flex items-center gap-1.5 ml-auto shrink-0">
                 {(session.totalInputTokens || 0) + (session.totalOutputTokens || 0) > 0 && (
-                  <Badge variant="outline" className="text-[10px] h-4 px-1.5 text-blue-500/70 border-blue-500/30">
-                    {formatTokens((session.totalInputTokens || 0) + (session.totalOutputTokens || 0))} tok
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] h-4 px-1.5 text-blue-500/70 border-blue-500/30"
+                  >
+                    {formatTokens(
+                      (session.totalInputTokens || 0) + (session.totalOutputTokens || 0),
+                    )}{' '}
+                    tok
                   </Badge>
                 )}
                 {session.eventCount != null && session.eventCount > 0 && (

@@ -39,10 +39,21 @@ export const config = {
   version: readVersion(),
   gitHash: (() => {
     const dir = dirname(fileURLToPath(import.meta.url))
-    for (const p of [resolve(dir, '../../../GIT_HASH'), resolve(dir, '../../GIT_HASH'), '/app/GIT_HASH']) {
-      try { const v = readFileSync(p, 'utf8').trim(); if (v) return v } catch {}
+    for (const p of [
+      resolve(dir, '../../../GIT_HASH'),
+      resolve(dir, '../../GIT_HASH'),
+      '/app/GIT_HASH',
+    ]) {
+      try {
+        const v = readFileSync(p, 'utf8').trim()
+        if (v) return v
+      } catch {}
     }
-    try { return execSync('git rev-parse --short HEAD').toString().trim() } catch { return 'unknown' }
+    try {
+      return execSync('git rev-parse --short HEAD').toString().trim()
+    } catch {
+      return 'unknown'
+    }
   })(),
   port: parseInt(process.env.AGENTS_OBSERVE_SERVER_PORT || '4981', 10),
   logLevel,

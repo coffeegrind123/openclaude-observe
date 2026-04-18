@@ -4,6 +4,7 @@ import type { EventStore } from '../storage/types'
 import type { ParsedEvent } from '../types'
 import { config } from '../config'
 import { apiError } from '../errors'
+import { computeSessionContext } from '../context'
 
 function deriveEventStatus(subtype: string | null): string {
   if (subtype === 'PreToolUse') return 'running'
@@ -167,6 +168,17 @@ router.get('/sessions/:id/usage', async (c) => {
   const usage = await store.getSessionUsage(sessionId)
   if (!usage) return apiError(c, 404, 'Session not found')
   return c.json(usage)
+})
+
+// GET /sessions/:id/context — per-turn context attribution breakdown
+router.get('/sessions/:id/context', async (c) => {
+  const store = c.get('store')
+  const sessionId = decodeURIComponent(c.req.param('id'))
+  const session = await store.getSessionById(sessionId)
+  if (!session) return apiError(c, 404, 'Session not found')
+  const events = await store.getEventsForSession(sessionId)
+  const breakdown = computeSessionContext(events)
+  return c.json(breakdown)
 })
 
 // PATCH /sessions/:id — update session table fields (slug, projectId)

@@ -53,7 +53,14 @@ export const STATIC_FILTERS: StaticFilter[] = [
   },
   {
     label: 'Pipes',
-    subtypes: ['PipeRoleAssigned', 'PipeAttach', 'PipeDetach', 'PipePromptRouted', 'PipePermissionForward', 'PipeLanPeerDiscovered'],
+    subtypes: [
+      'PipeRoleAssigned',
+      'PipeAttach',
+      'PipeDetach',
+      'PipePromptRouted',
+      'PipePermissionForward',
+      'PipeLanPeerDiscovered',
+    ],
   },
   {
     label: 'Coordinator',

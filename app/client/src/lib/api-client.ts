@@ -133,6 +133,10 @@ export const api = {
         llmCallCount: number
       }>
     }>(`/sessions/${encodeURIComponent(sessionId)}/usage`),
+  getSessionContext: (sessionId: string) =>
+    fetchJson<import('@/types/context').SessionContextBreakdown>(
+      `/sessions/${encodeURIComponent(sessionId)}/context`,
+    ),
   deleteSession: (sessionId: string) =>
     fetchVoid(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
   clearSessionEvents: (sessionId: string) =>

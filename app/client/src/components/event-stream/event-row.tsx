@@ -6,6 +6,7 @@ import { getAgentColorById } from '@/lib/agent-utils'
 import { AgentLabel } from '@/components/shared/agent-label'
 import { useUIStore } from '@/stores/ui-store'
 import { EventDetail } from './event-detail'
+import { ContextBadge } from './context-badge'
 import { Check, X, Loader } from 'lucide-react'
 import type { ParsedEvent, Agent } from '@/types'
 import type { PairedPayloads } from '@/hooks/use-deduped-events'
@@ -102,7 +103,7 @@ function llmSummary(payload: Record<string, unknown>): string | null {
   const tokenParts: string[] = []
   if (inputTokens != null) tokenParts.push(`in:${formatTokens(inputTokens)}`)
   if (outputTokens != null) tokenParts.push(`out:${formatTokens(outputTokens)}`)
-  if (cacheRead != null && inputTokens != null && (cacheRead + inputTokens) > 0) {
+  if (cacheRead != null && inputTokens != null && cacheRead + inputTokens > 0) {
     const pct = Math.round((cacheRead / (cacheRead + inputTokens)) * 100)
     tokenParts.push(`cache:${pct}%`)
   }
@@ -241,9 +242,18 @@ export const EventRow = memo(function EventRow({
             </span>
           )}
           {isLLM ? (
-            <span className="text-xs text-muted-foreground truncate flex-1 min-w-0 font-mono tabular-nums">
-              {llmSummary(event.payload) || displaySummary}
-            </span>
+            <>
+              <span className="text-xs text-muted-foreground truncate flex-1 min-w-0 font-mono tabular-nums">
+                {llmSummary(event.payload) || displaySummary}
+              </span>
+              <span
+                className="shrink-0"
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <ContextBadge sessionId={event.sessionId} llmEventId={event.id} />
+              </span>
+            </>
           ) : displaySummary.includes('\n') ? (
             <div className="text-xs text-muted-foreground flex-1 min-w-0">
               {displaySummary.split('\n').map((line, i) => (

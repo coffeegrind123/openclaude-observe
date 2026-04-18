@@ -71,7 +71,9 @@ export function ChangelogModal({ open, onOpenChange }: ChangelogModalProps) {
       >
         <div className="flex items-center px-6 pt-6 pb-0">
           <DialogTitle>Changelog</DialogTitle>
-          <span className="ml-2 text-xs text-muted-foreground">v{__APP_VERSION__} ({__APP_GIT_HASH__})</span>
+          <span className="ml-2 text-xs text-muted-foreground">
+            v{__APP_VERSION__} ({__APP_GIT_HASH__})
+          </span>
           {latestVersion && !versionMismatch && !outdated && (
             <span className="ml-1.5 text-[10px] text-green-600 dark:text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded-full">
               up to date

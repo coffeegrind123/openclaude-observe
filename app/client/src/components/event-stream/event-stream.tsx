@@ -4,11 +4,13 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffectiveEvents } from '@/hooks/use-effective-events'
 import { useAgents } from '@/hooks/use-agents'
 import { useDedupedEvents } from '@/hooks/use-deduped-events'
+import { useCompactions } from '@/hooks/use-compactions'
 import { usePermissionModeBackfill } from '@/hooks/use-permission-mode-backfill'
 import { getTimelineScrollTo, registerEventStreamScroll, withSyncLock } from '@/lib/scroll-sync'
 import { api } from '@/lib/api-client'
 import { useUIStore } from '@/stores/ui-store'
 import { EventRow } from './event-row'
+import { CompactionBoundary } from './compaction-boundary'
 import { eventMatchesFilters } from '@/config/filters'
 import { format } from 'timeago.js'
 import { buildAgentColorMap } from '@/lib/agent-utils'
@@ -75,6 +77,17 @@ export function EventStream() {
   // Dedupe tool events + build spawn map (shared with timeline-rewind)
   const { deduped, spawnToolUseIds, spawnInfo, mergedIdMap, pairedPayloads } =
     useDedupedEvents(events)
+
+  // Pair PreCompact/PostCompact events with flanking LLM tokens so the row can
+  // render a rich boundary. Keyed by PreCompact event id.
+  const compactionMap = useCompactions(events)
+  const postToPreCompactionMap = useMemo(() => {
+    const m = new Map<number, number>() // postId -> preId
+    for (const info of compactionMap.values()) {
+      if (info.postEventId != null) m.set(info.postEventId, info.preEventId)
+    }
+    return m
+  }, [compactionMap])
 
   // Apply all client-side filters: agent selection + static/tool filters
   const filteredEvents = useMemo(() => {
@@ -392,6 +405,19 @@ export function EventStream() {
                   {virtualItems.map((virtualItem) => {
                     const event = displayedEvents[virtualItem.index]
                     if (!event) return null
+                    // Render PreCompact/PostCompact as a distinct boundary card
+                    // instead of a normal event row so the compaction reads as
+                    // a visual break in the stream.
+                    const isPreCompact = event.subtype === 'PreCompact'
+                    const isPostCompact = event.subtype === 'PostCompact'
+                    const compactionInfo = isPreCompact
+                      ? (compactionMap.get(event.id) ?? null)
+                      : isPostCompact
+                        ? (() => {
+                            const preId = postToPreCompactionMap.get(event.id)
+                            return preId != null ? (compactionMap.get(preId) ?? null) : null
+                          })()
+                        : null
                     return (
                       <div
                         key={virtualItem.key}
@@ -400,14 +426,22 @@ export function EventStream() {
                         className="absolute top-0 left-0 w-full border-b border-border/50"
                         style={{ transform: `translateY(${virtualItem.start}px)` }}
                       >
-                        <EventRow
-                          event={event}
-                          agentMap={agentMap}
-                          agentColorMap={agentColorMap}
-                          showAgentLabel={showAgentLabel}
-                          spawnInfo={spawnInfo.get(event.agentId)}
-                          pairedPayloads={pairedPayloads.get(event.id)}
-                        />
+                        {isPreCompact || isPostCompact ? (
+                          <CompactionBoundary
+                            event={event}
+                            info={compactionInfo}
+                            variant={isPreCompact ? 'pre' : 'post'}
+                          />
+                        ) : (
+                          <EventRow
+                            event={event}
+                            agentMap={agentMap}
+                            agentColorMap={agentColorMap}
+                            showAgentLabel={showAgentLabel}
+                            spawnInfo={spawnInfo.get(event.agentId)}
+                            pairedPayloads={pairedPayloads.get(event.id)}
+                          />
+                        )}
                       </div>
                     )
                   })}

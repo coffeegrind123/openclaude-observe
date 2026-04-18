@@ -177,9 +177,7 @@ export function SessionItem({
               </Badge>
             )}
             {!isEditing && totalTokens > 0 && (
-              <span
-                className="text-[9px] text-blue-500/70 shrink-0 group-hover:hidden"
-              >
+              <span className="text-[9px] text-blue-500/70 shrink-0 group-hover:hidden">
                 {formatTokens(totalTokens)}
               </span>
             )}

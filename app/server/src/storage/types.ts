@@ -71,7 +71,14 @@ export interface EventStore {
   updateSessionProject(sessionId: string, projectId: number): Promise<void>
   updateAgentName(agentId: string, name: string): Promise<void>
   insertEvent(params: InsertEventParams): Promise<number>
-  upsertInstance(id: string, sessionId: string, role: string, name: string | null, machineId: string | null, pid: number | null): void
+  upsertInstance(
+    id: string,
+    sessionId: string,
+    role: string,
+    name: string | null,
+    machineId: string | null,
+    pid: number | null,
+  ): void
   updateInstanceHeartbeat(id: string, timestamp: number): void
   getInstancesForSession(sessionId: string): InstanceRow[]
   getProjects(): Promise<any[]>

@@ -1,0 +1,105 @@
+/* hljs token colors tuned to match the rest of the dashboard's dark/light theme.
+ * Token classes come from highlight.js; background/foreground come from the
+ * host element so the rules here only paint tokens. */
+
+.hljs-comment,
+.hljs-quote {
+  color: rgb(115 115 115);
+  font-style: italic;
+}
+.dark .hljs-comment,
+.dark .hljs-quote {
+  color: rgb(130 130 130);
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link {
+  color: rgb(168 85 247); /* purple-500 */
+}
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-literal,
+.dark .hljs-section,
+.dark .hljs-link {
+  color: rgb(196 139 255);
+}
+
+.hljs-string,
+.hljs-attr,
+.hljs-symbol,
+.hljs-meta-string,
+.hljs-regexp {
+  color: rgb(22 163 74); /* green-600 */
+}
+.dark .hljs-string,
+.dark .hljs-attr,
+.dark .hljs-symbol,
+.dark .hljs-meta-string,
+.dark .hljs-regexp {
+  color: rgb(134 239 172);
+}
+
+.hljs-number,
+.hljs-boolean,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-deletion {
+  color: rgb(217 119 6); /* amber-600 */
+}
+.dark .hljs-number,
+.dark .hljs-boolean,
+.dark .hljs-variable,
+.dark .hljs-template-variable,
+.dark .hljs-deletion {
+  color: rgb(251 191 36);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-name,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: rgb(37 99 235); /* blue-600 */
+}
+.dark .hljs-title,
+.dark .hljs-title.function_,
+.dark .hljs-title.class_,
+.dark .hljs-name,
+.dark .hljs-selector-class,
+.dark .hljs-selector-id {
+  color: rgb(96 165 250);
+}
+
+.hljs-type,
+.hljs-built_in,
+.hljs-builtin-name {
+  color: rgb(13 148 136); /* teal-600 */
+}
+.dark .hljs-type,
+.dark .hljs-built_in,
+.dark .hljs-builtin-name {
+  color: rgb(94 234 212);
+}
+
+.hljs-tag {
+  color: rgb(219 39 119); /* pink-600 */
+}
+.dark .hljs-tag {
+  color: rgb(244 114 182);
+}
+
+.hljs-addition {
+  color: rgb(22 163 74);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}

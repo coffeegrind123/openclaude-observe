@@ -23,10 +23,7 @@ const components: Components = {
     </h4>
   ),
   p: ({ children, ...props }) => (
-    <p
-      className="mb-1.5 last:mb-0 leading-relaxed whitespace-pre-wrap break-words"
-      {...props}
-    >
+    <p className="mb-1.5 last:mb-0 leading-relaxed whitespace-pre-wrap break-words" {...props}>
       {children}
     </p>
   ),

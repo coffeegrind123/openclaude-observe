@@ -284,7 +284,14 @@ router.post('/events', async (c) => {
       const instanceName = (hookPayload.instance_name as string) || null
       const machineId = (hookPayload.machine_id as string) || null
       const pid = typeof hookPayload.pid === 'number' ? hookPayload.pid : null
-      store.upsertInstance(parsed.instanceId, parsed.sessionId, instanceRole, instanceName, machineId, pid)
+      store.upsertInstance(
+        parsed.instanceId,
+        parsed.sessionId,
+        instanceRole,
+        instanceName,
+        machineId,
+        pid,
+      )
 
       if (parsed.subtype === 'DaemonHeartbeat') {
         store.updateInstanceHeartbeat(parsed.instanceId, parsed.timestamp)

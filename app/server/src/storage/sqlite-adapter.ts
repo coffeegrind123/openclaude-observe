@@ -85,7 +85,9 @@ export class SqliteAdapter implements EventStore {
     if (needsTokenBackfill) {
       this.db.exec('ALTER TABLE sessions ADD COLUMN total_input_tokens INTEGER NOT NULL DEFAULT 0')
       this.db.exec('ALTER TABLE sessions ADD COLUMN total_output_tokens INTEGER NOT NULL DEFAULT 0')
-      this.db.exec('ALTER TABLE sessions ADD COLUMN total_cache_read_tokens INTEGER NOT NULL DEFAULT 0')
+      this.db.exec(
+        'ALTER TABLE sessions ADD COLUMN total_cache_read_tokens INTEGER NOT NULL DEFAULT 0',
+      )
       this.db.exec(
         'ALTER TABLE sessions ADD COLUMN total_cache_creation_tokens INTEGER NOT NULL DEFAULT 0',
       )
@@ -670,9 +672,7 @@ export class SqliteAdapter implements EventStore {
       llmCallCount: number
     }>
   } | null> {
-    const session = this.db
-      .prepare('SELECT * FROM sessions WHERE id = ?')
-      .get(sessionId) as any
+    const session = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId) as any
     if (!session) return null
 
     const agentRows = this.db
@@ -849,7 +849,14 @@ export class SqliteAdapter implements EventStore {
     return result
   }
 
-  upsertInstance(id: string, sessionId: string, role: string, name: string | null, machineId: string | null, pid: number | null): void {
+  upsertInstance(
+    id: string,
+    sessionId: string,
+    role: string,
+    name: string | null,
+    machineId: string | null,
+    pid: number | null,
+  ): void {
     const now = Date.now()
     this.db
       .prepare(

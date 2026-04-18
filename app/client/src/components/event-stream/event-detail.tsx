@@ -4,6 +4,11 @@ import { Button } from '@/components/ui/button'
 import { Copy, Check, ChevronDown, ChevronRight, Loader, FileText, Code } from 'lucide-react'
 
 const ReactDiffViewer = lazy(() => import('react-diff-viewer-continued'))
+import { ReadToolViewer } from './viewers/read-tool-viewer'
+import { EditToolViewer } from './viewers/edit-tool-viewer'
+import { WriteToolViewer } from './viewers/write-tool-viewer'
+import { BashToolViewer } from './viewers/bash-tool-viewer'
+import { GrepToolViewer } from './viewers/grep-tool-viewer'
 import { api } from '@/lib/api-client'
 import { getEventIcon } from '@/config/event-icons'
 import { getEventSummary } from '@/lib/event-summary'
@@ -430,6 +435,13 @@ function ToolDetail({
           label="Status"
           value={event.subtype === 'PreCompact' ? 'Compacting...' : 'Compacted'}
         />
+        {payload.trigger && <DetailRow label="Trigger" value={payload.trigger as string} />}
+        {payload.custom_instructions && (
+          <DetailCode label="Instructions" value={payload.custom_instructions as string} />
+        )}
+        {payload.compact_summary && (
+          <DetailCode label="Summary" value={payload.compact_summary as string} />
+        )}
         {payload.tokens_before && (
           <DetailRow label="Tokens before" value={String(payload.tokens_before)} />
         )}
@@ -483,9 +495,7 @@ function ToolDetail({
     const durationMs = payload.duration_ms as number | undefined
     const totalTokens = inputTokens + outputTokens + cacheRead + cacheCreation || 1
     const cacheHitRatio =
-      cacheRead + inputTokens > 0
-        ? Math.round((cacheRead / (cacheRead + inputTokens)) * 100)
-        : 0
+      cacheRead + inputTokens > 0 ? Math.round((cacheRead / (cacheRead + inputTokens)) * 100) : 0
     return (
       <div className="space-y-2">
         <div className="flex gap-2 flex-wrap items-center">
@@ -531,10 +541,22 @@ function ToolDetail({
             />
           </div>
           <div className="flex gap-3 text-[9px] text-muted-foreground">
-            <span><span className="inline-block w-2 h-2 rounded-sm bg-blue-500/70 mr-0.5" />Input</span>
-            <span><span className="inline-block w-2 h-2 rounded-sm bg-green-500/70 mr-0.5" />Output</span>
-            <span><span className="inline-block w-2 h-2 rounded-sm bg-amber-500/70 mr-0.5" />Cache read</span>
-            <span><span className="inline-block w-2 h-2 rounded-sm bg-purple-500/70 mr-0.5" />Cache create</span>
+            <span>
+              <span className="inline-block w-2 h-2 rounded-sm bg-blue-500/70 mr-0.5" />
+              Input
+            </span>
+            <span>
+              <span className="inline-block w-2 h-2 rounded-sm bg-green-500/70 mr-0.5" />
+              Output
+            </span>
+            <span>
+              <span className="inline-block w-2 h-2 rounded-sm bg-amber-500/70 mr-0.5" />
+              Cache read
+            </span>
+            <span>
+              <span className="inline-block w-2 h-2 rounded-sm bg-purple-500/70 mr-0.5" />
+              Cache create
+            </span>
           </div>
         </div>
         <div className="space-y-1">
@@ -559,7 +581,16 @@ function ToolDetail({
       <div className="space-y-1">
         {payload.tool_name && <DetailRow label="Tool" value={payload.tool_name as string} />}
         {payload.reason && <DetailRow label="Reason" value={payload.reason as string} />}
-        {payload.tool_input && <DetailCode label="Input" value={typeof payload.tool_input === 'string' ? payload.tool_input : JSON.stringify(payload.tool_input, null, 2)} />}
+        {payload.tool_input && (
+          <DetailCode
+            label="Input"
+            value={
+              typeof payload.tool_input === 'string'
+                ? payload.tool_input
+                : JSON.stringify(payload.tool_input, null, 2)
+            }
+          />
+        )}
       </div>
     )
   }
@@ -579,9 +610,15 @@ function ToolDetail({
         <DetailRow label="Worker" value={payload.workerName as string} />
         <DetailRow label="PID" value={String(payload.pid)} />
         {payload.tmuxSession && <DetailRow label="tmux" value={payload.tmuxSession as string} />}
-        {payload.restartCount != null && <DetailRow label="Restarts" value={String(payload.restartCount)} />}
-        {payload.exitCode != null && <DetailRow label="Exit code" value={String(payload.exitCode)} />}
-        {payload.uptimeMs != null && <DetailRow label="Uptime" value={`${Math.round((payload.uptimeMs as number) / 1000)}s`} />}
+        {payload.restartCount != null && (
+          <DetailRow label="Restarts" value={String(payload.restartCount)} />
+        )}
+        {payload.exitCode != null && (
+          <DetailRow label="Exit code" value={String(payload.exitCode)} />
+        )}
+        {payload.uptimeMs != null && (
+          <DetailRow label="Uptime" value={`${Math.round((payload.uptimeMs as number) / 1000)}s`} />
+        )}
       </div>
     )
   }
@@ -592,7 +629,9 @@ function ToolDetail({
         <DetailRow label="Worker" value={payload.workerName as string} />
         <DetailRow label="PID" value={String(payload.pid)} />
         {payload.memoryMb != null && <DetailRow label="Memory" value={`${payload.memoryMb}MB`} />}
-        {payload.activeTask && <DetailRow label="Active task" value={payload.activeTask as string} />}
+        {payload.activeTask && (
+          <DetailRow label="Active task" value={payload.activeTask as string} />
+        )}
       </div>
     )
   }
@@ -623,7 +662,9 @@ function ToolDetail({
     return (
       <div className="space-y-1">
         <DetailRow label="Targets" value={payload.targets as string} />
-        {payload.promptPreview && <DetailCode label="Prompt" value={payload.promptPreview as string} />}
+        {payload.promptPreview && (
+          <DetailCode label="Prompt" value={payload.promptPreview as string} />
+        )}
       </div>
     )
   }
@@ -662,8 +703,15 @@ function ToolDetail({
     return (
       <div className="space-y-1">
         <DetailRow label="Worker" value={payload.workerId as string} />
-        {payload.durationMs != null && <DetailRow label="Duration" value={`${((payload.durationMs as number) / 1000).toFixed(2)}s`} />}
-        {payload.resultPreview && <DetailCode label="Result" value={payload.resultPreview as string} />}
+        {payload.durationMs != null && (
+          <DetailRow
+            label="Duration"
+            value={`${((payload.durationMs as number) / 1000).toFixed(2)}s`}
+          />
+        )}
+        {payload.resultPreview && (
+          <DetailCode label="Result" value={payload.resultPreview as string} />
+        )}
       </div>
     )
   }
@@ -671,8 +719,12 @@ function ToolDetail({
   if (event.subtype === 'BridgeConnected' || event.subtype === 'BridgeDisconnected') {
     return (
       <div className="space-y-1">
-        {payload.sessionUrl && <DetailRow label="Session URL" value={payload.sessionUrl as string} />}
-        {payload.environmentId && <DetailRow label="Environment" value={payload.environmentId as string} />}
+        {payload.sessionUrl && (
+          <DetailRow label="Session URL" value={payload.sessionUrl as string} />
+        )}
+        {payload.environmentId && (
+          <DetailRow label="Environment" value={payload.environmentId as string} />
+        )}
         {payload.reason && <DetailRow label="Reason" value={payload.reason as string} />}
       </div>
     )
@@ -682,7 +734,9 @@ function ToolDetail({
     return (
       <div className="space-y-1">
         <DetailRow label="Work ID" value={payload.workId as string} />
-        {payload.promptPreview && <DetailCode label="Preview" value={payload.promptPreview as string} />}
+        {payload.promptPreview && (
+          <DetailCode label="Preview" value={payload.promptPreview as string} />
+        )}
       </div>
     )
   }
@@ -690,67 +744,53 @@ function ToolDetail({
   // Tool events
   if (event.subtype !== 'PreToolUse' && event.subtype !== 'PostToolUse') return null
 
+  const toolResponse = payload.tool_response as Record<string, any> | string | undefined
+  const relPathBound = (fp: string) => relPath(fp, cwd)
+
   switch (event.toolName) {
-    case 'Bash': {
-      const isDiff = /\bdiff\b/.test(ti.command || '')
+    case 'Bash':
       return (
-        <div className="space-y-1.5">
-          {ti.description && <DetailRow label="Description" value={ti.description} />}
-          {ti.command && <DetailCode label="Command" value={ti.command} />}
-          {cwd && <DetailRow label="CWD" value={cwd} />}
-          {result && <DetailCode label="Result" value={formatResult(result)} diff={isDiff} />}
-        </div>
+        <BashToolViewer
+          toolInput={ti as Record<string, unknown>}
+          toolResponse={toolResponse}
+          cwd={cwd}
+          durationMs={payload.duration_ms as number | undefined}
+        />
       )
-    }
-    case 'Read': {
-      const readResponse = payload.tool_response as Record<string, any> | undefined
-      const fileContent = readResponse?.file?.content ?? readResponse?.content
-      const fileType = readResponse?.type as string | undefined
-      const displayContent = typeof fileContent === 'string' ? fileContent : result
+    case 'Read':
       return (
-        <div className="space-y-1.5">
-          <DetailRow label="File" value={relPath(ti.file_path, cwd)} />
-          {ti.offset && (
-            <DetailRow
-              label="Range"
-              value={`line ${ti.offset}${ti.limit ? `, limit ${ti.limit}` : ''}`}
-            />
-          )}
-          {fileType && fileType !== 'text' && <DetailRow label="Type" value={fileType} />}
-          {displayContent && <DetailCode label="Content" value={formatResult(displayContent)} />}
-        </div>
+        <ReadToolViewer
+          filePath={ti.file_path as string}
+          toolInput={ti as Record<string, unknown>}
+          toolResponse={toolResponse}
+          relPath={relPathBound}
+        />
       )
-    }
     case 'Write':
       return (
-        <div className="space-y-1.5">
-          <DetailRow label="File" value={relPath(ti.file_path, cwd)} />
-          {result && <DetailCode label="Result" value={formatResult(result)} />}
-        </div>
+        <WriteToolViewer
+          filePath={ti.file_path as string}
+          toolInput={ti as Record<string, unknown>}
+          toolResponse={toolResponse}
+          relPath={relPathBound}
+        />
       )
     case 'Edit':
       return (
-        <div className="space-y-1.5">
-          <DetailRow label="File" value={relPath(ti.file_path, cwd)} />
-          {ti.old_string && ti.new_string ? (
-            <DetailDiff oldValue={ti.old_string} newValue={ti.new_string} />
-          ) : (
-            <>
-              {ti.old_string && <DetailCode label="Old" value={ti.old_string} />}
-              {ti.new_string && <DetailCode label="New" value={ti.new_string} />}
-            </>
-          )}
-          {result && <DetailCode label="Result" value={formatResult(result)} />}
-        </div>
+        <EditToolViewer
+          filePath={ti.file_path as string}
+          toolInput={ti as Record<string, unknown>}
+          toolResponse={toolResponse}
+          relPath={relPathBound}
+        />
       )
     case 'Grep':
       return (
-        <div className="space-y-1.5">
-          <DetailRow label="Pattern" value={`/${ti.pattern}/`} />
-          {ti.path && <DetailRow label="Path" value={relPath(ti.path, cwd)} />}
-          {ti.glob && <DetailRow label="Glob" value={ti.glob} />}
-          {result && <DetailCode label="Result" value={formatResult(result)} />}
-        </div>
+        <GrepToolViewer
+          toolInput={ti as Record<string, unknown>}
+          toolResponse={toolResponse}
+          relPath={relPathBound}
+        />
       )
     case 'Glob':
       return (
