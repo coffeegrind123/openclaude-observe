@@ -94,7 +94,11 @@ export function getEventSummary(event: ParsedEvent): string {
     }
 
     case 'LLMGeneration': {
-      const model = p.model as string | undefined
+      // Prefer upstream-reported actual_model when proxies re-route (z.ai,
+      // OpenRouter, LiteLLM) so summary text matches what actually ran.
+      const model =
+        (p.actual_model as string | undefined) ??
+        (p.model as string | undefined)
       const inp = p.input_tokens as number | undefined
       const out = p.output_tokens as number | undefined
       if (model && inp != null && out != null) return `${model} | in:${inp} out:${out}`

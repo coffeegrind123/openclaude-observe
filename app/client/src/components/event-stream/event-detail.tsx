@@ -468,7 +468,12 @@ function ToolDetail({
   }
 
   if (event.subtype === 'LLMGeneration') {
-    const model = payload.model as string | undefined
+    // Prefer the upstream-reported model when a proxy re-routes (z.ai
+    // claude-sonnet-4-6 → glm-4.6, OpenRouter, LiteLLM) so the label
+    // shows what actually ran, not what was requested.
+    const model =
+      (payload.actual_model as string | undefined) ??
+      (payload.model as string | undefined)
     const provider = payload.provider as string | undefined
     const inputTokens = (payload.input_tokens as number) || 0
     const outputTokens = (payload.output_tokens as number) || 0
@@ -483,7 +488,7 @@ function ToolDetail({
         : 0
     return (
       <div className="space-y-2">
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           {model && (
             <span className="inline-flex items-center rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-400">
               {model}

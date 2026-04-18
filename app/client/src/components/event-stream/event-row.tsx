@@ -86,7 +86,12 @@ function formatTokens(n: unknown): string {
 }
 
 function llmSummary(payload: Record<string, unknown>): string | null {
-  const model = payload.model as string | undefined
+  // Prefer the upstream-reported model (e.g. glm-4.6 when z.ai re-routes
+  // claude-sonnet-4-6) over the request model so the row label matches
+  // what actually ran.
+  const model =
+    (payload.actual_model as string | undefined) ??
+    (payload.model as string | undefined)
   const inputTokens = payload.input_tokens as number | undefined
   const outputTokens = payload.output_tokens as number | undefined
   const cacheRead = payload.cache_read_tokens as number | undefined
