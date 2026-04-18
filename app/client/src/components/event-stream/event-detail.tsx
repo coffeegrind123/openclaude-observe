@@ -1146,6 +1146,15 @@ function dedupeThread(events: ParsedEvent[]): ParsedEvent[] {
   const toolUseMap = new Map<string, number>()
 
   for (const e of events) {
+    // Hide synthetic / hidden-in-REPL prompts so the chat thread mirrors
+    // what the user actually saw. The OpenClaude sender tags these as
+    // kind:'background' in forwardHookToObserve (proactive ticks,
+    // super-mode priming reminders, Esc-interrupt hints, local command
+    // stdout). Telemetry views still receive these — the filter is
+    // chat-thread-only.
+    if ((e.payload as { kind?: unknown } | undefined)?.kind === 'background') {
+      continue
+    }
     if (e.subtype === 'PreToolUse' && e.toolUseId) {
       toolUseMap.set(e.toolUseId, result.length)
       result.push({ ...e })
