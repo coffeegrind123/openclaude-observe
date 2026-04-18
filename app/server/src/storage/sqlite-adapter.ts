@@ -79,23 +79,18 @@ export class SqliteAdapter implements EventStore {
       `)
     }
 
-    if (!sessionCols.some((c) => c.name === 'total_input_tokens')) {
+    // Token columns are added here; the backfill UPDATE that reads from the
+    // events table runs after that table is created further down.
+    const needsTokenBackfill = !sessionCols.some((c) => c.name === 'total_input_tokens')
+    if (needsTokenBackfill) {
       this.db.exec('ALTER TABLE sessions ADD COLUMN total_input_tokens INTEGER NOT NULL DEFAULT 0')
       this.db.exec('ALTER TABLE sessions ADD COLUMN total_output_tokens INTEGER NOT NULL DEFAULT 0')
       this.db.exec('ALTER TABLE sessions ADD COLUMN total_cache_read_tokens INTEGER NOT NULL DEFAULT 0')
-      this.db.exec('ALTER TABLE sessions ADD COLUMN total_cache_creation_tokens INTEGER NOT NULL DEFAULT 0')
+      this.db.exec(
+        'ALTER TABLE sessions ADD COLUMN total_cache_creation_tokens INTEGER NOT NULL DEFAULT 0',
+      )
       this.db.exec('ALTER TABLE sessions ADD COLUMN total_duration_ms INTEGER NOT NULL DEFAULT 0')
       this.db.exec('ALTER TABLE sessions ADD COLUMN llm_call_count INTEGER NOT NULL DEFAULT 0')
-      // Backfill from existing LLMGeneration events
-      this.db.exec(`
-        UPDATE sessions SET
-          total_input_tokens = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.input_tokens'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
-          total_output_tokens = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.output_tokens'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
-          total_cache_read_tokens = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.cache_read_tokens'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
-          total_cache_creation_tokens = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.cache_creation_tokens'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
-          total_duration_ms = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.duration_ms'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
-          llm_call_count = COALESCE((SELECT COUNT(*) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0)
-      `)
     }
 
     this.db.exec(`
@@ -156,6 +151,20 @@ export class SqliteAdapter implements EventStore {
     }
     if (!eventCols.some((c) => c.name === 'instance_id')) {
       this.db.exec('ALTER TABLE events ADD COLUMN instance_id TEXT')
+    }
+
+    // Run the token backfill now that the events table is guaranteed to exist.
+    // No-op on fresh DBs (zero events) but keeps historical migrations correct.
+    if (needsTokenBackfill) {
+      this.db.exec(`
+        UPDATE sessions SET
+          total_input_tokens = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.input_tokens'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
+          total_output_tokens = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.output_tokens'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
+          total_cache_read_tokens = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.cache_read_tokens'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
+          total_cache_creation_tokens = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.cache_creation_tokens'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
+          total_duration_ms = COALESCE((SELECT SUM(COALESCE(json_extract(payload, '$.duration_ms'), 0)) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0),
+          llm_call_count = COALESCE((SELECT COUNT(*) FROM events WHERE session_id = sessions.id AND subtype = 'LLMGeneration'), 0)
+      `)
     }
 
     this.db.exec(`
