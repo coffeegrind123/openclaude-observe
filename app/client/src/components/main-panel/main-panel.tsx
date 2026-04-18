@@ -4,6 +4,7 @@ import { ScopeBar } from './scope-bar'
 import { EventFilterBar } from './event-filter-bar'
 import { ActivityTimeline } from '@/components/timeline/activity-timeline'
 import { EventStream } from '@/components/event-stream/event-stream'
+import { ChatPanel } from '@/components/chat-feed/chat-panel'
 import { HomePage } from './home-page'
 import { ProjectPage } from './project-page'
 
@@ -24,7 +25,10 @@ export function MainPanel() {
       <ScopeBar />
       <EventFilterBar />
       <ActivityTimeline />
-      <EventStream />
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        <EventStream />
+        <ChatPanel />
+      </div>
     </div>
   )
 }

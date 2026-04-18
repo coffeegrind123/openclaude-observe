@@ -126,6 +126,12 @@ interface UIState {
   reverseFeed: boolean
   setReverseFeed: (enabled: boolean) => void
 
+  // Chat panel (right side of event feed). Persisted to localStorage.
+  chatPanelCollapsed: boolean
+  chatPanelWidth: number
+  setChatPanelCollapsed: (collapsed: boolean) => void
+  setChatPanelWidth: (width: number) => void
+
   // Icon customization reactivity
   iconCustomizationVersion: number
   bumpIconCustomizationVersion: () => void
@@ -139,6 +145,11 @@ interface UIState {
 
 const PINNED_STORAGE_KEY = 'agents-observe-pinned-sessions'
 const REVERSE_FEED_STORAGE_KEY = 'agents-observe-reverse-feed'
+const CHAT_PANEL_COLLAPSED_KEY = 'agents-observe-chat-panel-collapsed'
+const CHAT_PANEL_WIDTH_KEY = 'agents-observe-chat-panel-width'
+const CHAT_PANEL_DEFAULT_WIDTH = 420
+const CHAT_PANEL_MIN_WIDTH = 280
+const CHAT_PANEL_MAX_WIDTH = 800
 
 function loadPinnedSessions(): Set<string> {
   try {
@@ -159,6 +170,27 @@ function loadReverseFeed(): boolean {
     return raw === null ? true : raw === 'true'
   } catch {
     return true
+  }
+}
+
+function loadChatPanelCollapsed(): boolean {
+  try {
+    const raw = localStorage.getItem(CHAT_PANEL_COLLAPSED_KEY)
+    return raw === 'true'
+  } catch {
+    return false
+  }
+}
+
+function loadChatPanelWidth(): number {
+  try {
+    const raw = localStorage.getItem(CHAT_PANEL_WIDTH_KEY)
+    if (!raw) return CHAT_PANEL_DEFAULT_WIDTH
+    const n = parseInt(raw, 10)
+    if (Number.isNaN(n)) return CHAT_PANEL_DEFAULT_WIDTH
+    return Math.max(CHAT_PANEL_MIN_WIDTH, Math.min(CHAT_PANEL_MAX_WIDTH, n))
+  } catch {
+    return CHAT_PANEL_DEFAULT_WIDTH
   }
 }
 
@@ -347,6 +379,22 @@ export const useUIStore = create<UIState>((set, get) => ({
       localStorage.setItem(REVERSE_FEED_STORAGE_KEY, String(enabled))
     } catch {}
     set({ reverseFeed: enabled })
+  },
+
+  chatPanelCollapsed: loadChatPanelCollapsed(),
+  chatPanelWidth: loadChatPanelWidth(),
+  setChatPanelCollapsed: (collapsed) => {
+    try {
+      localStorage.setItem(CHAT_PANEL_COLLAPSED_KEY, String(collapsed))
+    } catch {}
+    set({ chatPanelCollapsed: collapsed })
+  },
+  setChatPanelWidth: (width) => {
+    const clamped = Math.max(CHAT_PANEL_MIN_WIDTH, Math.min(CHAT_PANEL_MAX_WIDTH, width))
+    try {
+      localStorage.setItem(CHAT_PANEL_WIDTH_KEY, String(clamped))
+    } catch {}
+    set({ chatPanelWidth: clamped })
   },
 
   iconCustomizationVersion: 0,
