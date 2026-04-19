@@ -163,7 +163,11 @@ export function ActivityTimeline() {
 
   return (
     <TooltipProvider>
-      <div ref={containerRef} className="border-b border-border overflow-hidden" style={{ height: timelineHeight }}>
+      <div
+        ref={containerRef}
+        className="border-b border-border overflow-hidden"
+        style={{ height: timelineHeight }}
+      >
         <div className="flex items-center justify-between px-3 py-1 border-b border-border/50">
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground font-medium">Activity</span>
@@ -232,7 +236,10 @@ export function ActivityTimeline() {
           style={{ height: timelineHeight - 32 }}
         >
           {rewindMode ? (
-            <TimelineRewind events={frozenEvents || events || []} agents={frozenAgentsRef.current} />
+            <TimelineRewind
+              events={frozenEvents || events || []}
+              agents={frozenAgentsRef.current}
+            />
           ) : (
             <>
               {flatAgents.map(({ agent, isSubagent }) => (
@@ -258,8 +265,9 @@ export function ActivityTimeline() {
         </div>
 
         <div
-          className="h-1 cursor-row-resize hover:bg-primary/20 active:bg-primary/30"
+          className="h-1.5 cursor-row-resize bg-border/40 hover:bg-primary/30 active:bg-primary/50 transition-colors"
           onMouseDown={handleMouseDown}
+          title="Drag to resize"
         />
       </div>
     </TooltipProvider>

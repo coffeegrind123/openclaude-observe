@@ -1,5 +1,14 @@
 import { useState } from 'react'
-import { Scissors, ArrowDown, Zap, User, ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
+import {
+  Scissors,
+  ArrowDown,
+  Zap,
+  User,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Check,
+} from 'lucide-react'
 import { ChatMarkdown } from '@/components/chat-feed/chat-markdown'
 import type { CompactionInfo } from '@/hooks/use-compactions'
 import type { ParsedEvent } from '@/types'
@@ -120,11 +129,7 @@ export function CompactionBoundary({ event, info, variant }: CompactionBoundaryP
             />
           )}
           {info?.compactSummary && (
-            <ExpandableSection
-              label="Summary"
-              text={info.compactSummary}
-              previewChars={140}
-            />
+            <ExpandableSection label="Summary" text={info.compactSummary} previewChars={140} />
           )}
         </div>
 

@@ -121,10 +121,25 @@ export function Sidebar({ connected }: SidebarProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7"
+          className="h-7 w-7 relative"
           onClick={() => setSettingsOpen(true)}
+          title={
+            versionMismatch
+              ? 'Settings — server/client version mismatch'
+              : outdated
+                ? 'Settings — update available'
+                : 'Settings'
+          }
         >
           <Settings className="h-3.5 w-3.5" />
+          {(versionMismatch || outdated) && (
+            <span
+              className={cn(
+                'absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full ring-1 ring-sidebar',
+                versionMismatch ? 'bg-red-500' : 'bg-orange-500',
+              )}
+            />
+          )}
         </Button>
         {!sidebarCollapsed && (
           <button
@@ -165,8 +180,9 @@ export function Sidebar({ connected }: SidebarProps) {
       {/* Resize handle */}
       {!sidebarCollapsed && (
         <div
-          className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/30"
+          className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize bg-border/40 hover:bg-primary/30 active:bg-primary/50 transition-colors"
           onMouseDown={handleMouseDown}
+          title="Drag to resize"
         />
       )}
     </div>

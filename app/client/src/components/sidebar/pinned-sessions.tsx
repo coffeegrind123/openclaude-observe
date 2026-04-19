@@ -1,12 +1,18 @@
 import { useCallback } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
-import { Pin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/ui-store'
 import { api } from '@/lib/api-client'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { SessionItem } from './session-item'
 import type { Session } from '@/types'
+
+function pinnedInitials(session: Session): string {
+  const source = session.slug || session.id
+  // Strip leading non-alphanum so a UUID like 0a-... still shows letters when possible
+  const cleaned = source.replace(/^[^a-z0-9]+/i, '')
+  return cleaned.slice(0, 2).toUpperCase() || source.slice(0, 2).toUpperCase()
+}
 
 export function PinnedSessions({ collapsed }: { collapsed: boolean }) {
   const pinnedIds = useUIStore((s) => s.pinnedSessionIds)
@@ -43,24 +49,30 @@ export function PinnedSessions({ collapsed }: { collapsed: boolean }) {
   if (collapsed) {
     return (
       <div className="px-1 py-1 space-y-1">
-        {sessions.map((session) => (
-          <Tooltip key={session.id}>
-            <TooltipTrigger asChild>
-              <button
-                className={cn(
-                  'flex h-8 w-8 mx-auto items-center justify-center rounded-md text-xs cursor-pointer',
-                  selectedSessionId === session.id
-                    ? 'bg-primary/10 text-primary border border-primary/30'
-                    : 'text-muted-foreground hover:bg-accent',
-                )}
-                onClick={() => selectSession(session)}
-              >
-                <Pin className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">{session.slug || session.id.slice(0, 8)}</TooltipContent>
-          </Tooltip>
-        ))}
+        {sessions.map((session) => {
+          const isActive = session.status === 'active'
+          const isSelected = selectedSessionId === session.id
+          return (
+            <Tooltip key={session.id}>
+              <TooltipTrigger asChild>
+                <button
+                  className={cn(
+                    'flex h-8 w-8 mx-auto items-center justify-center rounded-md text-[10px] font-semibold tracking-tight cursor-pointer border',
+                    isSelected
+                      ? 'bg-primary/10 text-primary border-primary/40'
+                      : isActive
+                        ? 'border-green-500/40 text-green-600 dark:text-green-400 hover:bg-accent'
+                        : 'border-transparent text-muted-foreground hover:bg-accent',
+                  )}
+                  onClick={() => selectSession(session)}
+                >
+                  {pinnedInitials(session)}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">{session.slug || session.id.slice(0, 8)}</TooltipContent>
+            </Tooltip>
+          )
+        })}
       </div>
     )
   }

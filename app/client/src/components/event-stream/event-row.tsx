@@ -59,20 +59,20 @@ const LABEL_MAP: Record<string, string> = {
   WorktreeCreate: 'Worktree',
   WorktreeRemove: 'Worktree',
   LLMGeneration: 'LLM',
-  DaemonStart: 'Daemon\u2191',
-  DaemonStop: 'Daemon\u2193',
-  DaemonHeartbeat: 'Heartbeat',
+  DaemonStart: 'Start',
+  DaemonStop: 'Stop',
+  DaemonHeartbeat: 'Beat',
   PipeRoleAssigned: 'PipeRole',
-  PipeAttach: 'Pipe\u2194',
-  PipeDetach: 'Pipe\u2715',
+  PipeAttach: 'Attach',
+  PipeDetach: 'Detach',
   PipePromptRouted: 'Route',
   PipePermissionForward: 'PipePerm',
   PipeLanPeerDiscovered: 'LANPeer',
   CoordinatorDispatch: 'Dispatch',
   CoordinatorResult: 'Result',
-  BridgeConnected: 'Bridge\u2191',
-  BridgeDisconnected: 'Bridge\u2193',
-  BridgeWorkReceived: 'BridgeWork',
+  BridgeConnected: 'Connect',
+  BridgeDisconnected: 'Disconn',
+  BridgeWorkReceived: 'BrgWork',
   SuperModeToggle: 'Super',
   CompactionRun: 'Compact',
   CostUpdate: 'Cost',
@@ -91,8 +91,7 @@ function llmSummary(payload: Record<string, unknown>): string | null {
   // claude-sonnet-4-6) over the request model so the row label matches
   // what actually ran.
   const model =
-    (payload.actual_model as string | undefined) ??
-    (payload.model as string | undefined)
+    (payload.actual_model as string | undefined) ?? (payload.model as string | undefined)
   const inputTokens = payload.input_tokens as number | undefined
   const outputTokens = payload.output_tokens as number | undefined
   const cacheRead = payload.cache_read_tokens as number | undefined
@@ -185,9 +184,14 @@ export const EventRow = memo(function EventRow({
             : agentColors.border,
         )}
         onClick={handleRowClick}
+        onAuxClick={(e) => {
+          // Some browsers don't fire onClick for middle-click; onAuxClick covers it.
+          if (e.button === 1) handleRowClick(e)
+        }}
         onMouseDown={(e) => {
           if (e.button === 1) e.preventDefault()
         }}
+        title="Click to expand · Ctrl/⌘-click or middle-click to select"
       >
         {showAgentLabel && (
           <div
@@ -252,9 +256,7 @@ export const EventRow = memo(function EventRow({
             </span>
           )}
           {isTool && event.toolName?.startsWith('mcp__') && (
-            <span className="text-[10px] text-muted-foreground/60 shrink-0">
-              {event.toolName}
-            </span>
+            <span className="text-[10px] text-muted-foreground/60 shrink-0">{event.toolName}</span>
           )}
           {isLLM ? (
             <>

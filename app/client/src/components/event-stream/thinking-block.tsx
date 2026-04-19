@@ -24,7 +24,12 @@ function estimateTokens(text: string): number {
 function truncatedFirstLine(text: string, max = 140): string {
   const firstParagraph = text.split('\n\n')[0]
   if (firstParagraph.length <= max) return firstParagraph.replace(/\s+/g, ' ').trim()
-  return firstParagraph.slice(0, max - 1).replace(/\s+/g, ' ').trim() + '…'
+  return (
+    firstParagraph
+      .slice(0, max - 1)
+      .replace(/\s+/g, ' ')
+      .trim() + '…'
+  )
 }
 
 export function ThinkingBlock({ thinkingText, defaultOpen = false }: ThinkingBlockProps) {

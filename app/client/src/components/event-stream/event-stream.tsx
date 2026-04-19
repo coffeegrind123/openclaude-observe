@@ -31,6 +31,9 @@ export function EventStream() {
     selectedEventId,
     rewindMode,
     reverseFeed,
+    clearAllFilters,
+    setSearchQuery,
+    setSelectedAgentIds,
   } = useUIStore()
 
   // Defer filter values so the UI stays responsive during filter changes
@@ -403,10 +406,18 @@ export function EventStream() {
               <span className="text-xs text-muted-foreground">
                 Events: <span className="text-foreground">{filteredEvents.length}</span>
                 {showRawCount && (
-                  <span className="text-muted-foreground/70 dark:text-muted-foreground/50">
-                    {' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearAllFilters()
+                      setSearchQuery('')
+                      setSelectedAgentIds([])
+                    }}
+                    title="Clear filters to show all events"
+                    className="ml-1 text-muted-foreground/70 dark:text-muted-foreground/50 underline-offset-2 hover:underline hover:text-foreground cursor-pointer"
+                  >
                     / {rawCount} raw
-                  </span>
+                  </button>
                 )}
               </span>
               {firstTs && lastTs && (

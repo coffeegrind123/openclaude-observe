@@ -60,12 +60,11 @@ export function ProjectPage() {
         </Tooltip>
       </div>
       <div className="flex-1 overflow-y-auto">
-        {isLoading && (
+        {isLoading ? (
           <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
             Loading...
           </div>
-        )}
-        {!isLoading && sorted.length > 0 && (
+        ) : (
           <SessionList sessions={sorted} sortBy={sessionSortOrder} />
         )}
       </div>

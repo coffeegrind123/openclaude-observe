@@ -485,8 +485,7 @@ function ToolDetail({
     // claude-sonnet-4-6 → glm-4.6, OpenRouter, LiteLLM) so the label
     // shows what actually ran, not what was requested.
     const model =
-      (payload.actual_model as string | undefined) ??
-      (payload.model as string | undefined)
+      (payload.actual_model as string | undefined) ?? (payload.model as string | undefined)
     const provider = payload.provider as string | undefined
     const inputTokens = (payload.input_tokens as number) || 0
     const outputTokens = (payload.output_tokens as number) || 0

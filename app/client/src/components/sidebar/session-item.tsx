@@ -114,9 +114,8 @@ export function SessionItem({
         >
           <div className="flex items-center gap-1.5 text-xs">
             {needsAttention && !isEditing ? (
-              // Swap: bell replaces the status dot / pin affordance until
-              // the user acknowledges it. Clicking dismisses and the
-              // normal dot/pin returns.
+              // Bell replaces the status dot until the user acknowledges
+              // it. Clicking dismisses and the normal dot returns.
               <NotificationIndicator
                 compact
                 className="h-3 w-3 shrink-0"
@@ -126,35 +125,13 @@ export function SessionItem({
                 }}
               />
             ) : (
-              <span
-                className="relative h-3 w-3 shrink-0 flex items-center justify-center"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onTogglePin()
-                }}
-              >
+              <span className="relative h-3 w-3 shrink-0 flex items-center justify-center pointer-events-none">
                 <span
                   className={cn(
                     'h-2 w-2 rounded-full',
-                    isPinned ? 'hidden' : 'group-hover:hidden',
                     session.status === 'active'
                       ? 'bg-green-500'
                       : 'bg-muted-foreground/60 dark:bg-muted-foreground/40',
-                  )}
-                />
-                <Pin
-                  fill={isPinned ? 'currentColor' : 'none'}
-                  className={cn(
-                    'h-3 w-3 absolute inset-0 cursor-pointer transition-opacity',
-                    isPinned
-                      ? session.status === 'active'
-                        ? 'opacity-80 text-green-500 hover:fill-none'
-                        : 'opacity-60 text-primary hover:fill-none'
-                      : 'opacity-0 group-hover:opacity-100',
-                    !isPinned &&
-                      (session.status === 'active'
-                        ? 'text-green-500/60 hover:text-green-500'
-                        : 'text-muted-foreground/50 hover:text-muted-foreground'),
                   )}
                 />
               </span>
@@ -214,18 +191,36 @@ export function SessionItem({
               </span>
             )}
             {!isEditing && (
-              <Pencil
-                data-testid={`edit-session-${session.id}`}
-                className="h-3 w-3 shrink-0 ml-auto hidden group-hover:block text-muted-foreground/50 hover:text-muted-foreground transition-opacity cursor-pointer"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (onEdit) {
-                    onEdit()
-                  } else {
-                    startEditing(e)
-                  }
-                }}
-              />
+              <div className="flex items-center gap-1 shrink-0 ml-auto">
+                <Pencil
+                  data-testid={`edit-session-${session.id}`}
+                  className="h-3 w-3 hidden group-hover:block text-muted-foreground/50 hover:text-muted-foreground transition-opacity cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (onEdit) {
+                      onEdit()
+                    } else {
+                      startEditing(e)
+                    }
+                  }}
+                />
+                <button
+                  aria-label={isPinned ? 'Unpin session' : 'Pin session'}
+                  title={isPinned ? 'Unpin session' : 'Pin session'}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onTogglePin()
+                  }}
+                  className={cn(
+                    'transition-opacity cursor-pointer',
+                    isPinned
+                      ? 'opacity-80 text-primary hover:opacity-100'
+                      : 'hidden group-hover:block text-muted-foreground/60 hover:text-muted-foreground',
+                  )}
+                >
+                  <Pin className="h-3 w-3" fill={isPinned ? 'currentColor' : 'none'} />
+                </button>
+              </div>
             )}
           </div>
           {cwd && showCwd && (

@@ -218,9 +218,7 @@ describe('buildChatEntries — thinking correlation', () => {
     const entries = buildChatEntries(events)
     const subStop = entries.find((e) => e.event.id === 3)!
     const mainStop = entries.find((e) => e.event.id === 5)!
-    expect((subStop.message as { thinking?: string }).thinking).toBe(
-      'subagent internal thinking',
-    )
+    expect((subStop.message as { thinking?: string }).thinking).toBe('subagent internal thinking')
     // Main stop must NOT include the subagent's thinking.
     expect((mainStop.message as { thinking?: string }).thinking).toBe('main thinking')
   })

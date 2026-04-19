@@ -178,8 +178,10 @@ export function AgentCombobox() {
                             )
                           })()}
                       </div>
-                      <div className="flex items-center gap-2 shrink-0 text-[10px] text-muted-foreground">
-                        <span>{formatStartTime(agent.firstEventAt ?? 0)}</span>
+                      <div
+                        className="flex items-center gap-2 shrink-0 text-[10px] text-muted-foreground"
+                        title={`Started ${formatStartTime(agent.firstEventAt ?? 0)}`}
+                      >
                         <span>{formatRuntime(agent)}</span>
                         <Badge variant="outline" className="text-[9px] h-3.5 px-1">
                           {agent.eventCount}

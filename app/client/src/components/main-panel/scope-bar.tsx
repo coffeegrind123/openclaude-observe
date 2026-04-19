@@ -1,5 +1,6 @@
 import { useUIStore } from '@/stores/ui-store'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { LogsModal } from './logs-modal'
 import { AgentCombobox } from './agent-combobox'
 import {
@@ -32,61 +33,85 @@ export function ScopeBar() {
 
       <div className="flex items-center gap-1 shrink-0">
         {/* Follow — icon mirrors feed direction (top vs bottom) */}
-        <Button
-          variant={autoFollow ? 'default' : 'ghost'}
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => setAutoFollow(!autoFollow)}
-          title={autoFollow ? 'Auto-follow enabled' : 'Auto-follow disabled'}
-        >
-          {reverseFeed ? (
-            <ArrowUpToLine className="h-3.5 w-3.5" />
-          ) : (
-            <ArrowDownToLine className="h-3.5 w-3.5" />
-          )}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={autoFollow ? 'default' : 'ghost'}
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setAutoFollow(!autoFollow)}
+              aria-label={autoFollow ? 'Disable auto-follow' : 'Enable auto-follow'}
+            >
+              {reverseFeed ? (
+                <ArrowUpToLine className="h-3.5 w-3.5" />
+              ) : (
+                <ArrowDownToLine className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {autoFollow ? 'Auto-follow on' : 'Auto-follow off'}
+          </TooltipContent>
+        </Tooltip>
         {/* Expand/Collapse */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => {
-            if (expandedEventIds.size > 0) {
-              collapseAllEvents()
-            } else {
-              requestExpandAll()
-            }
-          }}
-          title={expandedEventIds.size > 0 ? 'Collapse all' : 'Expand all'}
-        >
-          {expandedEventIds.size > 0 ? (
-            <ChevronsDownUp className="h-3.5 w-3.5" />
-          ) : (
-            <ChevronsUpDown className="h-3.5 w-3.5" />
-          )}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => {
+                if (expandedEventIds.size > 0) {
+                  collapseAllEvents()
+                } else {
+                  requestExpandAll()
+                }
+              }}
+              aria-label={expandedEventIds.size > 0 ? 'Collapse all events' : 'Expand all events'}
+            >
+              {expandedEventIds.size > 0 ? (
+                <ChevronsDownUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronsUpDown className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {expandedEventIds.size > 0 ? 'Collapse all' : 'Expand all'}
+          </TooltipContent>
+        </Tooltip>
         {/* Logs */}
         <LogsModal />
         {/* Stats */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-          onClick={() => setEditingSessionId(selectedSessionId, 'stats')}
-          title="Session stats"
-        >
-          <BarChart3 className="h-3.5 w-3.5" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              onClick={() => setEditingSessionId(selectedSessionId, 'stats')}
+              aria-label="Session stats"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Session stats</TooltipContent>
+        </Tooltip>
         {/* Edit */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-          onClick={() => setEditingSessionId(selectedSessionId)}
-          title="Edit session"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              onClick={() => setEditingSessionId(selectedSessionId)}
+              aria-label="Edit session"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Edit session</TooltipContent>
+        </Tooltip>
       </div>
     </div>
   )
