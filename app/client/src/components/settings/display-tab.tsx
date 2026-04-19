@@ -5,6 +5,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 export function DisplayTab() {
   const reverseFeed = useUIStore((s) => s.reverseFeed)
   const setReverseFeed = useUIStore((s) => s.setReverseFeed)
+  const notificationsEnabled = useUIStore((s) => s.notificationsEnabled)
+  const setNotificationsEnabled = useUIStore((s) => s.setNotificationsEnabled)
   const { mode, setMode } = useTheme()
 
   return (
@@ -53,6 +55,27 @@ export function DisplayTab() {
             <p className="text-xs text-muted-foreground">
               New events spawn at the top of the feed and existing events fall downwards. When
               disabled, new events append to the bottom.
+            </p>
+          </div>
+        </label>
+      </section>
+
+      <section className="space-y-3">
+        <header>
+          <h3 className="text-sm font-medium">Sidebar</h3>
+        </header>
+        <label className="flex items-start gap-3 cursor-pointer select-none">
+          <Checkbox
+            checked={notificationsEnabled}
+            onCheckedChange={(v) => setNotificationsEnabled(v === true)}
+            className="mt-0.5"
+          />
+          <div className="space-y-0.5">
+            <div className="text-sm">Show notification alerts</div>
+            <p className="text-xs text-muted-foreground">
+              Highlights sessions (and their parent projects) in the sidebar when an agent emits a
+              Notification event and is waiting for your input. Click the bell to dismiss it for
+              that session.
             </p>
           </div>
         </label>

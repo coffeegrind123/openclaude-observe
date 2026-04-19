@@ -108,6 +108,11 @@ interface UIState {
   autoFollow: boolean
   setAutoFollow: (enabled: boolean) => void
 
+  // Notification alerts — when off, the sidebar bells never appear.
+  notificationsEnabled: boolean
+  setNotificationsEnabled: (enabled: boolean) => void
+
+
   // Rewind mode: freezes the event/timeline view at a snapshot of events
   rewindMode: boolean
   frozenEvents: ParsedEvent[] | null
@@ -345,6 +350,13 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   autoFollow: true,
   setAutoFollow: (enabled) => set({ autoFollow: enabled }),
+
+  notificationsEnabled: localStorage.getItem('agents-observe-notifications') !== 'off',
+  setNotificationsEnabled: (enabled) => {
+    localStorage.setItem('agents-observe-notifications', enabled ? 'on' : 'off')
+    set({ notificationsEnabled: enabled })
+  },
+
 
   rewindMode: false,
   frozenEvents: null,

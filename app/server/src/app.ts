@@ -15,6 +15,7 @@ import adminRouter from './routes/admin'
 import healthRouter from './routes/health'
 import consumerRouter from './routes/consumer'
 import callbacksRouter from './routes/callbacks'
+import notificationsRouter from './routes/notifications'
 import changelogRouter from './routes/changelog'
 import instancesRouter from './routes/instances'
 
@@ -51,6 +52,7 @@ export function createApp(
   app.route('/api', healthRouter)
   app.route('/api', consumerRouter)
   app.route('/api', callbacksRouter)
+  app.route('/api', notificationsRouter)
   app.route('/api', changelogRouter)
   app.route('/api', instancesRouter)
 
