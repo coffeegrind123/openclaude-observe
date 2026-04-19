@@ -204,11 +204,12 @@ Since 14.04.2026, this project uses **date-based versioning** (`DD.MM.YYYY`) plu
 
 ## Related projects
 
-- [OpenClaude](https://github.com/coffeegrind123/openclaude) — the upstream agent this dashboard observes
-- [agents-observe](https://github.com/simple10/agents-observe) — the original Claude Code hooks-based observability project this fork grew out of
-- [Agent Super Spy](https://github.com/simple10/agent-super-spy) — full observability stack for agents, local or remote
-- [Multi-Agent Observability System](https://github.com/disler/claude-code-hooks-multi-agent-observability) — inspired the original project
+- [OpenClaude](https://github.com/coffeegrind123/openclaude) — the agent this dashboard observes
 - [agent-chat](https://github.com/DheerG/agent-chat) — inspired the split event/chat view
+
+## Acknowledgements
+
+This project was forked from [simple10/agents-observe](https://github.com/simple10/agents-observe) (a Claude Code hooks observability dashboard, itself inspired by [disler/claude-code-hooks-multi-agent-observability](https://github.com/disler/claude-code-hooks-multi-agent-observability)) and has since been rewritten around OpenClaude's native OTel integration.
 
 ## License
 

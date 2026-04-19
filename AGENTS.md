@@ -29,8 +29,8 @@ Restart Claude Code. The server auto-starts as a Docker container and the dashbo
 Requires [just](https://github.com/casey/just), [Node.js](https://nodejs.org/), and [Docker](https://www.docker.com/).
 
 ```bash
-git clone https://github.com/simple10/agents-observe.git
-cd agents-observe
+git clone https://github.com/coffeegrind123/openclaude-observe.git
+cd openclaude-observe
 just install   # install dependencies
 just start     # start server via Docker
 ```
@@ -58,7 +58,7 @@ Key points:
 - **Run `just check` before every commit** — runs all tests + formatting
 - Use `just` commands for all dev tasks (not `npm` directly) — see `just --list`
 - Worktrees need a `.env` with unique ports (see DEVELOPMENT.md § Worktrees)
-- All env vars are centralized in `hooks/scripts/lib/config.mjs` — never read `process.env` elsewhere
+- All server env vars are centralized in `app/server/src/config.ts` — never read `process.env` elsewhere
 - TypeScript throughout, kebab-case file names
 
 ## Commit Convention

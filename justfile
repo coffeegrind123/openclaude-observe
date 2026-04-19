@@ -1,10 +1,8 @@
-# Agents Observe
+# OpenClaude Observe
 # Usage: just <recipe>
 #
 # AGENTS_OBSERVE_SERVER_PORT & AGENTS_OBSERVE_DEV_CLIENT_PORT are read from .env
-# Allows for overriding the default ports
-# Server port is used for both local dev & docker starts
-# Client port is only for local dev
+# to override the defaults (4981 / 5174).
 
 set dotenv-load := true
 set export := true
@@ -15,44 +13,48 @@ dev_client_port := env("AGENTS_OBSERVE_DEV_CLIENT_PORT", "5174")
 project_root := justfile_directory()
 server := project_root / "app" / "server"
 client := project_root / "app" / "client"
-cli_script := project_root / "hooks" / "scripts" / "observe_cli.mjs"
 
 # List available recipes
 default:
     @just --list
 
+# ─── Development ─────────────────────────────────────────
+
+# Install server + client dependencies
+install:
+    cd {{ server }} && npm install
+    cd {{ client }} && npm install
+
+# Start server + client in dev mode (hot reload)
+dev:
+    AGENTS_OBSERVE_RUNTIME=dev AGENTS_OBSERVE_SHUTDOWN_DELAY_MS=${AGENTS_OBSERVE_SHUTDOWN_DELAY_MS:-0} node {{ project_root }}/start.mjs
+
+# Start server locally without Docker (production-style)
+start-local:
+    AGENTS_OBSERVE_RUNTIME=local node {{ project_root }}/start.mjs
+
 # ─── Docker ─────────────────────────────────────────────
 
 # Build the Docker image locally
 build:
-    docker build -t agents-observe:local .
+    docker build -t openclaude-observe:local .
 
-# Start server (same path as plugin MCP)
+# Start server via docker compose
 start:
-    node {{ cli_script }} start
+    docker compose up -d openclaude-observe
     @just open
 
-# Start the server locally without docker
-start-local:
-    npm run start
-
-# Stop server
+# Stop the docker compose stack
 stop:
-    node {{ cli_script }} stop
+    docker compose down
 
-# Restart server
+# Restart the docker compose stack
 restart:
-    node {{ cli_script }} restart
+    docker compose restart openclaude-observe
 
-# View container logs (follow)
+# Follow docker container logs
 logs:
-    node {{ cli_script }} logs -f
-
-# ─── Development ─────────────────────────────────────────
-
-# Start local server + client in dev mode (hot reload)
-dev:
-    AGENTS_OBSERVE_RUNTIME=dev AGENTS_OBSERVE_SHUTDOWN_DELAY_MS=${AGENTS_OBSERVE_SHUTDOWN_DELAY_MS:-0} node {{ project_root }}/start.mjs
+    docker compose logs -f openclaude-observe
 
 # ─── Testing ────────────────────────────────────────────
 
@@ -60,37 +62,23 @@ dev:
 test:
     npm test
 
-# Send a test event to the server
-test-event:
-    @echo '{"session_id":"test-1234","hook_event_name":"SessionStart","cwd":"/tmp","source":"new"}' \
-      | AGENTS_OBSERVE_PROJECT_NAME=test-project node {{ project_root }}/hooks/scripts/observe_cli.mjs hook
-    @echo "Event sent"
-
-# ─── Database ────────────────────────────────────────────
-
-# Delete the events database (stops server, deletes, restarts)
-db-reset:
-    node {{ cli_script }} db-reset
-
-# ─── Utilities ───────────────────────────────────────────
-
-# Check server health
-health:
-    node {{ cli_script }} health
-
-# Run the CLI with a command (hook, health, start, stop, restart)
-cli *args:
-    node {{ cli_script }} {{ args }}
-
-# Open the dashboard in browser
-open port=port:
-    open http://localhost:{{ port }}
-
-# Run all tests + format (run before every commit)
+# Run tests, format, and rebuild the client (run before every commit)
 check:
     npm test
     npm run fmt
     cd app/client && npm install && npm run build
+
+# ─── Database ───────────────────────────────────────────
+
+# Delete the SQLite database (creates a .bak backup if ALLOW_DB_RESET=backup)
+db-reset:
+    rm -f {{ project_root }}/data/observe.db
+
+# ─── Utilities ──────────────────────────────────────────
+
+# Check server health
+health:
+    curl -sf http://localhost:{{ port }}/api/health | (command -v jq >/dev/null && jq . || cat)
 
 # Show client bundle size visualizer in browser
 bundle-visualizer:
@@ -100,11 +88,12 @@ bundle-visualizer:
 fmt:
     npm run fmt
 
-# Tag and push a release (bumps versions, tests, builds, tags, pushes)
-release version:
-    {{ project_root }}/scripts/release.sh {{ version }}
+# Open the dashboard in browser
+open port=port:
+    open http://localhost:{{ port }}
 
-# Install all dependencies
-install:
-    cd {{ server }} && npm install
-    cd {{ client }} && npm install
+# ─── Release ────────────────────────────────────────────
+
+# Tag and push a release (bumps version, builds, tags, pushes)
+release:
+    {{ project_root }}/scripts/release.sh

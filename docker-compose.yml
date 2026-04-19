@@ -1,9 +1,6 @@
-# Example Docker Compose Config
-# Start with `docker compose up`
-#
-# This file is not used by the claude plugin or local dev scripts.
-# It's here for reference and quick testing.
-# Recommended to use the `just start` and `just dev` commands instead.
+# Docker Compose config for OpenClaude Observe
+# Start with `docker compose up openclaude-observe` (or `just start`).
+# For local dev with hot reload, use `just dev` instead.
 #
 services:
   openclaude-observe:

@@ -38,7 +38,7 @@ echo "Found $COMMIT_COUNT commits since $PREV_TAG"
 
 # Use Claude to write the changelog entry
 CHANGELOG_ENTRY=$(claude -p "$(cat <<PROMPT
-Write a CHANGELOG.md entry for version $VERSION of agents-observe.
+Write a CHANGELOG.md entry for version $VERSION of openclaude-observe.
 
 Here are the commits since the last release ($PREV_TAG):
 
