@@ -1,5 +1,6 @@
-import { memo } from 'react'
-import { Scissors, ArrowDown, Zap, User } from 'lucide-react'
+import { useState } from 'react'
+import { Scissors, ArrowDown, Zap, User, ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
+import { ChatMarkdown } from '@/components/chat-feed/chat-markdown'
 import type { CompactionInfo } from '@/hooks/use-compactions'
 import type { ParsedEvent } from '@/types'
 
@@ -15,11 +16,7 @@ function formatTokens(n: number): string {
   return n.toLocaleString()
 }
 
-export const CompactionBoundary = memo(function CompactionBoundary({
-  event,
-  info,
-  variant,
-}: CompactionBoundaryProps) {
+export function CompactionBoundary({ event, info, variant }: CompactionBoundaryProps) {
   // The PreCompact row carries the headline card; PostCompact just shows a thin
   // closing rule so the pair reads as one unit.
   if (variant === 'post') {
@@ -97,10 +94,19 @@ export const CompactionBoundary = memo(function CompactionBoundary({
             <CompactionBar before={tokensBefore} after={tokensAfter} />
           )}
 
+          {info?.customInstructions && (
+            <ExpandableSection
+              label="Custom instructions"
+              text={info.customInstructions}
+              previewChars={90}
+            />
+          )}
           {info?.compactSummary && (
-            <div className="mt-1.5 text-[10px] text-muted-foreground line-clamp-2">
-              {info.compactSummary}
-            </div>
+            <ExpandableSection
+              label="Summary"
+              text={info.compactSummary}
+              previewChars={140}
+            />
           )}
         </div>
 
@@ -115,7 +121,91 @@ export const CompactionBoundary = memo(function CompactionBoundary({
       </div>
     </div>
   )
-})
+}
+
+/**
+ * Collapsible text block for compaction summary / custom instructions.
+ * Closed: single-line preview with a leading chevron; click anywhere on the
+ * row to expand. Open: full markdown-rendered content in a bordered scrollable
+ * box with a copy button.
+ */
+function ExpandableSection({
+  label,
+  text,
+  previewChars,
+}: {
+  label: string
+  text: string
+  previewChars: number
+}) {
+  const [open, setOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const firstLine = text.replace(/\s+/g, ' ').trim()
+  const preview =
+    firstLine.length > previewChars ? firstLine.slice(0, previewChars - 1) + '…' : firstLine
+  const lineCount = text.split('\n').length
+  const charCount = text.length
+  const tokens = Math.max(1, Math.ceil(charCount / 4))
+  const tokLabel = tokens >= 1000 ? `~${(tokens / 1000).toFixed(1)}k` : `~${tokens}`
+
+  const copy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {}
+  }
+
+  return (
+    <div className="mt-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="group w-full flex items-start gap-1 text-left text-[10px] hover:bg-amber-500/[0.08] rounded px-1 py-0.5 cursor-pointer"
+      >
+        {open ? (
+          <ChevronDown className="h-2.5 w-2.5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+        ) : (
+          <ChevronRight className="h-2.5 w-2.5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+        )}
+        <span className="shrink-0 font-medium text-amber-700 dark:text-amber-400">{label}</span>
+        <span className="shrink-0 text-muted-foreground/70 tabular-nums">
+          {tokLabel}t · {lineCount}l
+        </span>
+        {!open && (
+          <span className="text-muted-foreground truncate flex-1 min-w-0 italic">{preview}</span>
+        )}
+      </button>
+
+      {open && (
+        <div className="ml-3.5 mt-1 rounded border border-amber-500/30 bg-background/40">
+          <div className="flex items-center gap-2 px-2 py-1 border-b border-amber-500/20 bg-amber-500/[0.05]">
+            <span className="text-[9px] uppercase tracking-wider text-amber-700 dark:text-amber-400">
+              {label}
+            </span>
+            <span className="text-[9px] text-muted-foreground/70 tabular-nums">
+              {charCount.toLocaleString()} chars · {lineCount} lines
+            </span>
+            <button
+              type="button"
+              onClick={copy}
+              className="ml-auto flex items-center gap-1 text-[9px] text-muted-foreground/70 hover:text-foreground transition-colors cursor-pointer"
+              title="Copy"
+            >
+              {copied ? <Check className="h-2.5 w-2.5" /> : <Copy className="h-2.5 w-2.5" />}
+              {copied ? 'copied' : 'copy'}
+            </button>
+          </div>
+          <div className="px-3 py-2 text-[11px] text-foreground/90 max-h-[500px] overflow-auto">
+            <ChatMarkdown text={text} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function CompactionBar({ before, after }: { before: number; after: number }) {
   const afterPct = before > 0 ? Math.min(100, (after / before) * 100) : 0
