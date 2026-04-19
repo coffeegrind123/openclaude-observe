@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { getAgentColorById, getAgentDisplayName } from '@/lib/agent-utils'
 import { useUIStore } from '@/stores/ui-store'
@@ -12,6 +12,9 @@ import {
   SquareArrowOutUpRight,
   SquareArrowDownLeft,
   PauseCircle,
+  Brain,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 import type { Agent, ParsedEvent } from '@/types'
 import type { ChatEntry } from '@/lib/chat-events'
@@ -22,6 +25,54 @@ interface ChatMessageProps {
   agentMap: Map<string, Agent>
   agentColorMap: Map<string, number>
   showAgentLabel: boolean
+}
+
+/**
+ * Collapsible thinking preface for assistant/subagent-stop bubbles. Hidden by
+ * default — click the pill to reveal the chain-of-thought inline, styled as
+ * a muted indented block above the assistant text.
+ */
+function ThinkingPeek({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const tokens = Math.max(1, Math.ceil(text.length / 4))
+  const tokLabel = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens)
+  const passes = text.split(/\n\n---\n\n/).filter((s) => s.trim().length > 0)
+  return (
+    <div className="mb-1">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen((v) => !v)
+        }}
+        className="inline-flex items-center gap-1 rounded bg-purple-500/10 hover:bg-purple-500/15 border border-purple-500/30 px-1.5 py-[1px] text-[10px] font-medium text-purple-700 dark:text-purple-300 transition-colors cursor-pointer"
+        title="Show thinking"
+      >
+        {open ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
+        <Brain className="h-2.5 w-2.5" />
+        thinking · {tokLabel}t
+        {passes.length > 1 && <span className="opacity-70">· {passes.length}×</span>}
+      </button>
+      {open && (
+        <div className="mt-1 pl-2 border-l-2 border-purple-500/30 text-[10px] text-muted-foreground italic space-y-2 max-h-[300px] overflow-auto">
+          {passes.map((pass, i) => (
+            <div
+              key={i}
+              className="whitespace-pre-wrap break-words"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {passes.length > 1 && (
+                <div className="not-italic text-[9px] uppercase tracking-wider text-purple-600/70 dark:text-purple-400/70 mb-0.5">
+                  pass {i + 1}
+                </div>
+              )}
+              {pass}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function formatTime(ts: number): string {
@@ -156,6 +207,7 @@ export const ChatMessage = memo(function ChatMessage({
               : cn(agentColors.border, 'bg-muted/30'),
           )}
         >
+          {message.thinking && <ThinkingPeek text={message.thinking} />}
           <ChatMarkdown text={message.text} />
         </div>
       </div>
@@ -224,7 +276,20 @@ export const ChatMessage = memo(function ChatMessage({
               agentColors.border,
             )}
           >
+            {message.thinking && <ThinkingPeek text={message.thinking} />}
             <ChatMarkdown text={message.text} />
+          </div>
+        ) : message.thinking ? (
+          <div
+            className={cn(
+              'mt-1 max-w-[90%] rounded-lg border bg-card px-2.5 py-1.5 text-xs break-words overflow-hidden',
+              agentColors.border,
+            )}
+          >
+            <ThinkingPeek text={message.thinking} />
+            <div className="text-[11px] text-muted-foreground italic">
+              Subagent finished with no final message.
+            </div>
           </div>
         ) : (
           <div className="mt-1 text-[11px] text-muted-foreground italic">

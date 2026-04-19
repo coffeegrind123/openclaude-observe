@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState, useRef, useEffect } from 'react'
+import { useMemo, useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { BarChart3, ChevronDown } from 'lucide-react'
 import { api } from '@/lib/api-client'
 import {
   CATEGORY_LABELS,
   CATEGORY_COLORS,
   CATEGORY_TEXT_COLORS,
-  CONTEXT_CATEGORIES,
   type ContextCategory,
   type TurnAttribution,
 } from '@/types/context'
@@ -35,15 +35,37 @@ export function ContextBadge({ sessionId, llmEventId }: ContextBadgeProps) {
   )
 
   const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLSpanElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+
+  // Recompute the popover's absolute position whenever it opens. Using a
+  // portal with viewport coordinates keeps the popover outside the event
+  // row's <button> ancestry (so nested-button click swallowing doesn't
+  // apply) and sidesteps clipping from `overflow: hidden` ancestors.
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    setPosition({ top: rect.bottom + 4, left: rect.left })
+  }, [open])
 
   useEffect(() => {
     if (!open) return
     const onDocClick = (e: MouseEvent) => {
-      if (!popoverRef.current?.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (triggerRef.current?.contains(target)) return
+      if (popoverRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
     }
     document.addEventListener('mousedown', onDocClick)
-    return () => document.removeEventListener('mousedown', onDocClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('keydown', onKey)
+    }
   }, [open])
 
   if (!turn) return null
@@ -51,32 +73,53 @@ export function ContextBadge({ sessionId, llmEventId }: ContextBadgeProps) {
   const displayTokens = turn.inputTokens > 0 ? turn.inputTokens : turn.estimatedTokens
   if (displayTokens === 0) return null
 
+  // Trigger is a <span role="button"> (not a real <button>) because this
+  // badge appears inside the event row's outer <button>. Nested native
+  // buttons are invalid HTML — browsers collapse them and the inner click
+  // never fires. The popover itself is portalled to document.body for the
+  // same reason (its internal CategoryRow uses real <button>s).
   return (
-    <div className="relative inline-block">
-      <button
-        type="button"
+    <>
+      <span
+        ref={triggerRef}
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
         onClick={(e) => {
           e.stopPropagation()
           setOpen((v) => !v)
         }}
-        className="inline-flex items-center gap-1 rounded bg-muted/60 hover:bg-muted border border-border px-1.5 py-[1px] text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            e.stopPropagation()
+            setOpen((v) => !v)
+          }
+        }}
+        className="inline-flex items-center gap-1 rounded bg-muted/60 hover:bg-muted border border-border px-1.5 py-[1px] text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none"
         title="Context breakdown"
       >
         <BarChart3 className="h-2.5 w-2.5" />
         {formatTokens(displayTokens)} ctx
         <ChevronDown className={`h-2.5 w-2.5 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
+      </span>
 
-      {open && (
-        <div
-          ref={popoverRef}
-          onClick={(e) => e.stopPropagation()}
-          className="absolute z-50 top-full left-0 mt-1 min-w-[320px] rounded-md border border-border bg-popover shadow-lg text-popover-foreground"
-        >
-          <ContextPopover turn={turn} />
-        </div>
-      )}
-    </div>
+      {open &&
+        position &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{ top: position.top, left: position.left }}
+            className="fixed z-[1000] min-w-[320px] rounded-md border border-border bg-popover text-popover-foreground shadow-xl"
+            role="dialog"
+          >
+            <ContextPopover turn={turn} />
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
 

@@ -9,6 +9,7 @@ import { EditToolViewer } from './viewers/edit-tool-viewer'
 import { WriteToolViewer } from './viewers/write-tool-viewer'
 import { BashToolViewer } from './viewers/bash-tool-viewer'
 import { GrepToolViewer } from './viewers/grep-tool-viewer'
+import { ThinkingBlock } from './thinking-block'
 import { api } from '@/lib/api-client'
 import { getEventIcon } from '@/config/event-icons'
 import { getEventSummary } from '@/lib/event-summary'
@@ -566,6 +567,9 @@ function ToolDetail({
           )}
           <DetailRow label="Cache hit" value={`${cacheHitRatio}%`} />
         </div>
+        {typeof payload.thinking_preview === 'string' && payload.thinking_preview.length > 0 && (
+          <ThinkingBlock thinkingText={payload.thinking_preview as string} />
+        )}
         {payload.prompt_preview && (
           <DetailCode label="Prompt" value={payload.prompt_preview as string} />
         )}
