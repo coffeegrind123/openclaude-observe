@@ -16,6 +16,20 @@ function formatTokens(n: number): string {
   return n.toLocaleString()
 }
 
+// OpenClaude tags system-initiated compactions with a descriptive prefix in
+// the PreCompact hook's `custom_instructions` field (reactive PTL recovery,
+// forced auto-compact, media-size strip, etc.). Detect those so the UI can
+// label the section "Recovery reason" instead of "Custom instructions" —
+// making it obvious this is automatic context-window rescue vs. user input.
+function isRecoveryReason(text: string): boolean {
+  const t = text.trimStart()
+  return (
+    t.startsWith('Reactive PTL recovery') ||
+    t.startsWith('Forced auto-compact') ||
+    t.startsWith('Media-size recovery')
+  )
+}
+
 export function CompactionBoundary({ event, info, variant }: CompactionBoundaryProps) {
   // The PreCompact row carries the headline card; PostCompact just shows a thin
   // closing rule so the pair reads as one unit.
@@ -96,7 +110,11 @@ export function CompactionBoundary({ event, info, variant }: CompactionBoundaryP
 
           {info?.customInstructions && (
             <ExpandableSection
-              label="Custom instructions"
+              label={
+                isRecoveryReason(info.customInstructions)
+                  ? 'Recovery reason'
+                  : 'Custom instructions'
+              }
               text={info.customInstructions}
               previewChars={90}
             />
