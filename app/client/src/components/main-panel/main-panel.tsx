@@ -26,7 +26,8 @@ export function MainPanel() {
       <EventFilterBar />
       <ActivityTimeline />
       <div className="flex-1 flex overflow-hidden min-h-0">
-        <EventStream />
+        {/* key= remounts EventStream on session change so virtualizer state resets cleanly */}
+        <EventStream key={selectedSessionId} />
         <ChatPanel />
       </div>
     </div>
