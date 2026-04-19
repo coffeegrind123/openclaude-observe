@@ -1,5 +1,3 @@
-# Fresh install test harness — keep build context small and reproducible
-
 # Dependency trees (reinstalled inside the image)
 node_modules
 app/server/node_modules
@@ -30,7 +28,3 @@ bak/
 .env
 .env.local
 settings.local.json
-
-# Existing harness tarballs (the driver writes to /tmp, not the repo, but belt-and-suspenders)
-server-image.tar
-*.tar

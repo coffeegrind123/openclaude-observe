@@ -1,8 +1,6 @@
 # OpenClaude Observe
 
-Real-time observability dashboard for [OpenClaude](https://github.com/coffeegrind123/openclaude).
-
-Receives OTel trace events via native in-process integration — LLM calls, tool executions, agent hierarchy, and multi-instance topology (daemon, pipes, coordinator, bridge). Powerful filtering, searching, split event/chat view, and live visualization of multi-agent sessions.
+Real-time observability dashboard for [OpenClaude](https://github.com/coffeegrind123/openclaude). Captures every hook event and OTel span the agent emits — in-process, zero config beyond a single env var.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/coffeegrind123/openclaude-observe/main/docs/assets/dashboard2.png" alt="OpenClaude Observe Dashboard" />
@@ -13,12 +11,10 @@ Receives OTel trace events via native in-process integration — LLM calls, tool
 ```bash
 git clone https://github.com/coffeegrind123/openclaude-observe.git
 cd openclaude-observe
-docker compose up openclaude-observe
+docker compose up -d openclaude-observe
 ```
 
-Dashboard: **<http://localhost:4981>**
-
-Point OpenClaude at the server by setting `CLAUDE_OBSERVE_URL` in its environment:
+Open **<http://localhost:4981>** and point OpenClaude at the server:
 
 ```bash
 export CLAUDE_OBSERVE_URL=http://localhost:4981
@@ -26,190 +22,133 @@ export CLAUDE_OBSERVE_URL=http://localhost:4981
 
 Restart your OpenClaude session. Events stream in automatically — no plugin, no hook scripts, no MCP server.
 
-### Prerequisites
+**Prerequisites:** [Docker](https://www.docker.com/). [Node.js](https://nodejs.org/) and [just](https://github.com/casey/just) only for local dev.
 
-- [Docker](https://www.docker.com/) — the server runs as a container
-- [just](https://github.com/casey/just) and [Node.js](https://nodejs.org/) — only for local dev
+## What you see
 
-## Why observability matters
+OpenClaude is an autonomous agent — it spawns subagents, runs tools, calls the LLM, coordinates across multiple instances. The terminal shows you only the surface. Observe shows you everything underneath:
 
-When OpenClaude runs autonomously — spawning subagents, invoking tools, calling the LLM, coordinating across multiple instances — the terminal only surfaces a fraction of what's happening. Subagents are invisible. Daemon/pipe/coordinator/bridge traffic is opaque. And when something goes wrong three agents deep in parallel execution, you're left reading logs after the fact.
-
-OpenClaude Observe captures every OTel span and hook event as it happens and streams them to a live dashboard. You see exactly what each agent and instance is doing, which tools it's calling, what files it's touching, how subagents relate to their parents, and how tokens are flowing — in real time.
-
-- **Multi-agent work is opaque.** A coordinator spawns a reviewer, a test runner, and a docs agent in parallel. Without observability, you only see the final result. Here you watch each one work and catch problems as they happen.
-- **Multi-instance topology is invisible.** OpenClaude runs as a daemon with worker pipes, a coordinator, and a bridge. Observe shows each instance with a badge, tracks heartbeats, and correlates cross-instance events.
-- **Tool calls are the ground truth.** The assistant's text output is a summary. The tool calls — Bash commands, file reads, edits, grep patterns — are what it actually did.
-- **LLM usage is measurable.** Every LLMGeneration span is captured with input/output/cache tokens, TTFT, duration, and model. Session-level token rollups surface in the sidebar and via REST.
-- **Sessions are ephemeral, but patterns aren't.** Historical events let you see how agents behave over time, which tools they favor, and where they get stuck.
-
-## What you can do
-
-- **Watch events stream live** — tool calls, LLM generations, subagent lifecycles, compactions, permission prompts, stops, and 20+ OpenClaude-specific event types
-- **Split event/chat view** — event stream on the left, conversation-style feed on the right with full markdown rendering (headings, lists, code, tables, links). Panel is resizable (280–800px), collapsible, and sticky-to-newest
-- **See the full agent hierarchy** — which subagent was spawned by which parent, with timeline colors threaded throughout the UI
-- **See multi-instance topology** — daemon, pipes, coordinator, bridge events badged by `instance_id`, with filters and per-instance detail handlers
-- **Track tokens server-side** — input/output/cache/creation tokens + LLM call counts are tallied per session, shown as compact badges in the sidebar and on the Recent Sessions page, and exposed via `GET /sessions/:id/usage` with per-agent breakdowns
-- **Filter and search** — by agent, event type, tool, instance, or free text across all events
-- **Expand any event** — see the full payload, LLM token breakdown bars (in/out/cache + hit ratio), command, and result. Every field has a copy-to-clipboard button
-- **Timeline controls** — click dots to jump to events, rewind through a session frame by frame
-- **Session stats tab** — per-agent token usage and results at a glance
-- **Fork a session** — one-click `claude --fork-session --resume` command in the session modal
-- **Newest-on-top feed** — optional reverse-chronological mode (Settings → Display) where new events spawn at the top and existing events fall downward; auto-follow icon flips to indicate direction
-- **Browse historical sessions** — with human-readable slugs (e.g., "twinkly-hugging-dragon")
+- **Live event stream** — tool calls, LLM generations, subagent lifecycles, compactions, permission prompts. 27 event types, all colored and iconed
+- **Split chat / event view** — conversation on the right with full markdown; raw stream on the left. Resizable, collapsible, sticky-to-newest
+- **Full agent hierarchy** — subagent ↔ parent links with threaded color cues throughout the UI
+- **Multi-instance topology** — daemon, pipes, coordinator, bridge events badged by `instance_id`, with heartbeat tracking
+- **Token accounting** — input / output / cache / creation tokens + LLM call counts tallied per session and per agent. Compact badges in the sidebar; full breakdown via `GET /api/sessions/:id/usage`
+- **Filter, search, expand** — by agent, event type, tool, instance, or free-text. Every event expands to its raw payload with one-click copy on every field
+- **Timeline rewind** — scrub a session frame-by-frame, click any dot to jump
+- **Newest-on-top mode** — optional reverse-chronological feed (Settings → Display)
+- **Session bookmarks** — pin sessions, attach labels, fork-resume in one click
 
 ## Architecture
 
 ```
 OpenClaude forwardHookToObserve()  ─┐
-                                    ├─▶  POST /api/events  ─▶  API Server (SQLite)  ─▶  React Dashboard
-OpenClaude ClaudeObserveExporter   ─┘                         (parse + store)          (WebSocket live)
+                                    ├─▶  POST /api/events  ─▶  SQLite + WebSocket  ─▶  React Dashboard
+OpenClaude ClaudeObserveExporter   ─┘
 ```
 
-- **Hook forwarding** — OpenClaude's `forwardHookToObserve()` intercepts all 27 hook events (SessionStart/End, PreToolUse/PostToolUse, UserPromptSubmit, SubagentStop, etc.) and POSTs them directly. No shell scripts, no MCP server, no hook commands in `settings.json`.
-- **OTel tracing** — `ClaudeObserveExporter` converts OTel spans into observe events for LLMGeneration (model, tokens, TTFT, cache metrics) and for multi-instance activity (Daemon, Pipes, Coordinator, Bridge, SuperMode, Compaction, Cost).
-- **Server** (`app/server/`) — Hono + better-sqlite3 + native `ws`. Parser extracts structural fields from 22+ event types, stores agent and instance metadata, broadcasts to subscribed WebSocket clients. Instance heartbeats tracked for daemon workers.
-- **Client** (`app/client/`) — React 19 + shadcn. All agent state (status, counts, timing) is derived client-side from the event stream. Tool events are deduped (PreToolUse + PostToolUse merged). Icon mapping and summary generation are editable config files.
+Both transports are in-process inside OpenClaude. The server (Hono + better-sqlite3 + native `ws`) parses each event, persists it, and broadcasts to subscribed dashboard clients. The client (React 19 + shadcn) derives all agent state from the event stream — virtualized, deferred, and dedup'd so multi-thousand-event sessions stay smooth.
 
-## Event types
+| Layer | Stack |
+|-------|-------|
+| Server | Hono · better-sqlite3 · native `ws` |
+| Client | React 19 · shadcn/ui · TanStack Query / Virtual · Zustand |
+| Wire | JSON over HTTP for ingest, JSON over WS for live updates |
+| Storage | SQLite at `data/observe.db` (single file, bind-mounted in Docker) |
 
-OpenClaude Observe recognizes 22+ event types in five categories:
+## Event coverage
 
 | Category | Events |
 |----------|--------|
-| **Hooks** (Claude Code–compatible) | SessionStart, SessionEnd, UserPromptSubmit, Stop, PreToolUse, PostToolUse, SubagentStop, Notification, PreCompact, PermissionDenied, … |
-| **LLM** | LLMGeneration (model, input/output/cache tokens, TTFT, duration) |
-| **Daemon** | DaemonStart, DaemonStop, worker lifecycle, heartbeats |
-| **Pipes / IPC** | PipeConnect, PipeDisconnect, PipeMessage |
-| **Coordinator / Bridge** | CoordinatorEvent, BridgeEvent, SuperMode transitions |
-| **System** | Compaction, Cost tracking |
+| **Session** | SessionStart, Stop, UserPromptSubmit, Notification |
+| **Tools** | PreToolUse, PostToolUse, PostToolUseFailure, ToolBatch |
+| **Subagents** | SubagentStart, SubagentStop |
+| **LLM** | LLMGeneration (model, in/out/cache tokens, TTFT, duration) |
+| **Daemon** | DaemonStart, DaemonStop, DaemonHeartbeat |
+| **Pipes (IPC)** | PipeRoleAssigned, PipeAttach, PipeDetach, PipePromptRouted, PipePermissionForward, PipeLanPeerDiscovered |
+| **Coordinator** | CoordinatorDispatch, CoordinatorResult |
+| **Bridge** | BridgeConnected, BridgeDisconnected, BridgeWorkReceived |
+| **System** | SuperModeToggle, CompactionRun, CostUpdate |
 
-Each event can carry an `instance_id` so multi-process deployments (daemon + pipes + coordinator + bridge) show up with instance badges in the UI.
+Every event can carry `instance_id` so multi-process deployments show up with instance badges.
 
-## Local development
+## Configuration
 
-Requires [Node.js](https://nodejs.org/) and [just](https://github.com/casey/just).
-
-```bash
-git clone https://github.com/coffeegrind123/openclaude-observe.git
-cd openclaude-observe
-just install    # install server + client deps
-just dev        # hot-reload dev mode
-```
-
-Dev mode runs the API on **<http://localhost:4981>** and the Vite client on **<http://localhost:5174>**.
-
-For production-style local run (no Docker): `npm run start`.
-
-### Commands
-
-```bash
-just install            # Install all dependencies
-just dev                # Start server + client in dev mode (hot reload)
-just test               # Run all tests (server + client)
-just check              # Tests + format + client build — run before every commit
-just fmt                # Format all source files
-just build              # Build the Docker image locally
-just release <version>  # Tag and push a release
-```
-
-See `just --list` for the full set. The `docker compose up` path in Quick Start is the recommended way to run the server day-to-day.
-
-### Configuration
-
-All server env vars are centralized in `app/server/src/config.ts`. The client reads only `AGENTS_OBSERVE_DEV_CLIENT_PORT`.
+All server env vars are centralized in `app/server/src/config.ts`. Copy `.env.example` to `.env` to override.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENTS_OBSERVE_SERVER_PORT` | `4981` | Server port (dev + Docker) |
+| `AGENTS_OBSERVE_SERVER_PORT` | `4981` | API + UI port |
 | `AGENTS_OBSERVE_DEV_CLIENT_PORT` | `5174` | Vite dev client port |
 | `AGENTS_OBSERVE_RUNTIME` | `docker` | `docker`, `local`, or `dev` |
 | `AGENTS_OBSERVE_SHUTDOWN_DELAY_MS` | `30000` | Auto-shutdown after last consumer disconnects (`0` disables) |
 | `AGENTS_OBSERVE_LOG_LEVEL` | `warn` | `warn`, `debug`, or `trace` |
 | `AGENTS_OBSERVE_DB_PATH` | `data/observe.db` | SQLite database path |
 | `AGENTS_OBSERVE_ALLOW_DB_RESET` | `backup` | DB reset policy: `allow`, `backup`, `deny` |
-| `AGENTS_OBSERVE_CLIENT_DIST_PATH` | (auto) | Custom client dist directory |
+| `AGENTS_OBSERVE_CLIENT_DIST_PATH` | (auto) | Override the client dist directory |
 
-On the OpenClaude side, point the exporter at this server with `CLAUDE_OBSERVE_URL=http://localhost:4981`.
+On the OpenClaude side, set `CLAUDE_OBSERVE_URL=http://localhost:4981`.
 
-### Worktrees
+## API
 
-Each git worktree needs its own ports. Create a `.env` in the worktree root:
+REST + WebSocket served from the same origin as the dashboard.
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/events` | Event ingestion (OpenClaude POSTs here) |
+| `GET  /api/sessions/recent` | Recent sessions with token rollups |
+| `GET  /api/sessions/:id` | Session detail + token totals |
+| `GET  /api/sessions/:id/usage` | Tokens + per-agent breakdown |
+| `GET  /api/sessions/:id/instances` | Per-session instance list (role, pid, heartbeat) |
+| `GET  /api/projects/:id/sessions` | Sessions scoped to a project |
+| `WS   /ws` | Live event stream + `instance_update` messages |
+
+## Local development
+
+Requires [Node.js](https://nodejs.org/) and [just](https://github.com/casey/just).
 
 ```bash
-AGENTS_OBSERVE_SERVER_PORT=4982
-AGENTS_OBSERVE_DEV_CLIENT_PORT=5179
+just install   # install server + client deps
+just dev       # hot-reload dev mode (API on :4981, Vite client on :5174)
+just check     # tests + format + client build — run before every commit
 ```
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full development guide.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full guide (worktrees, env vars, testing, code style). Run `just --list` for all recipes.
 
 ## Project structure
 
 ```text
 app/
-  server/              Hono routes, SQLite, WebSocket, parser for 22+ event types
-  client/              React 19 + shadcn dashboard (event stream, chat feed, timeline, sidebar)
-scripts/               Release tooling, changelog generator, fresh-install test harness
-test/
-  fresh-install/       End-to-end test harness that verifies a clean Docker install
-docs/                  Development guide, plans, and demo assets
+  server/              Hono routes, parser, SQLite, WebSocket
+  client/              React 19 + shadcn dashboard
+scripts/               Release tooling, changelog generator
+docs/                  Development guide, design plans, demo assets
 Dockerfile             Production container image
-docker-compose.yml     Primary run path — `docker compose up openclaude-observe`
-justfile               Task runner commands
-start.mjs              Local server entrypoint (non-Docker)
-vitest.config.ts       Test configuration
-package.json           Version metadata and workspace scripts
+docker-compose.yml     Primary run path
+justfile               Task runner
+start.mjs              Local entrypoint (non-Docker)
 ```
-
-## API
-
-REST and WebSocket endpoints are served from the same origin as the dashboard.
-
-| Endpoint | Description |
-|----------|-------------|
-| `POST /api/events` | Event ingestion (OpenClaude posts here) |
-| `GET  /api/sessions/recent` | Recent sessions with token rollups |
-| `GET  /api/sessions/:id` | Session detail + token fields |
-| `GET  /api/sessions/:id/usage` | Token totals + per-agent breakdown via `json_extract` |
-| `GET  /api/sessions/:id/instances` | Per-session instance list (role, pid, heartbeat) |
-| `GET  /api/projects/:id/sessions` | Sessions scoped to a project |
-| `WS   /ws` | Live event stream + `instance_update` messages |
-
-Dev mode and production/Docker mode share the same SQLite database at `./data/observe.db` by default. The database is created on first run.
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| Server not running | `docker compose up openclaude-observe` |
-| Docker not running | Start Docker Desktop, then retry |
-| Port 4981 in use | Set `AGENTS_OBSERVE_SERVER_PORT=<port>` in `.env` (server auto-selects a free port if the requested one is taken) |
-| Events not appearing | Check `CLAUDE_OBSERVE_URL` is set in OpenClaude's env and the server is reachable. Health check: `curl http://localhost:4981/api/health` |
-| WebSocket disconnected | Client reconnects every 3s. "Disconnected" shows in the sidebar footer; missed events are refetched on reconnect |
-| Database issues | Stop the server, delete `./data/observe.db`, restart. Backups are written automatically when `AGENTS_OBSERVE_ALLOW_DB_RESET=backup` |
+| Server not reachable | `just start` (docker compose) or `just dev` for hot-reload |
+| Port 4981 in use | `AGENTS_OBSERVE_SERVER_PORT=<port>` in `.env` |
+| Events not appearing | Verify `CLAUDE_OBSERVE_URL` in OpenClaude's env. Health: `curl http://localhost:4981/api/health` |
+| WebSocket disconnected | Client auto-reconnects every 3s; missed events refetch on reconnect |
+| Database corruption | Stop server, `just db-reset` (writes `.bak` if `AGENTS_OBSERVE_ALLOW_DB_RESET=backup`) |
 
 ## Versioning
 
-Since 14.04.2026, this project uses **date-based versioning** (`DD.MM.YYYY`) plus a short git hash baked into the Docker image at build time. Earlier releases used semver (`v0.x.y`) — see [CHANGELOG.md](CHANGELOG.md).
+Date-based: `DD.MM.YYYY` plus a short git hash baked into the Docker image. Earlier releases (pre-`14.04.2026`) used semver — see [CHANGELOG.md](CHANGELOG.md).
 
 ## Commit convention
 
-[Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `test:`, `chore:`, `release:`. The release script uses `git log` to auto-generate `CHANGELOG.md` entries. Breaking changes get a `!` (e.g., `feat!: rename config namespace`).
-
-## Roadmap
-
-- [ ] Codex support
-- [ ] OpenClaw support
-- [ ] pi-code agent support
-
-## Related projects
-
-- [OpenClaude](https://github.com/coffeegrind123/openclaude) — the agent this dashboard observes
-- [agent-chat](https://github.com/DheerG/agent-chat) — inspired the split event/chat view
+[Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `test:`, `chore:`, `release:`. Breaking changes get `!` (e.g., `feat!: rename config namespace`). The release script reads `git log` to auto-generate `CHANGELOG.md` entries — consistent prefixes keep the changelog tidy.
 
 ## Acknowledgements
 
-This project was forked from [simple10/agents-observe](https://github.com/simple10/agents-observe) (a Claude Code hooks observability dashboard, itself inspired by [disler/claude-code-hooks-multi-agent-observability](https://github.com/disler/claude-code-hooks-multi-agent-observability)) and has since been rewritten around OpenClaude's native OTel integration.
+Forked from [simple10/agents-observe](https://github.com/simple10/agents-observe) — itself inspired by [disler/claude-code-hooks-multi-agent-observability](https://github.com/disler/claude-code-hooks-multi-agent-observability) — and rewritten around OpenClaude's native OTel + hook-forwarding integration. The split event/chat layout was inspired by [agent-chat](https://github.com/DheerG/agent-chat).
 
 ## License
 

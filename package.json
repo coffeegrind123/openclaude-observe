@@ -1,7 +1,7 @@
 {
   "name": "openclaude-observe",
   "version": "20.04.2026",
-  "description": "Real-time observability dashboard for Claude Code agents",
+  "description": "Real-time observability dashboard for OpenClaude",
   "license": "MIT",
   "repository": "https://github.com/coffeegrind123/openclaude-observe",
   "homepage": "https://github.com/coffeegrind123/openclaude-observe",
@@ -11,7 +11,7 @@
     "test": "cd app/server && npm test && cd ../client && npm test",
     "test:server:watch": "cd app/server && npm run test:watch",
     "test:client:watch": "cd app/client && npm run test:watch",
-    "fmt": "npx prettier --write 'app/server/src/**/*.ts' 'app/client/src/**/*.{ts,tsx}' 'test/**/*.mjs' 'start.mjs'",
+    "fmt": "npx prettier --write 'app/server/src/**/*.ts' 'app/client/src/**/*.{ts,tsx}' 'start.mjs'",
     "check": "npm test && npm run fmt"
   },
   "devDependencies": {

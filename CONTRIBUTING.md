@@ -21,17 +21,15 @@ Thanks for your interest in contributing!
 
 ## Architecture
 
-OpenClaude Observe receives events via two paths:
-- **Hook forwarding** — OpenClaude's `forwardHookToObserve()` POSTs all 27 hook events to `/api/events`
-- **OTel tracing** — `ClaudeObserveExporter` sends LLMGeneration and multi-instance events via OTel spans
+OpenClaude Observe receives events via two in-process paths:
+- **Hook forwarding** — OpenClaude's `forwardHookToObserve()` POSTs every hook event to `/api/events`
+- **OTel tracing** — `ClaudeObserveExporter` sends LLMGeneration and multi-instance spans
 
-No Claude Code plugin or hook scripts needed — integration is native in OpenClaude.
+No Claude Code plugin, no hook scripts, no MCP server.
 
 ## Development
 
-- **Server**: `just dev-server` starts with hot reload via tsx
-- **Client**: `just dev-client` starts the Vite dev server
-- **Both**: `just dev` runs both in parallel
+`just dev` runs the server with hot reload (tsx) and the Vite client in parallel — see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full guide.
 
 ## Code style
 

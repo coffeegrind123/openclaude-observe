@@ -10,19 +10,20 @@ docker compose up openclaude-observe
 # Set CLAUDE_OBSERVE_URL=http://localhost:4981 in OpenClaude
 ```
 
-Restart Claude Code. The server auto-starts as a Docker container and the dashboard is at **http://localhost:4981**.
+Restart your OpenClaude session. Events stream in automatically — no plugin, no hook scripts, no MCP server.
 
-### Skills
+### Just recipes
 
 | Command | Description |
 |---------|-------------|
-| `/observe` | Open the dashboard |
-| `/observe status` | Server health and config |
-| `/observe start` | Start the server |
-| `/observe stop` | Stop the server |
-| `/observe restart` | Restart the server |
-| `/observe logs` | Show recent container logs |
-| `/observe debug` | Diagnose server issues |
+| `just start` | Start the server via docker compose |
+| `just stop` | Stop the server |
+| `just restart` | Restart the server |
+| `just logs` | Tail container logs |
+| `just health` | Hit `/api/health` |
+| `just dev` | Hot-reload dev mode |
+
+Run `just --list` for the full set.
 
 ## Clone & Run
 
@@ -43,11 +44,11 @@ For dev mode with hot reload: `just dev` (client at http://localhost:5174, API a
 
 | Problem | Fix |
 |---------|-----|
-| Server not running | Run `/observe start` or restart Claude Code |
-| Docker not running | Start Docker Desktop, then `/observe start` |
+| Server not running | `just start` |
+| Docker not running | Start Docker Desktop, then `just start` |
 | Port conflict | Set `AGENTS_OBSERVE_SERVER_PORT=<port>` in `.env` |
-| Need diagnostics | Run `/observe debug` |
-| Database issues | Run `just db-reset` |
+| Need diagnostics | `just logs` and `just health` |
+| Database issues | `just db-reset` |
 
 ## Development
 
