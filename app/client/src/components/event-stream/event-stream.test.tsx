@@ -203,8 +203,9 @@ describe('EventStream', () => {
 
     // Should show 1 merged event (not 2)
     expect(screen.getByText('1')).toBeInTheDocument()
-    // The merged row keeps subtype PreToolUse so summary uses tool_input from PostToolUseFailure payload
-    expect(screen.getByText('bad-cmd')).toBeInTheDocument()
+    // The merged row keeps subtype PreToolUse so summary uses tool_input from PostToolUseFailure payload.
+    // Summary is '[bin] cmd' since extractBashBinary identifies the first token as the binary.
+    expect(screen.getByText('[bad-cmd] bad-cmd')).toBeInTheDocument()
   })
 
   it('should NOT merge events with different toolUseIds', () => {
@@ -322,7 +323,7 @@ describe('EventStream', () => {
     renderWithProviders(<EventStream />)
 
     // Bash event should be visible
-    expect(screen.getByText('ls -la')).toBeInTheDocument()
+    expect(screen.getByText('[ls] ls -la')).toBeInTheDocument()
     // Read event should be filtered out
     expect(screen.queryByText('/tmp/file.txt')).not.toBeInTheDocument()
   })

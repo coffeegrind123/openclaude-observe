@@ -148,6 +148,9 @@ export const EventRow = memo(function EventRow({
     event.subtype === 'PostToolUseFailure'
   const isFailure = event.subtype === 'PostToolUseFailure' || event.status === 'failed'
   const isCompleted = event.status === 'completed'
+  const isPending = event.status === 'pending' || event.status === 'running'
+  // Status icon surfaces on any event that carries a status, not just tools.
+  const showStatus = isFailure || isCompleted || isPending
 
   const rawLabel = isTool ? 'Tool' : event.subtype || event.type
   const displayLabel = LABEL_MAP[rawLabel] || rawLabel
@@ -216,7 +219,7 @@ export const EventRow = memo(function EventRow({
           >
             {displayLabel}
           </span>
-          {isTool && (
+          {showStatus && (
             <span
               className={cn(
                 'shrink-0',
@@ -237,7 +240,19 @@ export const EventRow = memo(function EventRow({
             </span>
           )}
           {isTool && event.toolName && (
-            <span className="text-xs font-medium text-blue-700 dark:text-blue-400 shrink-0">
+            <span
+              className={cn(
+                'text-xs font-medium shrink-0',
+                event.toolName.startsWith('mcp__')
+                  ? 'text-cyan-700 dark:text-cyan-400'
+                  : 'text-blue-700 dark:text-blue-400',
+              )}
+            >
+              {event.toolName.startsWith('mcp__') ? 'MCP' : event.toolName}
+            </span>
+          )}
+          {isTool && event.toolName?.startsWith('mcp__') && (
+            <span className="text-[10px] text-muted-foreground/60 shrink-0">
               {event.toolName}
             </span>
           )}

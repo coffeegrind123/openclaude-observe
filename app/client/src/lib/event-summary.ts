@@ -3,6 +3,49 @@
 
 import type { ParsedEvent } from '@/types'
 
+// Valid binary name: alphanumeric, hyphens, dots, underscores — no shell special chars
+const VALID_BINARY_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/
+
+/** Extract the binary/command name from a bash command string, skipping env vars, cd, and shell keywords. */
+export function extractBashBinary(cmd: string): string | null {
+  // Take first line only (multi-line commands)
+  const first = cmd.split('\n')[0].trim()
+  const tokens = first.split(/\s+/)
+  let skipNext = false
+  for (const token of tokens) {
+    if (skipNext) {
+      skipNext = false
+      continue
+    }
+    // Skip env vars (FOO=bar), shell operators, subshell markers
+    if (token.includes('=') || token === '&&' || token === ';' || token === '||') continue
+    if (token.startsWith('$(') || token.startsWith('`')) continue
+    if (token === 'cd') {
+      skipNext = true // skip the directory argument
+      continue
+    }
+    // Skip shell keywords that aren't binaries
+    if (
+      token === 'for' ||
+      token === 'do' ||
+      token === 'done' ||
+      token === 'if' ||
+      token === 'then' ||
+      token === 'else' ||
+      token === 'fi' ||
+      token === 'while' ||
+      token === 'case' ||
+      token === 'esac'
+    )
+      continue
+    // Strip path prefix to get just the binary name
+    const bin = token.replace(/^.*\//, '')
+    // Validate: must look like a real binary name
+    if (bin && VALID_BINARY_RE.test(bin)) return bin
+  }
+  return null
+}
+
 export function getEventSummary(event: ParsedEvent): string {
   const p = event.payload as Record<string, any>
   const cwd = p.cwd as string | undefined
@@ -159,10 +202,13 @@ function getToolSummary(
 
   switch (toolName) {
     case 'Bash': {
-      const desc = toolInput.description
+      const desc = toolInput.description as string | undefined
       const cmd = toolInput.command as string | undefined
-      // Prefer description; collapse multi-line commands into one line
-      return desc || (cmd ? cmd.replace(/\s*\n\s*/g, ' \\n ').trim() : '')
+      // Extract the binary name as a prefix to quickly see what's being run
+      const bin = cmd ? extractBashBinary(cmd) : null
+      const binPrefix = bin ? `[${bin}] ` : ''
+      if (desc) return `${binPrefix}${desc}`
+      return cmd ? `${binPrefix}${cmd.replace(/\s*\n\s*/g, ' \\n ').trim()}` : ''
     }
     case 'Read':
     case 'Write':
