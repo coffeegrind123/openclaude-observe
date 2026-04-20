@@ -1,10 +1,12 @@
 import type { ParsedEvent } from '@/types'
 
 // Event subtypes the chat feed renders. All other events stay in the event
-// feed only. Order here does not imply priority — classification happens in
-// classifyChatEvent below.
+// feed only. LLMGeneration is in here so intermediate model turns show as
+// their own assistant bubbles — Stop only fires once per turn, so without
+// this the chat goes silent during long agent loops.
 export const CHAT_SUBTYPES = new Set([
   'UserPromptSubmit',
+  'LLMGeneration',
   'Stop',
   'stop_hook_summary',
   'StopFailure',
@@ -81,6 +83,21 @@ export function classifyChatEvent(event: ParsedEvent): ChatMessageKind | null {
       return { kind: 'user', text }
     }
 
+    case 'LLMGeneration': {
+      // Each LLM call is its own assistant bubble so mid-turn model text
+      // ("Let me check X first…") is visible before Stop fires. response_preview
+      // is the concatenated text blocks of this call's assistant message
+      // (capped 1000 chars by openclaude); thinking_preview is the extended-
+      // thinking content for the same call. Drop when both are empty — those
+      // are tool-only LLM calls with nothing to render.
+      const text = str(p.response_preview)
+      const thinking = str(p.thinking_preview)
+      if (!text && !thinking) return null
+      const msg: ChatMessageKind = { kind: 'assistant', text: text ?? '' }
+      if (thinking) msg.thinking = thinking
+      return msg
+    }
+
     case 'Stop':
     case 'stop_hook_summary': {
       const text = str(p.last_assistant_message)
@@ -137,58 +154,76 @@ export function classifyChatEvent(event: ParsedEvent): ChatMessageKind | null {
 }
 
 /**
- * Collect thinking_preview text from every LLMGeneration event in [start, end)
- * on the same agent. Joins multiple LLM calls' thinking with a `---` divider,
- * matching the sender-side format so passes read as sequential blocks.
- */
-function collectThinkingForAgent(
-  events: ParsedEvent[],
-  agentId: string,
-  startIdx: number,
-  endIdx: number,
-): string | undefined {
-  const pieces: string[] = []
-  for (let i = startIdx; i < endIdx; i++) {
-    const e = events[i]
-    if (e.subtype !== 'LLMGeneration') continue
-    if (e.agentId !== agentId) continue
-    const t = (e.payload as Record<string, unknown>).thinking_preview
-    if (typeof t === 'string' && t.length > 0) pieces.push(t)
-  }
-  if (pieces.length === 0) return undefined
-  return pieces.join('\n\n---\n\n')
-}
-
-/**
  * Build the chronological list of chat entries from the raw event stream.
  * Events that don't classify (no content, wrong subtype) are dropped.
  *
- * For assistant replies (Stop / stop_hook_summary / StopFailure / SubagentStop)
- * we stitch in the `thinking_preview` from any LLMGeneration events that fired
- * on the same agent since the previous assistant boundary. Thinking isn't on
- * the Stop event itself — it arrives on separate LLM spans — so this walks
- * back to the agent's prior Stop/SubagentStop (or the start of the event
- * window) to scope which LLM calls belong to this turn.
+ * Each LLMGeneration becomes its own assistant bubble so intermediate turns
+ * of a long agent loop are visible. When a Stop / stop_hook_summary /
+ * StopFailure fires on an agent that just emitted an LLMGeneration, we merge
+ * the two: the Stop's `last_assistant_message` (full text, untruncated)
+ * replaces the LLMGeneration bubble's `response_preview` text (capped at 1000
+ * chars) and StopFailure sets `failed=true` on that bubble. This avoids a
+ * trailing duplicate bubble at the end of every turn.
+ *
+ * If no LLMGeneration preceded the Stop on this agent (e.g. a session from
+ * before the LLM-span attribution fix, or a Stop with no LLM calls in the
+ * turn), the Stop bubble is emitted on its own as a fallback.
+ *
+ * SubagentStop is intentionally NOT merged — subagent LLM calls are
+ * currently attributed to the parent agent_id upstream, so the subagent
+ * rarely has a preceding LLMGeneration on its own agentId. Leaving it as an
+ * independent bubble preserves the subagent-stop styling (bordered result
+ * card with agent name) regardless of attribution.
  */
 export function buildChatEntries(events: ParsedEvent[] | undefined): ChatEntry[] {
   if (!events) return []
-  // Per-agent index of the last assistant-boundary event, so we can scope the
-  // "LLM calls in this turn" window without walking the whole history on each
-  // Stop. Single forward pass, O(n) overall.
-  const lastBoundary = new Map<string, number>() // agentId → index
   const entries: ChatEntry[] = []
+  // agentId → index into `entries` of the most recent LLMGeneration bubble
+  // on that agent that hasn't been sealed by a Stop yet. A Stop/
+  // stop_hook_summary/StopFailure on the same agent will upgrade this entry's
+  // text instead of pushing a new bubble.
+  const openLLMBubble = new Map<string, number>()
+
   for (let i = 0; i < events.length; i++) {
     const event = events[i]
     const message = classifyChatEvent(event)
     if (!message) continue
 
-    if (message.kind === 'assistant' || message.kind === 'subagent-stop') {
-      const start = (lastBoundary.get(event.agentId) ?? -1) + 1
-      const thinking = collectThinkingForAgent(events, event.agentId, start, i)
-      if (thinking) {
-        message.thinking = thinking
+    const subtype = event.subtype
+    if (subtype === 'LLMGeneration') {
+      openLLMBubble.set(event.agentId, entries.length)
+      entries.push({ event, message })
+      continue
+    }
+
+    if (subtype === 'Stop' || subtype === 'stop_hook_summary' || subtype === 'StopFailure') {
+      // classifier already asserted message.kind === 'assistant' here
+      if (message.kind !== 'assistant') {
+        entries.push({ event, message })
+        continue
       }
-      lastBoundary.set(event.agentId, i)
+      const openIdx = openLLMBubble.get(event.agentId)
+      if (openIdx !== undefined) {
+        const prev = entries[openIdx]
+        if (prev.message.kind === 'assistant') {
+          // Prefer the untruncated last_assistant_message over the LLM call's
+          // response_preview (capped at 1000 chars). Keep the preceding
+          // bubble's thinking since it belongs to the same LLM call.
+          if (message.text) prev.message.text = message.text
+          if (message.failed) prev.message.failed = true
+          openLLMBubble.delete(event.agentId)
+          continue
+        }
+      }
+      // No LLMGeneration to merge into — emit the Stop bubble standalone.
+      entries.push({ event, message })
+      continue
+    }
+
+    // User prompts mark a new turn boundary; any dangling LLMGeneration
+    // bubble from a prior turn is no longer a merge target.
+    if (subtype === 'UserPromptSubmit') {
+      openLLMBubble.delete(event.agentId)
     }
 
     entries.push({ event, message })

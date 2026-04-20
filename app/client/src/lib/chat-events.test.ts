@@ -23,8 +23,31 @@ describe('classifyChatEvent', () => {
   it('returns null for non-chat subtypes', () => {
     expect(classifyChatEvent(makeEvent({ subtype: 'PreToolUse' }))).toBeNull()
     expect(classifyChatEvent(makeEvent({ subtype: 'SessionStart' }))).toBeNull()
-    expect(classifyChatEvent(makeEvent({ subtype: 'LLMGeneration' }))).toBeNull()
     expect(classifyChatEvent(makeEvent({ subtype: null }))).toBeNull()
+  })
+
+  it('classifies LLMGeneration with response_preview as assistant', () => {
+    const result = classifyChatEvent(
+      makeEvent({
+        subtype: 'LLMGeneration',
+        payload: { response_preview: 'Let me check the file.' },
+      }),
+    )
+    expect(result).toEqual({ kind: 'assistant', text: 'Let me check the file.' })
+  })
+
+  it('classifies LLMGeneration with only thinking_preview as empty-text assistant', () => {
+    const result = classifyChatEvent(
+      makeEvent({
+        subtype: 'LLMGeneration',
+        payload: { thinking_preview: 'pondering...' },
+      }),
+    )
+    expect(result).toEqual({ kind: 'assistant', text: '', thinking: 'pondering...' })
+  })
+
+  it('drops LLMGeneration with neither response_preview nor thinking_preview', () => {
+    expect(classifyChatEvent(makeEvent({ subtype: 'LLMGeneration', payload: {} }))).toBeNull()
   })
 
   it('classifies UserPromptSubmit as user when prompt is set', () => {
@@ -93,8 +116,8 @@ describe('classifyChatEvent', () => {
   })
 })
 
-describe('buildChatEntries — thinking correlation', () => {
-  it('attaches thinking_preview from LLMGeneration events in the same turn to the Stop bubble', () => {
+describe('buildChatEntries — LLMGeneration ↔ Stop merging', () => {
+  it('emits one assistant bubble per LLMGeneration so intermediate turns are visible', () => {
     const events: ParsedEvent[] = [
       makeEvent({
         id: 1,
@@ -106,32 +129,68 @@ describe('buildChatEntries — thinking correlation', () => {
         id: 2,
         subtype: 'LLMGeneration',
         timestamp: 1100,
-        payload: { thinking_preview: 'first I should read the file' },
+        payload: {
+          response_preview: 'Let me read the file first.',
+          thinking_preview: 'first I should read the file',
+        },
       }),
       makeEvent({
         id: 3,
         subtype: 'LLMGeneration',
         timestamp: 1200,
-        payload: { thinking_preview: 'now I know how to fix it' },
+        payload: {
+          response_preview: 'Now applying the fix.',
+          thinking_preview: 'now I know how to fix it',
+        },
       }),
       makeEvent({
         id: 4,
         subtype: 'Stop',
         timestamp: 1300,
-        payload: { last_assistant_message: 'Done!' },
+        payload: { last_assistant_message: 'Done! Here is the full rationale…' },
       }),
     ]
     const entries = buildChatEntries(events)
-    const stopEntry = entries.find((e) => e.event.id === 4)
-    expect(stopEntry).toBeDefined()
-    expect(stopEntry!.message).toMatchObject({
+    // User prompt + 2 LLM bubbles (Stop merges into the last one, no extra bubble).
+    expect(entries).toHaveLength(3)
+    expect(entries[0].message).toMatchObject({ kind: 'user', text: 'fix the bug' })
+    expect(entries[1].message).toMatchObject({
       kind: 'assistant',
-      text: 'Done!',
-      thinking: 'first I should read the file\n\n---\n\nnow I know how to fix it',
+      text: 'Let me read the file first.',
+      thinking: 'first I should read the file',
+    })
+    // Stop merged into the second LLMGeneration bubble — text upgraded to the
+    // fuller last_assistant_message, thinking preserved from the LLM call.
+    expect(entries[2].event.id).toBe(3)
+    expect(entries[2].message).toMatchObject({
+      kind: 'assistant',
+      text: 'Done! Here is the full rationale…',
+      thinking: 'now I know how to fix it',
     })
   })
 
-  it('scopes thinking to the current turn — earlier LLMs do not leak into later Stops', () => {
+  it('emits a standalone Stop bubble when no LLMGeneration preceded it on that agent', () => {
+    const events: ParsedEvent[] = [
+      makeEvent({
+        id: 1,
+        subtype: 'UserPromptSubmit',
+        timestamp: 1000,
+        payload: { prompt: 'hi' },
+      }),
+      makeEvent({
+        id: 2,
+        subtype: 'Stop',
+        timestamp: 2000,
+        payload: { last_assistant_message: 'hey' },
+      }),
+    ]
+    const entries = buildChatEntries(events)
+    expect(entries).toHaveLength(2)
+    expect(entries[1].event.id).toBe(2)
+    expect(entries[1].message).toEqual({ kind: 'assistant', text: 'hey' })
+  })
+
+  it('UserPromptSubmit opens a new turn — a Stop after it does not merge into an older LLM', () => {
     const events: ParsedEvent[] = [
       makeEvent({
         id: 1,
@@ -143,7 +202,7 @@ describe('buildChatEntries — thinking correlation', () => {
         id: 2,
         subtype: 'LLMGeneration',
         timestamp: 1100,
-        payload: { thinking_preview: 'turn-1 thinking' },
+        payload: { response_preview: 'turn-1 reply' },
       }),
       makeEvent({
         id: 3,
@@ -159,25 +218,24 @@ describe('buildChatEntries — thinking correlation', () => {
       }),
       makeEvent({
         id: 5,
-        subtype: 'LLMGeneration',
-        timestamp: 1400,
-        payload: { thinking_preview: 'turn-2 thinking' },
-      }),
-      makeEvent({
-        id: 6,
         subtype: 'Stop',
-        timestamp: 1500,
+        timestamp: 1400,
         payload: { last_assistant_message: 'A2' },
       }),
     ]
     const entries = buildChatEntries(events)
-    const a1 = entries.find((e) => e.event.id === 3)!
-    const a2 = entries.find((e) => e.event.id === 6)!
-    expect((a1.message as { thinking?: string }).thinking).toBe('turn-1 thinking')
-    expect((a2.message as { thinking?: string }).thinking).toBe('turn-2 thinking')
+    // q1, merged(LLM+Stop→A1), q2, standalone Stop A2
+    expect(entries.map((e) => [e.event.id, e.message.kind])).toEqual([
+      [1, 'user'],
+      [2, 'assistant'],
+      [4, 'user'],
+      [5, 'assistant'],
+    ])
+    expect((entries[1].message as { text: string }).text).toBe('A1')
+    expect((entries[3].message as { text: string }).text).toBe('A2')
   })
 
-  it('keeps thinking scoped per-agent so subagent LLMs do not leak into main Stops', () => {
+  it('merges per-agent: Stop on agent A does not consume agent B’s LLMGeneration', () => {
     const events: ParsedEvent[] = [
       makeEvent({
         id: 1,
@@ -191,62 +249,56 @@ describe('buildChatEntries — thinking correlation', () => {
         agentId: 'sub-1',
         subtype: 'LLMGeneration',
         timestamp: 1100,
-        payload: { thinking_preview: 'subagent internal thinking' },
+        payload: { response_preview: 'subagent progress' },
       }),
       makeEvent({
         id: 3,
-        agentId: 'sub-1',
-        subtype: 'SubagentStop',
-        timestamp: 1200,
-        payload: { last_assistant_message: 'sub done' },
-      }),
-      makeEvent({
-        id: 4,
-        agentId: 'main',
-        subtype: 'LLMGeneration',
-        timestamp: 1300,
-        payload: { thinking_preview: 'main thinking' },
-      }),
-      makeEvent({
-        id: 5,
         agentId: 'main',
         subtype: 'Stop',
-        timestamp: 1400,
+        timestamp: 1200,
         payload: { last_assistant_message: 'main done' },
       }),
     ]
     const entries = buildChatEntries(events)
-    const subStop = entries.find((e) => e.event.id === 3)!
-    const mainStop = entries.find((e) => e.event.id === 5)!
-    expect((subStop.message as { thinking?: string }).thinking).toBe('subagent internal thinking')
-    // Main stop must NOT include the subagent's thinking.
-    expect((mainStop.message as { thinking?: string }).thinking).toBe('main thinking')
+    // main's Stop can't merge into sub-1's LLM, so sub-1's bubble stays and
+    // main's Stop emits its own standalone bubble.
+    expect(entries).toHaveLength(3)
+    expect(entries[0].event.id).toBe(1)
+    expect(entries[1].event.id).toBe(2)
+    expect((entries[1].message as { text: string }).text).toBe('subagent progress')
+    expect(entries[2].event.id).toBe(3)
+    expect((entries[2].message as { text: string }).text).toBe('main done')
   })
 
-  it('leaves thinking undefined when no LLMGeneration has thinking_preview', () => {
+  it('StopFailure marks the merged bubble failed', () => {
     const events: ParsedEvent[] = [
       makeEvent({
         id: 1,
         subtype: 'UserPromptSubmit',
         timestamp: 1000,
-        payload: { prompt: 'hi' },
+        payload: { prompt: 'go' },
       }),
       makeEvent({
         id: 2,
         subtype: 'LLMGeneration',
         timestamp: 1100,
-        payload: {}, // no thinking
+        payload: { response_preview: 'starting…' },
       }),
       makeEvent({
         id: 3,
-        subtype: 'Stop',
+        subtype: 'StopFailure',
         timestamp: 1200,
-        payload: { last_assistant_message: 'hey' },
+        payload: { last_assistant_message: 'blew up' },
       }),
     ]
     const entries = buildChatEntries(events)
-    const stopEntry = entries.find((e) => e.event.id === 3)!
-    expect((stopEntry.message as { thinking?: string }).thinking).toBeUndefined()
+    expect(entries).toHaveLength(2)
+    expect(entries[1].event.id).toBe(2)
+    expect(entries[1].message).toMatchObject({
+      kind: 'assistant',
+      text: 'blew up',
+      failed: true,
+    })
   })
 
   it('classifies Stop with last_assistant_message as assistant', () => {
@@ -341,6 +393,7 @@ describe('buildChatEntries — thinking correlation', () => {
     expect(CHAT_SUBTYPES).toEqual(
       new Set([
         'UserPromptSubmit',
+        'LLMGeneration',
         'Stop',
         'stop_hook_summary',
         'StopFailure',
