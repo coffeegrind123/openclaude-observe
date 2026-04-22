@@ -183,14 +183,34 @@ export function buildChatEntries(events: ParsedEvent[] | undefined): ChatEntry[]
   // stop_hook_summary/StopFailure on the same agent will upgrade this entry's
   // text instead of pushing a new bubble.
   const openLLMBubble = new Map<string, number>()
+  // agentId → count of unmatched PreCompact events. LLMGenerations emitted
+  // while depth > 0 are the auto-compaction summarizer's own output (the
+  // <analysis>/<summary> XML dump), not user-facing agent text. They still
+  // surface in the event panel under the compaction grouping — we filter
+  // them from chat so the compaction summary doesn't masquerade as an
+  // assistant reply. A UserPromptSubmit resets depth defensively in case a
+  // PostCompact never fires (crash, abort).
+  const compactionDepth = new Map<string, number>()
 
   for (let i = 0; i < events.length; i++) {
     const event = events[i]
+    const subtype = event.subtype
+
+    if (subtype === 'PreCompact') {
+      compactionDepth.set(event.agentId, (compactionDepth.get(event.agentId) ?? 0) + 1)
+      continue
+    }
+    if (subtype === 'PostCompact') {
+      const d = compactionDepth.get(event.agentId) ?? 0
+      if (d > 0) compactionDepth.set(event.agentId, d - 1)
+      continue
+    }
+
     const message = classifyChatEvent(event)
     if (!message) continue
 
-    const subtype = event.subtype
     if (subtype === 'LLMGeneration') {
+      if ((compactionDepth.get(event.agentId) ?? 0) > 0) continue
       openLLMBubble.set(event.agentId, entries.length)
       entries.push({ event, message })
       continue
@@ -221,9 +241,12 @@ export function buildChatEntries(events: ParsedEvent[] | undefined): ChatEntry[]
     }
 
     // User prompts mark a new turn boundary; any dangling LLMGeneration
-    // bubble from a prior turn is no longer a merge target.
+    // bubble from a prior turn is no longer a merge target. Also reset
+    // compaction depth — if a PostCompact was dropped, the next user turn
+    // must not stay hidden forever.
     if (subtype === 'UserPromptSubmit') {
       openLLMBubble.delete(event.agentId)
+      compactionDepth.delete(event.agentId)
     }
 
     entries.push({ event, message })

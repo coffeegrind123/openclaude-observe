@@ -301,6 +301,78 @@ describe('buildChatEntries — LLMGeneration ↔ Stop merging', () => {
     })
   })
 
+  it('drops LLMGenerations that fire inside a PreCompact → PostCompact window', () => {
+    const events: ParsedEvent[] = [
+      makeEvent({
+        id: 1,
+        subtype: 'UserPromptSubmit',
+        timestamp: 1000,
+        payload: { prompt: 'do work' },
+      }),
+      makeEvent({
+        id: 2,
+        subtype: 'LLMGeneration',
+        timestamp: 1100,
+        payload: { response_preview: 'real assistant reply' },
+      }),
+      makeEvent({ id: 3, subtype: 'PreCompact', timestamp: 1200, payload: {} }),
+      makeEvent({
+        id: 4,
+        subtype: 'LLMGeneration',
+        timestamp: 1210,
+        payload: { response_preview: '<analysis>compaction summary</analysis>' },
+      }),
+      makeEvent({ id: 5, subtype: 'PostCompact', timestamp: 1300, payload: {} }),
+      makeEvent({
+        id: 6,
+        subtype: 'LLMGeneration',
+        timestamp: 1400,
+        payload: { response_preview: 'back to normal work' },
+      }),
+    ]
+    const entries = buildChatEntries(events)
+    const texts = entries.map((e) => [e.event.id, (e.message as { text?: string }).text])
+    expect(texts).toEqual([
+      [1, 'do work'],
+      [2, 'real assistant reply'],
+      [6, 'back to normal work'],
+    ])
+  })
+
+  it('recovers from a dropped PostCompact when the next UserPromptSubmit arrives', () => {
+    const events: ParsedEvent[] = [
+      makeEvent({
+        id: 1,
+        subtype: 'UserPromptSubmit',
+        timestamp: 1000,
+        payload: { prompt: 'q1' },
+      }),
+      makeEvent({ id: 2, subtype: 'PreCompact', timestamp: 1100, payload: {} }),
+      makeEvent({
+        id: 3,
+        subtype: 'LLMGeneration',
+        timestamp: 1150,
+        payload: { response_preview: 'compactor chatter' },
+      }),
+      // PostCompact missing (crash). Next turn should NOT stay hidden.
+      makeEvent({
+        id: 4,
+        subtype: 'UserPromptSubmit',
+        timestamp: 1200,
+        payload: { prompt: 'q2' },
+      }),
+      makeEvent({
+        id: 5,
+        subtype: 'LLMGeneration',
+        timestamp: 1250,
+        payload: { response_preview: 'agent reply to q2' },
+      }),
+    ]
+    const entries = buildChatEntries(events)
+    expect(entries.map((e) => e.event.id)).toEqual([1, 4, 5])
+    expect((entries[2].message as { text: string }).text).toBe('agent reply to q2')
+  })
+
   it('classifies Stop with last_assistant_message as assistant', () => {
     const result = classifyChatEvent(
       makeEvent({
