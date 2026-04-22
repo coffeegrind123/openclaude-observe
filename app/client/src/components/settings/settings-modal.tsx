@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogClose, DialogTitle } from '@/components/ui
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ProjectsTab } from './projects-tab'
 import { SessionsTab } from './sessions-tab'
+import { LabelsModalBody } from '@/components/labels/labels-modal'
 import { IconSettings } from './icon-settings'
 import { DisplayTab } from './display-tab'
 import { Button } from '@/components/ui/button'
@@ -69,6 +70,7 @@ export function SettingsModal() {
               <TabsTrigger value="icons">Icons</TabsTrigger>
               <TabsTrigger value="projects">Projects</TabsTrigger>
               <TabsTrigger value="sessions">Sessions</TabsTrigger>
+              <TabsTrigger value="labels">Labels</TabsTrigger>
             </TabsList>
           </div>
           <TabsContent value="display" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
@@ -86,6 +88,13 @@ export function SettingsModal() {
           </TabsContent>
           <TabsContent value="sessions" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
             <SessionsTab />
+          </TabsContent>
+          {/* Labels tab deliberately skips the outer px-6/pb-6/pt-4
+              padding because LabelsModalBody handles its own scrolling
+              + internal padding (port of the old standalone
+              LabelsModal). */}
+          <TabsContent value="labels" className="flex-1 min-h-0 flex flex-col">
+            <LabelsModalBody />
           </TabsContent>
         </Tabs>
         {serverInfo && (
