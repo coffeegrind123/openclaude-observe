@@ -99,6 +99,9 @@ export interface EventStore {
   getThreadForEvent(eventId: number): Promise<StoredEvent[]>
   getEventsSince(sessionId: string, sinceTimestamp: number): Promise<StoredEvent[]>
   deleteSession(sessionId: string): Promise<{ events: number; agents: number }>
+  deleteSessions(
+    sessionIds: string[],
+  ): Promise<{ events: number; agents: number; sessions: number }>
   clearAllData(): Promise<{ projects: number; sessions: number; agents: number; events: number }>
   clearSessionEvents(sessionId: string): Promise<{ events: number; agents: number }>
   getSessionUsage(sessionId: string): Promise<{
@@ -120,6 +123,8 @@ export interface EventStore {
       llmCallCount: number
     }>
   } | null>
+  getDbStats(): Promise<{ sessionCount: number; eventCount: number }>
+  vacuum(): Promise<void>
   getRecentSessions(limit?: number): Promise<any[]>
   healthCheck(): Promise<{ ok: boolean; error?: string }>
   /**

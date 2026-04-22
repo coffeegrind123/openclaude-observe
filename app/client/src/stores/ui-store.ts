@@ -124,6 +124,13 @@ interface UIState {
   closeLabelsModal: () => void
   clearLabelsModalScrollTarget: () => void
 
+  // Settings modal
+  settingsOpen: boolean
+  settingsTab: string
+  openSettings: (tab?: string) => void
+  setSettingsTab: (tab: string) => void
+  closeSettings: () => void
+
   // Auto-follow
   autoFollow: boolean
   setAutoFollow: (enabled: boolean) => void
@@ -443,6 +450,24 @@ export const useUIStore = create<UIState>((set, get) => ({
   editingSessionTab: 'details',
   setEditingSessionId: (id, tab) =>
     set({ editingSessionId: id, editingSessionTab: tab ?? 'details' }),
+
+  settingsOpen: false,
+  // Remember the last tab the user viewed so the gear icon reopens
+  // there. Fall back to 'display' (the leftmost tab) on first use.
+  settingsTab: localStorage.getItem('agents-observe-settings-tab') || 'display',
+  openSettings: (tab) => {
+    if (tab) {
+      localStorage.setItem('agents-observe-settings-tab', tab)
+      set({ settingsOpen: true, settingsTab: tab })
+    } else {
+      set({ settingsOpen: true })
+    }
+  },
+  setSettingsTab: (tab) => {
+    localStorage.setItem('agents-observe-settings-tab', tab)
+    set({ settingsTab: tab })
+  },
+  closeSettings: () => set({ settingsOpen: false }),
 
   autoFollow: true,
   setAutoFollow: (enabled) =>

@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogClose, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ProjectsTab } from './projects-tab'
+import { SessionsTab } from './sessions-tab'
 import { IconSettings } from './icon-settings'
 import { DisplayTab } from './display-tab'
 import { Button } from '@/components/ui/button'
+import { useUIStore } from '@/stores/ui-store'
 import { getServerHealth } from '@/lib/server-health'
 import { Database, Container, Monitor, X } from 'lucide-react'
 
@@ -13,14 +15,19 @@ interface ServerInfo {
   runtime: 'docker' | 'local'
 }
 
-interface SettingsModalProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}
-
-export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState('projects')
+export function SettingsModal() {
+  const open = useUIStore((s) => s.settingsOpen)
+  // Read tab + setter straight from the store so switching tabs inside
+  // the modal persists to localStorage and the gear icon reopens there
+  // next time.
+  const activeTab = useUIStore((s) => s.settingsTab)
+  const setSettingsTab = useUIStore((s) => s.setSettingsTab)
+  const closeSettings = useUIStore((s) => s.closeSettings)
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null)
+
+  const onOpenChange = (o: boolean) => {
+    if (!o) closeSettings()
+  }
 
   useEffect(() => {
     if (open && !serverInfo) {
@@ -53,19 +60,17 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         </div>
         <Tabs
           value={activeTab}
-          onValueChange={setActiveTab}
+          onValueChange={setSettingsTab}
           className="flex-1 flex flex-col min-h-0"
         >
           <div className="px-6 pt-2">
             <TabsList>
-              <TabsTrigger value="projects">Projects</TabsTrigger>
               <TabsTrigger value="display">Display</TabsTrigger>
               <TabsTrigger value="icons">Icons</TabsTrigger>
+              <TabsTrigger value="projects">Projects</TabsTrigger>
+              <TabsTrigger value="sessions">Sessions</TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="projects" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
-            <ProjectsTab />
-          </TabsContent>
           <TabsContent value="display" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
             <DisplayTab />
           </TabsContent>
@@ -75,6 +80,12 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             style={{ maxHeight: 'calc(80vh - 140px)' }}
           >
             <IconSettings />
+          </TabsContent>
+          <TabsContent value="projects" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
+            <ProjectsTab />
+          </TabsContent>
+          <TabsContent value="sessions" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
+            <SessionsTab />
           </TabsContent>
         </Tabs>
         {serverInfo && (

@@ -19,11 +19,11 @@ export function Sidebar({ connected }: SidebarProps) {
   const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth } = useUIStore()
   const latestVersion = useUIStore((s) => s.latestVersion)
   const serverVersion = useUIStore((s) => s.serverVersion)
+  const openSettings = useUIStore((s) => s.openSettings)
   const outdated = latestVersion ? isNewerVersion(__APP_VERSION__, latestVersion) : false
   const versionMismatch = serverVersion ? serverVersion !== __APP_VERSION__ : false
   const { theme, toggleTheme } = useTheme()
   const resizing = useRef(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [changelogOpen, setChangelogOpen] = useState(false)
 
   const sidebarRef = useRef<HTMLDivElement>(null)
@@ -122,7 +122,7 @@ export function Sidebar({ connected }: SidebarProps) {
           variant="ghost"
           size="icon"
           className="h-7 w-7 relative"
-          onClick={() => setSettingsOpen(true)}
+          onClick={() => openSettings()}
           title={
             versionMismatch
               ? 'Settings — server/client version mismatch'
@@ -173,7 +173,7 @@ export function Sidebar({ connected }: SidebarProps) {
         )}
       </div>
 
-      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsModal />
       <LabelsModal />
       <ChangelogModal open={changelogOpen} onOpenChange={setChangelogOpen} />
 
