@@ -6,7 +6,7 @@ import { AgentCombobox } from './agent-combobox'
 import {
   ArrowDownToLine,
   ArrowUpToLine,
-  Pencil,
+  SquarePen,
   BarChart3,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -107,7 +107,7 @@ export function ScopeBar() {
               onClick={() => setEditingSessionId(selectedSessionId)}
               aria-label="Edit session"
             >
-              <Pencil className="h-3.5 w-3.5" />
+              <SquarePen className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Edit session</TooltipContent>

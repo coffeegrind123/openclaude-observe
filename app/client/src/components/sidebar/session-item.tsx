@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { formatTokens } from '@/lib/format-utils'
-import { Pin, Pencil } from 'lucide-react'
+import { Pin, SquarePen } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -207,7 +207,7 @@ export function SessionItem({
             )}
             {!isEditing && (
               <div className="flex items-center gap-1 shrink-0 ml-auto">
-                <Pencil
+                <SquarePen
                   data-testid={`edit-session-${session.id}`}
                   className="h-3 w-3 hidden group-hover:block text-muted-foreground/50 hover:text-muted-foreground transition-opacity cursor-pointer"
                   onClick={(e) => {
