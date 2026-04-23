@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState, useEffect, useCallback } from 'react'
+import { memo, useRef, useMemo, useState, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { getEventIcon, getEventColor } from '@/config/event-icons'
 import { getRangeMs, getRangeTicks } from '@/config/time-ranges'
@@ -8,13 +8,14 @@ import { AgentLabel } from '@/components/shared/agent-label'
 import { DotTooltipContent } from './dot-tooltip'
 import type { Agent, ParsedEvent } from '@/types'
 
-// Renders event dots inside a single animated container.
-// Instead of per-dot CSS transitions (which drift at different speeds and
-// conflict with React re-renders), all dots share one container animation:
-// translateX(0) → translateX(-100%) over rangeMs. Dots have static left
-// positions relative to the container, so they all move at exactly the
-// same speed and can never pass each other.
-function DotContainer({
+// Renders event dots inside a single animated container. All dots share
+// one container animation (translateX(0) → translateX(-100%) over
+// rangeMs) so they all move at exactly the same speed and can never
+// pass each other. Wrapped in React.memo with a content-aware equality
+// below: on every WS flush the parent rebuilds the per-agent events
+// array, but if no new dots actually appeared in THIS lane (same length,
+// same trailing id) we skip the whole re-render.
+function DotContainerInner({
   events,
   rangeMs,
   generation,
@@ -98,6 +99,22 @@ function DotContainer({
     </div>
   )
 }
+
+const DotContainer = memo(DotContainerInner, (prev, next) => {
+  // Parent rebuilds `events` on every WS flush. If the new array has
+  // the same length and the same trailing event id, it's effectively
+  // the same set of dots — skip the re-render.
+  if (prev.rangeMs !== next.rangeMs) return false
+  if (prev.generation !== next.generation) return false
+  if (prev.setScrollToEventId !== next.setScrollToEventId) return false
+  const pe = prev.events
+  const ne = next.events
+  if (pe === ne) return true
+  if (pe.length !== ne.length) return false
+  if (pe.length === 0) return true
+  return pe[pe.length - 1].id === ne[ne.length - 1].id
+})
+
 
 interface AgentLaneProps {
   agent: Agent
