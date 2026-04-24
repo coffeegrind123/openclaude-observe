@@ -118,5 +118,6 @@ export type WSMessage =
   | { type: 'instance_update'; data: Instance }
   | { type: 'notification'; data: { sessionId: string; projectId: number; ts: number } }
   | { type: 'notification_clear'; data: { sessionId: string; ts: number } }
+  | { type: 'activity'; data: { sessionId: string; eventId: number; ts: number } }
 
 export type WSClientMessage = { type: 'subscribe'; sessionId: string } | { type: 'unsubscribe' }

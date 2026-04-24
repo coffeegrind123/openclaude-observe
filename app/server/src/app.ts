@@ -24,6 +24,7 @@ type Env = {
     store: EventStore
     broadcastToSession: (sessionId: string, msg: object) => void
     broadcastToAll: (msg: object) => void
+    broadcastActivity: (sessionId: string, eventId: number) => void
   }
 }
 
@@ -31,6 +32,7 @@ export function createApp(
   store: EventStore,
   broadcastToSession: (sessionId: string, msg: object) => void,
   broadcastToAll: (msg: object) => void,
+  broadcastActivity: (sessionId: string, eventId: number) => void,
 ) {
   const app = new Hono<Env>()
 
@@ -41,6 +43,7 @@ export function createApp(
     c.set('store', store)
     c.set('broadcastToSession', broadcastToSession)
     c.set('broadcastToAll', broadcastToAll)
+    c.set('broadcastActivity', broadcastActivity)
     await next()
   })
 

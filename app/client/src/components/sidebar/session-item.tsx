@@ -10,6 +10,7 @@ import {
   useSessionHasNotification,
   useAnnounceVisibleBell,
 } from './notification-indicator'
+import { useSessionPulseActive } from '@/hooks/use-pulse-active'
 import type { Session } from '@/types'
 
 interface SessionItemProps {
@@ -96,6 +97,11 @@ export function SessionItem({
   const totalTokens = (session.totalInputTokens || 0) + (session.totalOutputTokens || 0)
   const lastActivityTs = session.lastActivity ?? session.startedAt
   const needsAttention = useSessionHasNotification(session.id)
+  // True for ACTIVITY_CONFIG.pulseDurationMs after the server
+  // broadcasts an activity ping for this session. Suppressed when the
+  // bell is showing — the bell animation already signals activity,
+  // and stacking two pulses is noisy.
+  const pulseActive = useSessionPulseActive(session.id) && !(needsAttention && !isEditing)
   // Register this session's bell as visible so the parent project's
   // folder indicator can suppress itself (no double-signaling).
   useAnnounceVisibleBell(session.id, needsAttention && !isEditing)
@@ -126,9 +132,18 @@ export function SessionItem({
               />
             ) : (
               <span className="relative h-3 w-3 shrink-0 flex items-center justify-center pointer-events-none">
+                {/* Activity pulse — faint green ping behind the dot.
+                    Runs continuously for ACTIVITY_CONFIG.pulseDurationMs
+                    after each ping, then disappears. */}
+                {pulseActive && (
+                  <span
+                    aria-hidden
+                    className="absolute h-2.5 w-2.5 rounded-full bg-green-400/50 dark:bg-green-300/40 animate-ping"
+                  />
+                )}
                 <span
                   className={cn(
-                    'h-2 w-2 rounded-full',
+                    'h-2 w-2 rounded-full relative',
                     session.status === 'active'
                       ? 'bg-green-500'
                       : 'bg-muted-foreground/60 dark:bg-muted-foreground/40',

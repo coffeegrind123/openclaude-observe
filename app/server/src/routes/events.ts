@@ -12,6 +12,7 @@ type Env = {
     store: EventStore
     broadcastToSession: (sessionId: string, msg: object) => void
     broadcastToAll: (msg: object) => void
+    broadcastActivity: (sessionId: string, eventId: number) => void
   }
 }
 
@@ -365,6 +366,13 @@ router.post('/events', async (c) => {
     }
 
     broadcastToSession(parsed.sessionId, { type: 'event', data: event })
+
+    // Fire an activity ping for the sidebar pulse animation. The
+    // broadcastActivity helper internally throttles to once per
+    // session per ACTIVITY_PING_THROTTLE_MS, so calling it on every
+    // insert is safe and cheap.
+    const broadcastActivity = c.get('broadcastActivity')
+    broadcastActivity(parsed.sessionId, eventId)
 
     // Fan out sidebar notification signals to every connected client so
     // bells can light up regardless of which session the viewer is on.
