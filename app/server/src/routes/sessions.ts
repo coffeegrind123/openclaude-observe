@@ -129,8 +129,22 @@ router.get('/sessions/:id/events', async (c) => {
         offset: c.req.query('offset') ? parseInt(c.req.query('offset')!) : undefined,
       })
 
-  const events = rows.map((r) => {
-    const base: Partial<ParsedEvent> = {
+  interface EventRow {
+    id: number
+    agentId: string
+    type: string
+    subtype: string | null
+    toolName: string | null
+    toolUseId: string | null
+    status: string
+    timestamp: number
+    payload: unknown
+    sessionId?: string
+    createdAt?: number
+  }
+
+  const events: EventRow[] = rows.map((r) => {
+    const base: EventRow = {
       id: r.id,
       agentId: r.agent_id,
       type: r.type,
@@ -142,7 +156,7 @@ router.get('/sessions/:id/events', async (c) => {
       payload: JSON.parse(r.payload),
     }
     if (requested.has('sessionId')) base.sessionId = r.session_id
-    if (requested.has('createdAt')) base.createdAt = r.created_at || r.timestamp
+    if (requested.has('createdAt')) base.createdAt = r.created_at ?? r.timestamp
     return base
   })
 
