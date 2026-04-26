@@ -71,14 +71,27 @@ export const STATIC_FILTERS: StaticFilter[] = [
     subtypes: ['BridgeConnected', 'BridgeDisconnected', 'BridgeWorkReceived'],
   },
   {
+    label: 'Config',
+    subtypes: ['InstructionsLoaded', 'ConfigChange', 'CwdChanged', 'FileChanged'],
+  },
+  {
     label: 'Errors',
     match: (e) => {
       const payload = e.payload
-      if (!payload) return false
-      // Match events with a non-empty error field
-      if (payload.error && payload.error !== '') return true
-      // Also match tool failure subtypes
+      // Tool failure subtypes (legacy data has hookName='PostToolUseFailure'
+      // directly; new data may have a paired PreToolUse whose status was
+      // bumped to 'failed' when a PostToolUseFailure was merged in).
       if (e.subtype === 'PostToolUseFailure' || e.subtype === 'StopFailure') return true
+      // Derived `status` after Pre/Post pairing — a PreToolUse whose paired
+      // PostToolUseFailure landed gets status === 'failed'.
+      if (e.status === 'failed') return true
+      if (!payload) return false
+      // Top-level error field (covers Notifications and StopFailure payloads).
+      if (typeof payload.error === 'string' && payload.error !== '') return true
+      // Tool failures encoded in the response rather than the hookName.
+      const tr = payload.tool_response as Record<string, unknown> | undefined
+      if (tr?.is_error === true) return true
+      if (typeof tr?.error === 'string' && tr.error !== '') return true
       return false
     },
   },
