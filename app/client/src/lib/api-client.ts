@@ -116,9 +116,12 @@ export const api = {
     if (filters?.search) params.set('search', filters.search)
     if (filters?.limit) params.set('limit', String(filters.limit))
     if (filters?.offset) params.set('offset', String(filters.offset))
-    const qs = params.toString()
+    // The endpoint defaults to a lean payload; opt in to the fields the
+    // client code reads off each event (event-row passes sessionId to
+    // ContextBadge; createdAt is read by paired-event runtime calculations).
+    params.set('fields', 'sessionId,createdAt')
     return fetchJson<ParsedEvent[]>(
-      `/sessions/${encodeURIComponent(sessionId)}/events${qs ? `?${qs}` : ''}`,
+      `/sessions/${encodeURIComponent(sessionId)}/events?${params.toString()}`,
     )
   },
   getThread: (eventId: number) => fetchJson<ParsedEvent[]>(`/events/${eventId}/thread`),

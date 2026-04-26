@@ -1,7 +1,6 @@
 // app/server/src/routes/sessions.ts
 import { Hono } from 'hono'
 import type { EventStore } from '../storage/types'
-import type { ParsedEvent } from '../types'
 import { config } from '../config'
 import { apiError } from '../errors'
 import { computeSessionContext } from '../context'
@@ -98,12 +97,26 @@ router.get('/sessions/:id/agents', async (c) => {
   return c.json(agents)
 })
 
+// Allow-list of opt-in `fields=` values. Default response omits these
+// (sessionId is redundant with the URL; createdAt is a server-side ingest
+// timestamp not normally needed by the client). Clients can pass
+// `?fields=sessionId,createdAt` to opt in.
+const OPT_IN_FIELDS = new Set(['sessionId', 'createdAt'])
+
 // GET /sessions/:id/events
 router.get('/sessions/:id/events', async (c) => {
   const store = c.get('store')
   const sessionId = decodeURIComponent(c.req.param('id'))
   const sinceParam = c.req.query('since')
   const agentIdParam = c.req.query('agentId')
+  const fieldsParam = c.req.query('fields')
+
+  const requested = new Set(
+    (fieldsParam ?? '')
+      .split(',')
+      .map((f) => f.trim())
+      .filter((f) => OPT_IN_FIELDS.has(f)),
+  )
 
   const rows = sinceParam
     ? await store.getEventsSince(sessionId, parseInt(sinceParam))
@@ -116,19 +129,22 @@ router.get('/sessions/:id/events', async (c) => {
         offset: c.req.query('offset') ? parseInt(c.req.query('offset')!) : undefined,
       })
 
-  const events: ParsedEvent[] = rows.map((r) => ({
-    id: r.id,
-    agentId: r.agent_id,
-    sessionId: r.session_id,
-    type: r.type,
-    subtype: r.subtype,
-    toolName: r.tool_name,
-    toolUseId: r.tool_use_id || null,
-    status: deriveEventStatus(r.subtype),
-    timestamp: r.timestamp,
-    createdAt: r.created_at || r.timestamp,
-    payload: JSON.parse(r.payload),
-  }))
+  const events = rows.map((r) => {
+    const base: Partial<ParsedEvent> = {
+      id: r.id,
+      agentId: r.agent_id,
+      type: r.type,
+      subtype: r.subtype,
+      toolName: r.tool_name,
+      toolUseId: r.tool_use_id || null,
+      status: deriveEventStatus(r.subtype),
+      timestamp: r.timestamp,
+      payload: JSON.parse(r.payload),
+    }
+    if (requested.has('sessionId')) base.sessionId = r.session_id
+    if (requested.has('createdAt')) base.createdAt = r.created_at || r.timestamp
+    return base
+  })
 
   // Lazy session status correction based on event history.
   if (events.length > 0) {
