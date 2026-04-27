@@ -1078,6 +1078,98 @@ describe('SqliteAdapter — getRecentSessions', () => {
 })
 
 // ---------------------------------------------------------------------------
+// getUnassignedSessions
+// ---------------------------------------------------------------------------
+describe('SqliteAdapter — getUnassignedSessions', () => {
+  test('returns sessions with project_id IS NULL', async () => {
+    // Directly insert a session with a NULL project_id via raw SQL bypassing
+    // the FK constraint in upsertSession.
+    const now = Date.now()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(store as any).db.pragma('foreign_keys = OFF')
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db
+        .prepare(
+          `INSERT INTO sessions (id, project_id, slug, status, started_at, created_at, updated_at, event_count, agent_count)
+           VALUES (?, ?, ?, 'active', ?, ?, ?, 0, 0)`,
+        )
+        .run('orphan1', null, 'orphan-1', now - 2000, now - 2000, now - 2000)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db
+        .prepare(
+          `INSERT INTO sessions (id, project_id, slug, status, started_at, created_at, updated_at, event_count, agent_count)
+           VALUES (?, ?, ?, 'active', ?, ?, ?, 0, 0)`,
+        )
+        .run('orphan2', null, 'orphan-2', now - 1000, now - 1000, now - 1000)
+    } finally {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.pragma('foreign_keys = ON')
+    }
+
+    const result = await store.getUnassignedSessions()
+    expect(result.length).toBeGreaterThanOrEqual(2)
+    const ids = result.map((r: any) => r.id)
+    expect(ids).toContain('orphan1')
+    expect(ids).toContain('orphan2')
+  })
+
+  test('respects limit parameter', async () => {
+    const now = Date.now()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(store as any).db.pragma('foreign_keys = OFF')
+    try {
+      for (let i = 0; i < 5; i++) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(store as any).db
+          .prepare(
+            `INSERT INTO sessions (id, project_id, slug, status, started_at, created_at, updated_at, event_count, agent_count)
+             VALUES (?, ?, ?, 'active', ?, ?, ?, 0, 0)`,
+          )
+          .run(`orphan${i}`, null, `orphan-${i}`, now - i * 1000, now - i * 1000, now - i * 1000)
+      }
+    } finally {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.pragma('foreign_keys = ON')
+    }
+
+    const result = await store.getUnassignedSessions(2)
+    expect(result).toHaveLength(2)
+  })
+
+  test('returns empty array when no unassigned sessions exist', async () => {
+    const result = await store.getUnassignedSessions()
+    expect(result).toEqual([])
+  })
+
+  test('sessions with a valid project_id are excluded', async () => {
+    const projId = await store.createProject('proj1', 'Project 1', null)
+    await store.upsertSession('sess1', projId, null, null, 1000)
+
+    const now = Date.now()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(store as any).db.pragma('foreign_keys = OFF')
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db
+        .prepare(
+          `INSERT INTO sessions (id, project_id, slug, status, started_at, created_at, updated_at, event_count, agent_count)
+           VALUES (?, ?, ?, 'active', ?, ?, ?, 0, 0)`,
+        )
+        .run('orphan1', null, 'orphan-1', now, now, now)
+    } finally {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(store as any).db.pragma('foreign_keys = ON')
+    }
+
+    const result = await store.getUnassignedSessions()
+    // Only orphan1 should be returned; sess1 has a valid project_id
+    expect(result).toHaveLength(1)
+    expect(result[0].id).toBe('orphan1')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Deletion
 // ---------------------------------------------------------------------------
 describe('SqliteAdapter — deletion', () => {

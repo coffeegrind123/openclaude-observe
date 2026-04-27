@@ -15,6 +15,7 @@ import { getEventIcon } from '@/config/event-icons'
 import { getEventSummary } from '@/lib/event-summary'
 import { cn } from '@/lib/utils'
 import { getAgentDisplayName } from '@/lib/agent-utils'
+import { formatRuntime } from '@/lib/runtime'
 import type { ParsedEvent, Agent } from '@/types'
 import type { SpawnInfo } from './event-row'
 import type { PairedPayloads } from '@/hooks/use-deduped-events'
@@ -24,11 +25,12 @@ interface EventDetailProps {
   agentMap: Map<string, Agent>
   spawnInfo?: SpawnInfo
   pairedPayloads?: PairedPayloads
+  runtimeMs?: number | null
 }
 
 const THREAD_SUBTYPES = ['UserPromptSubmit', 'Stop', 'SubagentStart', 'SubagentStop']
 
-export function EventDetail({ event, agentMap, spawnInfo, pairedPayloads }: EventDetailProps) {
+export function EventDetail({ event, agentMap, spawnInfo, pairedPayloads, runtimeMs }: EventDetailProps) {
   const [thread, setThread] = useState<ParsedEvent[] | null>(null)
   const [loadingThread, setLoadingThread] = useState(false)
 
@@ -72,6 +74,11 @@ export function EventDetail({ event, agentMap, spawnInfo, pairedPayloads }: Even
             </span>
           )}
         </div>
+      )}
+
+      {/* Runtime — elapsed time for Stop / SubagentStop events */}
+      {runtimeMs != null && (
+        <DetailRow label="Runtime" value={formatRuntime(runtimeMs)} />
       )}
 
       {/* Error from payload (shown for any event type with an error field) */}

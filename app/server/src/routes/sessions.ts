@@ -23,6 +23,35 @@ const LOG_LEVEL = config.logLevel
 
 const router = new Hono<Env>()
 
+// GET /sessions/unassigned
+router.get('/sessions/unassigned', async (c) => {
+  const store = c.get('store')
+  const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined
+  const rows = await store.getUnassignedSessions(limit)
+  const sessions = rows.map((r: any) => ({
+    id: r.id,
+    projectId: r.project_id,
+    projectName: r.project_name,
+    projectSlug: r.project_slug,
+    slug: r.slug,
+    transcriptPath: r.transcript_path || null,
+    status: r.status,
+    startedAt: r.started_at,
+    stoppedAt: r.stopped_at,
+    metadata: r.metadata ? JSON.parse(r.metadata) : null,
+    agentCount: r.agent_count,
+    eventCount: r.event_count,
+    lastActivity: r.last_activity,
+    totalInputTokens: r.total_input_tokens || 0,
+    totalOutputTokens: r.total_output_tokens || 0,
+    totalCacheReadTokens: r.total_cache_read_tokens || 0,
+    totalCacheCreationTokens: r.total_cache_creation_tokens || 0,
+    totalDurationMs: r.total_duration_ms || 0,
+    llmCallCount: r.llm_call_count || 0,
+  }))
+  return c.json(sessions)
+})
+
 // GET /sessions/recent
 router.get('/sessions/recent', async (c) => {
   const store = c.get('store')

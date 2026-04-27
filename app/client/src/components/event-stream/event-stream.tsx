@@ -10,7 +10,9 @@ import { getTimelineScrollTo, registerEventStreamScroll, withSyncLock } from '@/
 import { api } from '@/lib/api-client'
 import { useUIStore } from '@/stores/ui-store'
 import { EventRow } from './event-row'
+import { TimestampTooltipProvider } from './timestamp-tooltip'
 import { CompactionBoundary } from './compaction-boundary'
+import { computeRuntimeMs } from '@/lib/runtime'
 import { eventMatchesFilters } from '@/config/filters'
 import { format } from 'timeago.js'
 import { buildAgentColorMap } from '@/lib/agent-utils'
@@ -94,6 +96,17 @@ export function EventStream() {
     }
     return m
   }, [compactionMap])
+
+  // Pre-compute runtime for each event (Stop/SubagentStop → preceding event)
+  const runtimeMap = useMemo(() => {
+    const map = new Map<number, number>()
+    if (!events) return map
+    for (const event of events) {
+      const ms = computeRuntimeMs(event, events)
+      if (ms != null) map.set(event.id, ms)
+    }
+    return map
+  }, [events])
 
   // Apply all client-side filters: agent selection + static/tool filters
   const filteredEvents = useMemo(() => {
@@ -462,51 +475,54 @@ export function EventStream() {
               {displayedEvents.length === 0 ? (
                 <EmptyState text="No events match the current filters" />
               ) : (
-                <div className="relative" style={{ height: `${totalSize}px`, width: '100%' }}>
-                  {virtualItems.map((virtualItem) => {
-                    const event = displayedEvents[virtualItem.index]
-                    if (!event) return null
-                    // Render PreCompact/PostCompact as a distinct boundary card
-                    // instead of a normal event row so the compaction reads as
-                    // a visual break in the stream.
-                    const isPreCompact = event.subtype === 'PreCompact'
-                    const isPostCompact = event.subtype === 'PostCompact'
-                    const compactionInfo = isPreCompact
-                      ? (compactionMap.get(event.id) ?? null)
-                      : isPostCompact
-                        ? (() => {
-                            const preId = postToPreCompactionMap.get(event.id)
-                            return preId != null ? (compactionMap.get(preId) ?? null) : null
-                          })()
-                        : null
-                    return (
-                      <div
-                        key={virtualItem.key}
-                        ref={virtualizer.measureElement}
-                        data-index={virtualItem.index}
-                        className="absolute top-0 left-0 w-full border-b border-border/50"
-                        style={{ transform: `translateY(${virtualItem.start}px)` }}
-                      >
-                        {isPreCompact || isPostCompact ? (
-                          <CompactionBoundary
-                            event={event}
-                            info={compactionInfo}
-                            variant={isPreCompact ? 'pre' : 'post'}
-                          />
-                        ) : (
-                          <EventRow
-                            event={event}
-                            agentMap={agentMap}
-                            agentColorMap={agentColorMap}
-                            showAgentLabel={showAgentLabel}
-                            spawnInfo={spawnInfo.get(event.agentId)}
-                            pairedPayloads={pairedPayloads.get(event.id)}
-                          />
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                <TimestampTooltipProvider>
+                  <div className="relative" style={{ height: `${totalSize}px`, width: '100%' }}>
+                    {virtualItems.map((virtualItem) => {
+                      const event = displayedEvents[virtualItem.index]
+                      if (!event) return null
+                      // Render PreCompact/PostCompact as a distinct boundary card
+                      // instead of a normal event row so the compaction reads as
+                      // a visual break in the stream.
+                      const isPreCompact = event.subtype === 'PreCompact'
+                      const isPostCompact = event.subtype === 'PostCompact'
+                      const compactionInfo = isPreCompact
+                        ? (compactionMap.get(event.id) ?? null)
+                        : isPostCompact
+                          ? (() => {
+                              const preId = postToPreCompactionMap.get(event.id)
+                              return preId != null ? (compactionMap.get(preId) ?? null) : null
+                            })()
+                          : null
+                      return (
+                        <div
+                          key={virtualItem.key}
+                          ref={virtualizer.measureElement}
+                          data-index={virtualItem.index}
+                          className="absolute top-0 left-0 w-full border-b border-border/50"
+                          style={{ transform: `translateY(${virtualItem.start}px)` }}
+                        >
+                          {isPreCompact || isPostCompact ? (
+                            <CompactionBoundary
+                              event={event}
+                              info={compactionInfo}
+                              variant={isPreCompact ? 'pre' : 'post'}
+                            />
+                          ) : (
+                            <EventRow
+                              event={event}
+                              agentMap={agentMap}
+                              agentColorMap={agentColorMap}
+                              showAgentLabel={showAgentLabel}
+                              spawnInfo={spawnInfo.get(event.agentId)}
+                              pairedPayloads={pairedPayloads.get(event.id)}
+                              runtimeMs={runtimeMap.get(event.id) ?? null}
+                            />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </TimestampTooltipProvider>
               )}
             </div>
           </>

@@ -126,6 +126,7 @@ export interface EventStore {
   getDbStats(): Promise<{ sessionCount: number; eventCount: number }>
   vacuum(): Promise<void>
   getRecentSessions(limit?: number): Promise<any[]>
+  getUnassignedSessions(limit?: number): Promise<any[]>
   healthCheck(): Promise<{ ok: boolean; error?: string }>
   /**
    * Scan all tables for rows with broken foreign keys and repair them.

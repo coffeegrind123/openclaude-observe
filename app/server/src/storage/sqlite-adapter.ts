@@ -50,7 +50,7 @@ export class SqliteAdapter implements EventStore {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
-        project_id INTEGER NOT NULL REFERENCES projects(id),
+        project_id INTEGER REFERENCES projects(id),
         slug TEXT,
         status TEXT DEFAULT 'active',
         started_at INTEGER NOT NULL,
@@ -99,6 +99,48 @@ export class SqliteAdapter implements EventStore {
             WHERE session_id = sessions.id AND subtype = 'Notification'
           )
       `)
+    }
+
+    // Migration: allow project_id to be NULL so sessions can exist without
+    // a project (the "unassigned" bucket). SQLite doesn't support ALTER
+    // COLUMN, so we recreate the sessions table when the column is NOT NULL.
+    const projectIdInfo = sessionCols.find((c) => c.name === 'project_id')
+    if (projectIdInfo) {
+      const projectIdNotNull = (projectIdInfo as any).notnull === 1
+      if (projectIdNotNull) {
+        // Recreate the sessions table without the NOT NULL constraint.
+        this.db.exec(`
+          PRAGMA foreign_keys = OFF;
+          BEGIN;
+          CREATE TABLE sessions_new (
+            id TEXT PRIMARY KEY,
+            project_id INTEGER REFERENCES projects(id),
+            slug TEXT,
+            status TEXT DEFAULT 'active',
+            started_at INTEGER NOT NULL,
+            stopped_at INTEGER,
+            transcript_path TEXT,
+            metadata TEXT,
+            event_count INTEGER NOT NULL DEFAULT 0,
+            agent_count INTEGER NOT NULL DEFAULT 0,
+            last_activity INTEGER,
+            last_notification_ts INTEGER,
+            total_input_tokens INTEGER NOT NULL DEFAULT 0,
+            total_output_tokens INTEGER NOT NULL DEFAULT 0,
+            total_cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+            total_cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+            total_duration_ms INTEGER NOT NULL DEFAULT 0,
+            llm_call_count INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+          INSERT INTO sessions_new SELECT * FROM sessions;
+          DROP TABLE sessions;
+          ALTER TABLE sessions_new RENAME TO sessions;
+          COMMIT;
+          PRAGMA foreign_keys = ON;
+        `)
+      }
     }
 
     // Token columns are added here; the backfill UPDATE that reads from the
@@ -831,6 +873,23 @@ export class SqliteAdapter implements EventStore {
         llmCallCount: r.llm_call_count,
       })),
     }
+  }
+
+  async getUnassignedSessions(limit: number = 50): Promise<any[]> {
+    return this.db
+      .prepare(
+        `
+      SELECT s.*,
+        p.slug as project_slug,
+        p.name as project_name
+      FROM sessions s
+      LEFT JOIN projects p ON p.id = s.project_id
+      WHERE s.project_id IS NULL
+      ORDER BY COALESCE(s.last_activity, s.started_at) DESC
+      LIMIT ?
+    `,
+      )
+      .all(limit)
   }
 
   async getRecentSessions(limit: number = 20): Promise<any[]> {
