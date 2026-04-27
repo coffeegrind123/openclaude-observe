@@ -133,7 +133,9 @@ export const COLOR_PRESETS: Record<
 }
 
 // --- Key migration ---
-// Convert old localStorage keys like "PreToolUse:Bash" or "PostToolUse:Bash" to logical keys like "Bash"
+
+// Pass 1: Convert old localStorage keys like "PreToolUse:Bash" or "PostToolUse:Bash"
+// to logical keys like "Bash"
 function migrateKeys(data: IconCustomizations): IconCustomizations {
   const migrated: IconCustomizations = {}
   let changed = false
@@ -148,6 +150,44 @@ function migrateKeys(data: IconCustomizations): IconCustomizations {
   return changed ? migrated : data
 }
 
+// Pass 2: Delete obsolete keys that are no longer in the registry
+const OBSOLETE_KEYS = new Set([
+  '_ToolSuccess',
+  '_ToolFailure',
+  'system',
+  'user',
+  'assistant',
+  'agent_progress',
+  'progress',
+  'UserPromptSubmitResponse',
+])
+
+function migrateIconCustomizations(data: IconCustomizations): IconCustomizations {
+  const migrated: IconCustomizations = {}
+  let changed = false
+
+  for (const [key, value] of Object.entries(data)) {
+    // Strip Pre/PostToolUse prefixes (Pass 1 logic, handles keys that bypassed Pass 1)
+    const match = key.match(/^(?:Pre|Post)ToolUse(?:Failure)?:(.+)$/)
+    const logicalKey = match ? match[1] : key
+
+    // Delete obsolete keys
+    if (OBSOLETE_KEYS.has(logicalKey)) {
+      changed = true
+      continue
+    }
+
+    if (logicalKey !== key) changed = true
+
+    // Idempotent: first write wins when keys collide after migration
+    if (!migrated[logicalKey]) {
+      migrated[logicalKey] = value
+    }
+  }
+
+  return changed ? migrated : data
+}
+
 // --- External store for cross-component reactivity ---
 
 let cachedCustomizations: IconCustomizations | null = null
@@ -157,11 +197,18 @@ function getCustomizations(): IconCustomizations {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     let data: IconCustomizations = raw ? JSON.parse(raw) : {}
-    const migrated = migrateKeys(data)
+    let migrated = migrateKeys(data)
+    if (migrated !== data) {
+      data = migrated
+    }
+    // Pass 2: delete obsolete keys that are no longer in the registry
+    const remapped = migrateIconCustomizations(data)
+    if (remapped !== data) {
+      data = remapped
+    }
     if (migrated !== data) {
       // Migration changed keys — save the migrated data back
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated))
-      data = migrated
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
     }
     cachedCustomizations = data
   } catch {
