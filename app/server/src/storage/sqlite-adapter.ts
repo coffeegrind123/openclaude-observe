@@ -1,6 +1,7 @@
 // app/server/src/storage/sqlite-adapter.ts
 
 import Database from 'better-sqlite3'
+import { config } from '../config'
 import type {
   EventStore,
   InsertEventParams,
@@ -476,7 +477,7 @@ export class SqliteAdapter implements EventStore {
     // max across all events; `last_notification_ts` only advances for
     // Notification-subtype events. "Pending" is inferred from those
     // two columns (see getSessionsWithPendingNotifications).
-    const isNotification = params.subtype === 'Notification'
+    const isNotification = config.notificationEventSubtypes.has(params.subtype)
     this.db
       .prepare(
         `UPDATE sessions SET

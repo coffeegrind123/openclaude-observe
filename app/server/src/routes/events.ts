@@ -378,7 +378,7 @@ router.post('/events', async (c) => {
     // bells can light up regardless of which session the viewer is on.
     // Any non-Notification event also bubbles as a clear signal so the
     // UI can auto-dismiss bells once the agent resumes working.
-    if (parsed.subtype === 'Notification') {
+    if (config.notificationEventSubtypes.has(parsed.subtype)) {
       broadcastToAll({
         type: 'notification',
         data: {
