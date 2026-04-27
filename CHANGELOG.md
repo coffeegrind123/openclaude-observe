@@ -1,5 +1,85 @@
 # Changelog
 
+## 27.04.2026
+
+Completed selective cherry-pick from upstream (`simple10/agents-observe`, HEAD `38bdce6`) — 30 standalone improvements across bug fixes, performance, UX, and server enhancements, plus 4 full feature groups. Deferred the upstream three-layer contract refactor (Phases 1–8) 6–12 months until its agent-class extension model stabilizes and OpenClaude Observe has concrete agent classes to register.
+
+### Database Prune UI — Sessions · Projects · Labels tabs
+
+- Settings modal widened to 720px with tab persistence to localStorage. Five tabs: Display, Icons, Projects, Labels, Sessions. DB-size footer showing runtime (Docker/Local), dbPath, and formatted byte count via `GET /api/db/stats`
+- **Sessions tab**: sortable table (project, cwd, events, age, status), filterable by minimum event count and maximum age, bulk-delete with VACUUM, bulk label assignment dialog, inline label pills, per-session project-modal, select-all with indeterminate state
+- **Projects tab**: sortable table (name, sessions, events, created, activity), per-project create dialog with slug derivation, per-project delete confirmation, nuclear delete-all
+- **Labels tab**: cross-tab label management integrated as a Settings tab alongside Display/Icons
+- New server endpoints: `GET /api/db/stats`, `POST /api/sessions/bulk-delete`, `POST /api/projects`, `DELETE /api/data`
+- Sidebar: Projects | Labels tab strip reuses existing label data — no model changes
+
+### Keyboard shortcuts — region-based navigation
+
+- Region-jump keys: `e` = event stream, `/` = search, `a` = agent filter, `b` = sidebar
+- Arrow-key navigation between sidebar session items, project buttons, pinned sessions
+- Arrow-key navigation between filter pills (static + dynamic rows)
+- Window-level scroll shortcuts when event stream is active (ArrowUp/Down, PageUp/Down, Home/End)
+- Keyboard shortcut reference tab in Settings
+- New files: `lib/keyboard-nav.ts`, `hooks/use-region-shortcuts.ts`, `components/settings/keyboard-settings.tsx` with tests
+
+### Event icon registry
+
+- Centralized `EVENT_ICON_REGISTRY` with 19 color presets, per-event icons, and default colors — covers all 22 OpenClaude OTel event types, all known tool types, and per-phase tool coloring (PreToolUse/PostToolUse/PostToolUseFailure can have distinct colors)
+- `resolveEventIcon`/`resolveEventColor` with 3-tier fallback chain: exact match → MCP collapsed → generic phase match → default
+- Adapts `config/event-icons.ts` to delegate to the registry while preserving the existing `getEventIcon`/`getEventColor` API — all 7 call sites unchanged
+- Pass 2 localStorage migration: remaps old icon-customization keys to registry IDs, purges obsolete transcript-format keys. Idempotent — won't double-migrate
+- Skipped the agent-class layer-isolation parts (`6b73a69`) — our ParsedEvent model stays intact
+
+### Configurable notification events
+
+- New env var `AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS` — comma-separated list of subtypes that trigger notification bells. Default: `'Notification'` (backwards compatible). Supports extending to `'Notification,Stop,SubagentStop'` to get notified when agents finish. Empty string disables all triggers
+- Replaces hardcoded `subtype === 'Notification'` checks in notification tracking (`last_notification_ts`) and WS broadcast with config-driven Set membership
+
+### Performance — fetch deduping & rendering
+
+- Single `/api/health` fetch shared across all consumers (was N per page)
+- Deduplicated notifications fetch + suppressed HomePage flash on stale-while-revalidate
+- Deduplicated `/api/sessions/:id` fetches into one cache key
+- Dropped `refetchInterval` polling on session/project queries — WS invalidation already covers this
+- Fixed API call regressions: lazy-fetch storm + cache thrash on session switch
+- `React.memo` DotContainer with content-aware equality
+- Split agent lane into absolute siblings + shared tooltip per lane
+- `useAgents` side-effect fetch moved out of `useMemo` (React-correctness fix)
+
+### Server enhancements
+
+- `GET /api/sessions/unassigned` — returns sessions where `project_id IS NULL`. Allows `project_id` to be nullable with migration. New `useUnassignedSessions` hook. Sidebar UI bucket deferred
+- `GET /sessions/:id/events?fields=` allow-list — opt-in bandwidth saver
+- `createdAt` dropped from WS broadcast, marked optional (partial port of `ac24a1a`)
+- Events response typed inline, `??` for `createdAt` fallback
+
+### UX features
+
+- Event runtime display: Stop/SubagentStop events show elapsed time (paired with preceding LLMGeneration/SubagentStart). Runtime pill on row summary, Runtime detail row in detail pane. New `lib/runtime.ts`
+- Shared timestamp tooltip: single Radix Tooltip instance across all event rows with stable callbacks for React.memo compatibility. Uses `timeago.js` for relative time. New `components/event-stream/timestamp-tooltip.tsx`
+- Tab spacing/text size restored to defaults (`h-9`/`text-sm`), with sidebar tabs keeping compact override
+- Transition spinner on rewind-mode range changes
+- Broadcast activity pings for sidebar pulse animation via WS
+- Inline image render for MCP `tool_response` (base64 redaction on oversized images)
+- Keep last-expanded row in view on filter/search change
+- Nested-button warning fixed in sidebar project row
+
+### Bug fixes
+
+- Guard timeline-rewind and parser against poisoned timestamps
+- Tooltips re-opening on tab reactivation
+- Errors + Config static filters (category mapping fix)
+- Session Stats memory leak (events array retained after exit)
+
+### Deliberately skipped
+
+- **Three-layer contract refactor** (Phases 1–8, ~70 commits): fundamentally conflicts with our native OTel integration — `validateEnvelope()` rejects the shape `ClaudeObserveExporter` POSTs, the agent-class registry deletes `chat-feed/` and `compaction-boundary.tsx`, and the `instances` table has no upstream schema migration. Deferred 6–12 months
+- `89fd45a`/`8fa2749` backfill `start_cwd` — no `start_cwd` column in our schema (project resolution uses `projects.cwd`)
+- `133b465` PreCompact/PostCompact pairing — already implemented via `compaction-boundary.tsx`
+- `35f4fb7` UserPromptExpansion rendering — OpenClaude doesn't emit this event
+- `8efa058` shared EventStore context — agent-class registry dependency
+- All `hooks/scripts/lib/` commits — this fork has no hook scripts
+
 ## 20.04.2026
 
 Deep-cleaned the fork of upstream remnants and post-plugin dead code, then systematically merged 19 commits from upstream (`simple10/agents-observe`) that worked without the agent-class registry refactor we chose to skip.
