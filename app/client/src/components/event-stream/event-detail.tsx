@@ -822,14 +822,52 @@ function ToolDetail({
         </div>
       )
     }
-    default:
+    default: {
+      // Extract any base64 images from the tool_response so MCP tools
+      // that return screenshots (chrome-devtools take_screenshot, etc.)
+      // render their images inline. `data.length > 100` guards against
+      // empty strings and any [REDACTED] sentinel.
+      const images = extractBase64Images(payload.tool_response)
       return (
         <div className="space-y-1.5">
           {ti.description && <DetailRow label="Description" value={ti.description} />}
           {result && <DetailCode label="Result" value={formatResult(result)} />}
+          {images.map((img, i) => (
+            <div key={i} className="flex gap-2">
+              <span className="text-muted-foreground shrink-0 w-20 text-right">
+                {images.length > 1 ? `Image ${i + 1}:` : 'Image:'}
+              </span>
+              <div className="min-w-0 rounded-md border overflow-hidden bg-muted/30 flex items-center justify-center p-2">
+                <img
+                  src={`data:${img.mediaType};base64,${img.data}`}
+                  alt="Tool response image"
+                  className="max-w-full max-h-[480px] object-contain"
+                />
+              </div>
+            </div>
+          ))}
         </div>
       )
+    }
   }
+}
+
+function extractBase64Images(resp: unknown): { mediaType: string; data: string }[] {
+  if (!Array.isArray(resp)) return []
+  const out: { mediaType: string; data: string }[] = []
+  for (const item of resp) {
+    if (!item || typeof item !== 'object') continue
+    const typed = item as Record<string, unknown>
+    if (typed.type !== 'image') continue
+    const src = typed.source as Record<string, unknown> | undefined
+    if (!src || typeof src !== 'object') continue
+    if (src.type !== 'base64') continue
+    const data = src.data
+    if (typeof data !== 'string' || data.length <= 100) continue
+    const mediaType = typeof src.media_type === 'string' ? src.media_type : 'image/png'
+    out.push({ mediaType, data })
+  }
+  return out
 }
 
 // ── Helper components ──────────────────────────────────────
