@@ -185,6 +185,7 @@ export function ProjectList({ collapsed }: ProjectListProps) {
               <div
                 role="button"
                 tabIndex={0}
+                data-sidebar-item=""
                 className="group flex items-center gap-2 w-full rounded-md px-2 py-0.5 text-sm transition-colors cursor-pointer text-foreground hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 onClick={toggleProject}
                 onKeyDown={(e) => {
@@ -435,7 +436,9 @@ function SessionList({ projectId }: { projectId: number }) {
             })}
             {hiddenCount > 0 && (
               <button
-                className="w-full text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 cursor-pointer"
+                data-sidebar-item=""
+                tabIndex={-1}
+                className="w-full text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 onClick={() => toggleGroup(group.label)}
               >
                 Show {hiddenCount} more...
@@ -445,7 +448,9 @@ function SessionList({ projectId }: { projectId: number }) {
               expandedGroups.has(group.label) &&
               group.sessions.length > previewCount && (
                 <button
-                  className="w-full text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 cursor-pointer"
+                  data-sidebar-item=""
+                  tabIndex={-1}
+                  className="w-full text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   onClick={() => toggleGroup(group.label)}
                 >
                   Show less

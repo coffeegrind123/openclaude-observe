@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect, useDeferredValue, useCallback } from 'react'
+import { useRegionShortcuts } from '@/hooks/use-region-shortcuts'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useQuery } from '@tanstack/react-query'
 import { useEffectiveEvents } from '@/hooks/use-effective-events'
@@ -37,6 +38,8 @@ export function EventStream() {
     setSearchQuery,
     setSelectedAgentIds,
   } = useUIStore()
+
+  const { shortcuts } = useRegionShortcuts()
 
   // Defer filter values so the UI stays responsive during filter changes
   const deferredStaticFilters = useDeferredValue(activeStaticFilters)
@@ -387,6 +390,16 @@ export function EventStream() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedEvents, selectedEventId])
 
+  // Keyboard navigation for the event stream — delegates to shortcuts.onKeyDown
+  // which handles ArrowUp/Down/PageUp/PageDown for the active region.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      shortcuts.onKeyDown(e)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [shortcuts])
+
   // Scroll to a requested event (set via setScrollToEventId — e.g. timeline dot click).
   // Resolves merged events (PostToolUse → displayed PreToolUse row), scrolls the
   // virtualizer to the target row, then sets flashingEventId so the row pulses.
@@ -471,7 +484,7 @@ export function EventStream() {
                 </span>
               )}
             </div>
-            <div ref={scrollRef} className="flex-1 overflow-y-auto">
+            <div ref={scrollRef} data-region-target="events" tabIndex={-1} className="flex-1 overflow-y-auto outline-none">
               {displayedEvents.length === 0 ? (
                 <EmptyState text="No events match the current filters" />
               ) : (

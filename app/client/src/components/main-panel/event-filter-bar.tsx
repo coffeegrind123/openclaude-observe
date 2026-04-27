@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import { useUIStore } from '@/stores/ui-store'
 import { useEvents } from '@/hooks/use-events'
 import { cn } from '@/lib/utils'
+import { focusSiblingMatching } from '@/lib/keyboard-nav'
 import { Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
@@ -65,12 +66,50 @@ export function EventFilterBar() {
   const hasAnyFilter = activeStaticFilters.length > 0 || activeToolFilters.length > 0
 
   return (
-    <div className="flex flex-col gap-1 px-3 py-1.5 border-b border-border">
+    <div
+      className="flex flex-col gap-1 px-3 py-1.5 border-b border-border"
+      onKeyDown={(e) => {
+        const target = e.target as HTMLElement
+        if (!target.matches('[data-filter-pill]')) return
+        const container = e.currentTarget
+
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          const direction = e.key === 'ArrowRight' ? 1 : -1
+          if (focusSiblingMatching(target, '[data-filter-pill]', container, direction)) {
+            e.preventDefault()
+          }
+          return
+        }
+
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          const currentRow = target.getAttribute('data-filter-row')
+          if (currentRow == null) return
+          const targetRow = String(Number(currentRow) + (e.key === 'ArrowDown' ? 1 : -1))
+          const sameRow = Array.from(
+            container.querySelectorAll<HTMLElement>(
+              `[data-filter-pill][data-filter-row="${currentRow}"]`,
+            ),
+          )
+          const otherRow = Array.from(
+            container.querySelectorAll<HTMLElement>(
+              `[data-filter-pill][data-filter-row="${targetRow}"]`,
+            ),
+          )
+          if (otherRow.length === 0) return
+          const idx = sameRow.indexOf(target)
+          const clamped = Math.max(0, Math.min(idx, otherRow.length - 1))
+          otherRow[clamped].focus()
+          e.preventDefault()
+        }
+      }}
+    >
       {/* Row 1: Static filters + search */}
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1 flex-wrap">
           <span className="text-xs text-muted-foreground">Filters:</span>
           <button
+            data-filter-pill=""
+            data-filter-row="0"
             className={cn(
               'rounded-full px-2.5 py-0.5 text-xs transition-colors',
               !hasAnyFilter
@@ -87,6 +126,8 @@ export function EventFilterBar() {
             return (
               <button
                 key={filter.label}
+                data-filter-pill=""
+                data-filter-row="0"
                 className={cn(
                   'rounded-full px-2.5 py-0.5 text-xs transition-colors border',
                   isActive
@@ -113,6 +154,7 @@ export function EventFilterBar() {
             )}
           />
           <Input
+            data-region-target="search"
             placeholder="Search events..."
             value={localSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
@@ -143,6 +185,8 @@ export function EventFilterBar() {
           {dynamicNames.map((name) => (
             <button
               key={name}
+              data-filter-pill=""
+              data-filter-row="1"
               className={cn(
                 'rounded-full px-2.5 py-0.5 text-xs transition-colors border',
                 activeToolFilters.includes(name)
