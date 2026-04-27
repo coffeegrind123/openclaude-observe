@@ -103,7 +103,10 @@ export interface ParsedEvent {
   instanceId: string | null
   status: string // derived from subtype, not stored
   timestamp: number
-  createdAt: number
+  // Optional — server-side ingest timestamp. Dropped from WS broadcast and
+  // GET /sessions/:id/events default response; included only when the
+  // GET endpoint is called with ?fields=createdAt.
+  createdAt?: number
   payload: Record<string, unknown>
 }
 

@@ -358,7 +358,9 @@ router.post('/events', async (c) => {
       instanceId: parsed.instanceId,
       status: deriveEventStatus(parsed.subtype),
       timestamp: parsed.timestamp,
-      createdAt: now,
+      // createdAt is the server-side ingest timestamp; WS subscribers don't
+      // read it (the GET endpoint emits it on opt-in via ?fields=createdAt).
+      // Drop it from the broadcast to save WS bandwidth.
       payload: parsed.raw,
     }
 

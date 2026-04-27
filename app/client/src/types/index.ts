@@ -76,7 +76,9 @@ export interface ParsedEvent {
   toolUseId: string | null
   status: string
   timestamp: number
-  createdAt: number
+  // Optional — server-side ingest timestamp. Not broadcast over WS;
+  // included in GET /sessions/:id/events only when ?fields=createdAt.
+  createdAt?: number
   payload: Record<string, unknown>
 }
 
