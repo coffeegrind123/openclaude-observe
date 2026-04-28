@@ -4,6 +4,16 @@
 
 Security hardening — adversarial bug-hunter pass across the full codebase. 20 fixes covering SQLite migration safety, transaction atomicity, DoS prevention, input validation, and error handling.
 
+### Test expansion — 17 new test files, all server routes covered
+
+Full audit of all 26 existing test files for freshness (no stale tests found; 12 files flagged with significant coverage gaps). Added 408 tests across 17 files bringing the suite from 26→43 files and ~553→961 passing tests.
+
+**Server (8 new files, 162 tests):** All 10 route files now tested — sessions (9 endpoints including events status correction, context computation, metadata patching), projects (CRUD with slug validation), events (POST ingestion with session lifecycle, GET thread), health, instances, changelog. Plus unit tests for `apiError` helper and `rateLimit` middleware (window expiry, per-IP counters).
+
+**Client (9 new files, 246 tests):** Core lib coverage — `api-client` (every method with fetch mocking, error parsing, URL encoding), `format-utils` (`formatTokens`), `format-bytes`, `server-health` (memoization), `scroll-sync` (lock coordination), `utils` (`cn()` class merging, `isNewerVersion()` date-based/semver dual mode). Config coverage — `event-icons` (registry integrity, 47 required IDs, color presets, custom overrides, MCP collapsing), `time-ranges` (all 6 ranges with ms/ticks), `activity` (pulse config).
+
+**Fixes:** Server vitest binary (broken `.bin/vitest` symlink), client test setup (added `offsetWidth` mock for `@tanstack/react-virtual` in jsdom), `app.test.ts` flaky timeout 5s→10s. 7 pre-existing event-stream virtualizer failures remain (known jsdom limitation, component works correctly in real browsers).
+
 ### Critical
 
 - **Sessions table migration crash** — the `INSERT INTO sessions_new SELECT * FROM sessions` at `sqlite-adapter.ts:138` referenced 20 columns in the new table but the original `CREATE TABLE sessions` only has 14 (token columns are added later via `ALTER TABLE`). Any database created before the nullable `project_id` change would crash on startup with "20 columns but 14 values were supplied." Fixed by explicitly listing the 14 source columns in both `CREATE TABLE sessions_new` and the `INSERT ... SELECT`, with a post-migration row-count safety check
