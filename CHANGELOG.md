@@ -1,5 +1,43 @@
 # Changelog
 
+## 28.04.2026
+
+Security hardening — adversarial bug-hunter pass across the full codebase. 20 fixes covering SQLite migration safety, transaction atomicity, DoS prevention, input validation, and error handling.
+
+### Critical
+
+- **Sessions table migration crash** — the `INSERT INTO sessions_new SELECT * FROM sessions` at `sqlite-adapter.ts:138` referenced 20 columns in the new table but the original `CREATE TABLE sessions` only has 14 (token columns are added later via `ALTER TABLE`). Any database created before the nullable `project_id` change would crash on startup with "20 columns but 14 values were supplied." Fixed by explicitly listing the 14 source columns in both `CREATE TABLE sessions_new` and the `INSERT ... SELECT`, with a post-migration row-count safety check
+
+### High
+
+- **Atomic transactions**: `deleteProject`, `deleteSession`, `insertEvent` counter updates, `repairOrphans`, and `clearSessionEvents` now use `this.db.transaction()` wrappers — prevents mid-operation crashes from leaving orphaned rows or desynchronized session counters
+- **Unbounded slug suffix loop** (DoS): `pickAvailableSlug` now caps suffix at 1000, falling back to a timestamp-based unique slug. Attacker could previously pre-create 50k projects to force 50k DB queries per event
+- **CORS hardened** to localhost origins only — previously `cors()` with no config allowed cross-origin DELETE from any website
+- **Rate limiting** via new `middleware/rate-limit.ts`: 1000 requests per minute per IP, applied to `POST /api/events`. Stale entries swept every 5 minutes
+- **Request body size limit**: 10 MB cap, returns 413 before parsing. Prevents memory exhaustion from multi-GB JSON payloads
+- **WebSocket connection limit**: 100 max concurrent clients. Prevents `broadcastToAll` O(n) degradation from connection floods
+- **Instance data validation**: `instanceId` capped at 256 chars, `instanceRole` checked against expected values
+
+### Medium
+
+- **Graceful shutdown**: added `SqliteAdapter.close()` and `SIGINT`/`SIGTERM` handlers that close the database before exit — prevents WAL data loss on unclean shutdown
+- **VACUUM safety**: `admin.ts` bulk-delete wraps `store.vacuum()` in try/catch with `SQLITE_BUSY` retry
+- **State-changing GET**: `GET /api/sessions/:id/events` lazy status correction documented — intentional design, no longer a silent mutation
+- **NaN in SQL queries**: 6 `parseInt` sites on user-supplied params/routes now guard with `isNaN()` and return 400
+- **Context computation limit**: `GET /api/sessions/:id/context` caps events at 10,000 — prevents memory exhaustion on large sessions
+- **Subagent naming queue**: async interleaving fixed by capturing pending metadata synchronously before the `await store.upsertAgent()` call
+- **NaN timestamp passthrough**: parser now rejects NaN timestamps, defaults to `Date.now()`. Previously stored NaN in the DB, causing client-side garbage display
+
+### Low
+
+- Client timestamp display: `formatFullDate`, `formatRuntime`, `formatTime` all guard against NaN/Infinity with `'—'` fallback
+- LIKE wildcard escaping: `%` and `_` in search terms now escaped with `\` via `ESCAPE '\'` clause
+- WebSocket error logging: replaced empty `catch {}` with conditional `console.warn` when verbose
+- Slug length validation: 100 char max on `POST /projects`, 256 char truncation in parser
+- Consumer ID validation: type check (`typeof === 'string'`) and length cap (256 chars)
+- Content-Type validation: all POST/PATCH routes check for `application/json`, return 415 on mismatch
+- URI decode safety: `decodeURIComponent` wrapped in try/catch on all route params
+
 ## 27.04.2026
 
 Completed selective cherry-pick from upstream (`simple10/agents-observe`, HEAD `38bdce6`) — 30 standalone improvements across bug fixes, performance, UX, and server enhancements, plus 4 full feature groups. Deferred the upstream three-layer contract refactor (Phases 1–8) 6–12 months until its agent-class extension model stabilizes and OpenClaude Observe has concrete agent classes to register.
