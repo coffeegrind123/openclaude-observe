@@ -23,6 +23,12 @@ Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
     return 800
   },
 })
+Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+  configurable: true,
+  get() {
+    return 1200
+  },
+})
 Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
   configurable: true,
   get() {

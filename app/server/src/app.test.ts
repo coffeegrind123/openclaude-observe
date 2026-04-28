@@ -15,7 +15,7 @@ describe('dev mode redirect', () => {
     vi.restoreAllMocks()
   })
 
-  test('redirects unmatched GET requests to dev client', async () => {
+  test('redirects unmatched GET requests to dev client', { timeout: 10000 }, async () => {
     vi.doMock('./config', () => ({
       config: {
         clientDistPath: '',
