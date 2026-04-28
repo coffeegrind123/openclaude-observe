@@ -32,6 +32,10 @@ router.get('/projects', async (c) => {
 // into from the Project modal. Slug is derived from the name if not
 // provided; collisions return 409.
 router.post('/projects', async (c) => {
+  const contentType = c.req.header('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    return c.json({ error: 'Content-Type must be application/json' }, 415)
+  }
   const store = c.get('store')
   const broadcastToAll = c.get('broadcastToAll')
   let body: Record<string, unknown>
@@ -49,6 +53,9 @@ router.post('/projects', async (c) => {
   if (!slug) return apiError(c, 400, 'could not derive a valid slug from name')
   if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
     return apiError(c, 400, 'slug must be kebab-case (a-z, 0-9, hyphens)')
+  }
+  if (slug.length > 100) {
+    return apiError(c, 400, 'Slug must be 100 characters or fewer')
   }
 
   if (!(await store.isSlugAvailable(slug))) {
@@ -98,6 +105,10 @@ router.get('/projects/:id/sessions', async (c) => {
 
 // PATCH /projects/:id — update project fields (name)
 router.patch('/projects/:id', async (c) => {
+  const contentType = c.req.header('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    return c.json({ error: 'Content-Type must be application/json' }, 415)
+  }
   const store = c.get('store')
   const broadcastToAll = c.get('broadcastToAll')
   const projectId = Number(c.req.param('id'))

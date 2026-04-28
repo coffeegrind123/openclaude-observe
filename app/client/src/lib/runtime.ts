@@ -42,6 +42,7 @@ export function computeRuntimeMs(
 /** Format a duration in ms as a compact runtime string:
  *  <1s → "500ms", <60s → "5.2s", <60m → "1m 3s", >=60m → "1h 23m". */
 export function formatRuntime(ms: number): string {
+  if (!isFinite(ms) || ms < 0) return '—'
   if (ms < 1000) return `${Math.round(ms)}ms`
   const totalSec = ms / 1000
   if (totalSec < 60) return `${totalSec < 10 ? totalSec.toFixed(1) : Math.round(totalSec)}s`

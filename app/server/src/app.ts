@@ -36,7 +36,28 @@ export function createApp(
 ) {
   const app = new Hono<Env>()
 
-  app.use('*', cors())
+  // Body size limiter — must be before CORS and route setup
+  app.use('*', async (c, next) => {
+    const contentLength = c.req.header('content-length')
+    if (contentLength && parseInt(contentLength) > 10_000_000) { // 10 MB
+      return c.json({ error: 'Request body too large' }, 413)
+    }
+    await next()
+  })
+
+  app.use('*', cors({
+    origin: (origin) => {
+      // Allow requests with no origin (curl, server-to-server)
+      if (!origin) return null
+      // Allow localhost on any port
+      if (origin.match(/^https?:\/\/localhost(:\d+)?$/)) return origin
+      // Allow local IPs
+      if (origin.match(/^https?:\/\/127\.0\.0\.1(:\d+)?$/)) return origin
+      if (origin.match(/^https?:\/\/\[::1\](:\d+)?$/)) return origin
+      // Deny everything else
+      return null
+    },
+  }))
 
   // Inject store and broadcast into all routes
   app.use('*', async (c, next) => {

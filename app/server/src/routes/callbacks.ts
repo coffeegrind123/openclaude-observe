@@ -22,7 +22,12 @@ router.post('/callbacks/session-slug/:sessionId', async (c) => {
   const broadcastToAll = c.get('broadcastToAll')
 
   try {
-    const sessionId = decodeURIComponent(c.req.param('sessionId'))
+    let sessionId: string
+    try {
+      sessionId = decodeURIComponent(c.req.param('sessionId'))
+    } catch {
+      return c.json({ error: 'Invalid URL encoding' }, 400)
+    }
     const data = (await c.req.json()) as Record<string, unknown>
 
     if (typeof data.slug !== 'string' || !data.slug.trim()) {

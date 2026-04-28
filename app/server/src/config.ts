@@ -55,13 +55,19 @@ export const config = {
       return 'unknown'
     }
   })(),
-  port: parseInt(process.env.AGENTS_OBSERVE_SERVER_PORT || '4981', 10),
+  port: (() => {
+    const rawPort = parseInt(process.env.AGENTS_OBSERVE_SERVER_PORT || '', 10)
+    return !isNaN(rawPort) && rawPort > 0 && rawPort < 65536 ? rawPort : 4981
+  })(),
   logLevel,
   verbose: logLevel === 'debug' || logLevel === 'trace',
   dbPath: resolve(process.env.AGENTS_OBSERVE_DB_PATH || '../../data/observe.db'),
   storageAdapter: process.env.AGENTS_OBSERVE_STORAGE_ADAPTER || 'sqlite',
   clientDistPath: process.env.AGENTS_OBSERVE_CLIENT_DIST_PATH || '',
-  devClientPort: parseInt(process.env.AGENTS_OBSERVE_DEV_CLIENT_PORT || '5174', 10),
+  devClientPort: (() => {
+    const rawPort = parseInt(process.env.AGENTS_OBSERVE_DEV_CLIENT_PORT || '', 10)
+    return !isNaN(rawPort) && rawPort > 0 && rawPort < 65536 ? rawPort : 5174
+  })(),
 
   // DB reset policy: 'allow' = permit, 'deny' = reject, 'backup' (default) = backup then reset
   // Unrecognized values are treated as 'deny' to prevent misconfiguration
@@ -77,8 +83,8 @@ export const config = {
   notificationEventSubtypes: new Set(
     (process.env.AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS || 'Notification')
       .split(',')
-      .map(s => s.trim())
-      .filter(Boolean)
+      .map((s) => s.trim())
+      .filter(Boolean),
   ),
 
   // Auto-shutdown: <= 0 disables, > 0 is delay in ms after last consumer disconnects

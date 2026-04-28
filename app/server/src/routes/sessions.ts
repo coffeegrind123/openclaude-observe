@@ -1,33 +1,34 @@
 // app/server/src/routes/sessions.ts
-import { Hono } from 'hono'
-import type { EventStore } from '../storage/types'
-import { config } from '../config'
-import { apiError } from '../errors'
-import { computeSessionContext } from '../context'
+import { Hono } from "hono";
+import type { EventStore } from "../storage/types";
+import { config } from "../config";
+import { apiError } from "../errors";
+import { computeSessionContext } from "../context";
 
 function deriveEventStatus(subtype: string | null): string {
-  if (subtype === 'PreToolUse') return 'running'
-  if (subtype === 'PostToolUse') return 'completed'
-  return 'pending'
+  if (subtype === "PreToolUse") return "running";
+  if (subtype === "PostToolUse") return "completed";
+  return "pending";
 }
 
 type Env = {
   Variables: {
-    store: EventStore
-    broadcastToSession: (sessionId: string, msg: object) => void
-    broadcastToAll: (msg: object) => void
-  }
-}
+    store: EventStore;
+    broadcastToSession: (sessionId: string, msg: object) => void;
+    broadcastToAll: (msg: object) => void;
+  };
+};
 
-const LOG_LEVEL = config.logLevel
+const LOG_LEVEL = config.logLevel;
 
-const router = new Hono<Env>()
+const router = new Hono<Env>();
 
 // GET /sessions/unassigned
-router.get('/sessions/unassigned', async (c) => {
-  const store = c.get('store')
-  const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined
-  const rows = await store.getUnassignedSessions(limit)
+router.get("/sessions/unassigned", async (c) => {
+  const store = c.get("store");
+  const limitRaw = c.req.query("limit") ? parseInt(c.req.query("limit")!) : NaN;
+  const limit = isNaN(limitRaw) ? undefined : limitRaw;
+  const rows = await store.getUnassignedSessions(limit);
   const sessions = rows.map((r: any) => ({
     id: r.id,
     projectId: r.project_id,
@@ -48,15 +49,16 @@ router.get('/sessions/unassigned', async (c) => {
     totalCacheCreationTokens: r.total_cache_creation_tokens || 0,
     totalDurationMs: r.total_duration_ms || 0,
     llmCallCount: r.llm_call_count || 0,
-  }))
-  return c.json(sessions)
-})
+  }));
+  return c.json(sessions);
+});
 
 // GET /sessions/recent
-router.get('/sessions/recent', async (c) => {
-  const store = c.get('store')
-  const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : 20
-  const rows = await store.getRecentSessions(limit)
+router.get("/sessions/recent", async (c) => {
+  const store = c.get("store");
+  const limitRaw = c.req.query("limit") ? parseInt(c.req.query("limit")!) : NaN;
+  const limit = isNaN(limitRaw) ? 20 : limitRaw;
+  const rows = await store.getRecentSessions(limit);
   const sessions = rows.map((r: any) => ({
     id: r.id,
     projectId: r.project_id,
@@ -77,16 +79,21 @@ router.get('/sessions/recent', async (c) => {
     totalCacheCreationTokens: r.total_cache_creation_tokens || 0,
     totalDurationMs: r.total_duration_ms || 0,
     llmCallCount: r.llm_call_count || 0,
-  }))
-  return c.json(sessions)
-})
+  }));
+  return c.json(sessions);
+});
 
 // GET /sessions/:id
-router.get('/sessions/:id', async (c) => {
-  const store = c.get('store')
-  const sessionId = decodeURIComponent(c.req.param('id'))
-  const row = await store.getSessionById(sessionId)
-  if (!row) return apiError(c, 404, 'Session not found')
+router.get("/sessions/:id", async (c) => {
+  const store = c.get("store");
+  let sessionId: string;
+  try {
+    sessionId = decodeURIComponent(c.req.param("id"));
+  } catch {
+    return c.json({ error: "Invalid URL encoding" }, 400);
+  }
+  const row = await store.getSessionById(sessionId);
+  if (!row) return apiError(c, 404, "Session not found");
   return c.json({
     id: row.id,
     projectId: row.project_id,
@@ -107,14 +114,19 @@ router.get('/sessions/:id', async (c) => {
     totalCacheCreationTokens: row.total_cache_creation_tokens || 0,
     totalDurationMs: row.total_duration_ms || 0,
     llmCallCount: row.llm_call_count || 0,
-  })
-})
+  });
+});
 
 // GET /sessions/:id/agents
-router.get('/sessions/:id/agents', async (c) => {
-  const store = c.get('store')
-  const sessionId = decodeURIComponent(c.req.param('id'))
-  const rows = await store.getAgentsForSession(sessionId)
+router.get("/sessions/:id/agents", async (c) => {
+  const store = c.get("store");
+  let sessionId: string;
+  try {
+    sessionId = decodeURIComponent(c.req.param("id"));
+  } catch {
+    return c.json({ error: "Invalid URL encoding" }, 400);
+  }
+  const rows = await store.getAgentsForSession(sessionId);
   const agents = rows.map((r: any) => ({
     id: r.id,
     sessionId: r.session_id,
@@ -122,54 +134,65 @@ router.get('/sessions/:id/agents', async (c) => {
     name: r.name,
     description: r.description,
     agentType: r.agent_type || null,
-  }))
-  return c.json(agents)
-})
+  }));
+  return c.json(agents);
+});
 
 // Allow-list of opt-in `fields=` values. Default response omits these
 // (sessionId is redundant with the URL; createdAt is a server-side ingest
 // timestamp not normally needed by the client). Clients can pass
 // `?fields=sessionId,createdAt` to opt in.
-const OPT_IN_FIELDS = new Set(['sessionId', 'createdAt'])
+const OPT_IN_FIELDS = new Set(["sessionId", "createdAt"]);
 
 // GET /sessions/:id/events
-router.get('/sessions/:id/events', async (c) => {
-  const store = c.get('store')
-  const sessionId = decodeURIComponent(c.req.param('id'))
-  const sinceParam = c.req.query('since')
-  const agentIdParam = c.req.query('agentId')
-  const fieldsParam = c.req.query('fields')
+router.get("/sessions/:id/events", async (c) => {
+  const store = c.get("store");
+  let sessionId: string;
+  try {
+    sessionId = decodeURIComponent(c.req.param("id"));
+  } catch {
+    return c.json({ error: "Invalid URL encoding" }, 400);
+  }
+  const sinceParam = c.req.query("since");
+  const agentIdParam = c.req.query("agentId");
+  const fieldsParam = c.req.query("fields");
 
   const requested = new Set(
-    (fieldsParam ?? '')
-      .split(',')
+    (fieldsParam ?? "")
+      .split(",")
       .map((f) => f.trim())
       .filter((f) => OPT_IN_FIELDS.has(f)),
-  )
+  );
 
-  const rows = sinceParam
-    ? await store.getEventsSince(sessionId, parseInt(sinceParam))
+  const sinceVal = sinceParam ? parseInt(sinceParam) : NaN;
+  const limitRaw = c.req.query("limit") ? parseInt(c.req.query("limit")!) : NaN;
+  const offsetRaw = c.req.query("offset")
+    ? parseInt(c.req.query("offset")!)
+    : NaN;
+
+  const rows = !isNaN(sinceVal)
+    ? await store.getEventsSince(sessionId, sinceVal)
     : await store.getEventsForSession(sessionId, {
-        agentIds: agentIdParam ? agentIdParam.split(',') : undefined,
-        type: c.req.query('type') || undefined,
-        subtype: c.req.query('subtype') || undefined,
-        search: c.req.query('search') || undefined,
-        limit: c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined,
-        offset: c.req.query('offset') ? parseInt(c.req.query('offset')!) : undefined,
-      })
+        agentIds: agentIdParam ? agentIdParam.split(",") : undefined,
+        type: c.req.query("type") || undefined,
+        subtype: c.req.query("subtype") || undefined,
+        search: c.req.query("search") || undefined,
+        limit: isNaN(limitRaw) ? undefined : limitRaw,
+        offset: isNaN(offsetRaw) ? undefined : offsetRaw,
+      });
 
   interface EventRow {
-    id: number
-    agentId: string
-    type: string
-    subtype: string | null
-    toolName: string | null
-    toolUseId: string | null
-    status: string
-    timestamp: number
-    payload: unknown
-    sessionId?: string
-    createdAt?: number
+    id: number;
+    agentId: string;
+    type: string;
+    subtype: string | null;
+    toolName: string | null;
+    toolUseId: string | null;
+    status: string;
+    timestamp: number;
+    payload: unknown;
+    sessionId?: string;
+    createdAt?: number;
   }
 
   const events: EventRow[] = rows.map((r) => {
@@ -183,116 +206,186 @@ router.get('/sessions/:id/events', async (c) => {
       status: deriveEventStatus(r.subtype),
       timestamp: r.timestamp,
       payload: JSON.parse(r.payload),
-    }
-    if (requested.has('sessionId')) base.sessionId = r.session_id
-    if (requested.has('createdAt')) base.createdAt = r.created_at ?? r.timestamp
-    return base
-  })
+    };
+    if (requested.has("sessionId")) base.sessionId = r.session_id;
+    if (requested.has("createdAt"))
+      base.createdAt = r.created_at ?? r.timestamp;
+    return base;
+  });
 
   // Lazy session status correction based on event history.
+  //
+  // This GET handler intentionally mutates session status.  While
+  // status is normally set during POST /api/events, a session can
+  // become stale if the server restarts mid-session or if an event
+  // is lost.  Rather than run a periodic sweep, we correct status
+  // on read — cheap (one extra DB query) and self-healing.
+  //
+  // The guard below only fetches the session row when the event
+  // scan suggests a potential mismatch, so the common case (status
+  // already correct) avoids the extra write entirely.
   if (events.length > 0) {
-    let lastSessionEndIdx = -1
+    let lastSessionEndIdx = -1;
     for (let i = events.length - 1; i >= 0; i--) {
-      if (events[i].subtype === 'SessionEnd') {
-        lastSessionEndIdx = i
-        break
+      if (events[i].subtype === "SessionEnd") {
+        lastSessionEndIdx = i;
+        break;
       }
     }
-    const session = await store.getSessionById(sessionId)
-    if (session) {
-      if (
-        lastSessionEndIdx >= 0 &&
-        lastSessionEndIdx === events.length - 1 &&
-        session.status === 'active'
-      ) {
-        await store.updateSessionStatus(sessionId, 'stopped')
-      } else if (
-        lastSessionEndIdx >= 0 &&
-        lastSessionEndIdx < events.length - 1 &&
-        session.status === 'stopped'
-      ) {
-        await store.updateSessionStatus(sessionId, 'active')
-      } else if (lastSessionEndIdx < 0 && session.status === 'stopped') {
-        await store.updateSessionStatus(sessionId, 'active')
+
+    // Only query session when the event scan suggests staleness:
+    // - last event is SessionEnd → session might still be 'active'
+    // - last event is NOT SessionEnd (or prior stop) → session might be 'stopped'
+    // - no SessionEnd anywhere → session might be 'stopped'
+    const mightNeedCorrection =
+      (lastSessionEndIdx >= 0 && lastSessionEndIdx === events.length - 1) ||
+      (lastSessionEndIdx >= 0 && lastSessionEndIdx < events.length - 1) ||
+      lastSessionEndIdx < 0;
+
+    if (mightNeedCorrection) {
+      const session = await store.getSessionById(sessionId);
+      if (session) {
+        if (
+          lastSessionEndIdx >= 0 &&
+          lastSessionEndIdx === events.length - 1 &&
+          session.status === "active"
+        ) {
+          await store.updateSessionStatus(sessionId, "stopped");
+        } else if (
+          lastSessionEndIdx >= 0 &&
+          lastSessionEndIdx < events.length - 1 &&
+          session.status === "stopped"
+        ) {
+          await store.updateSessionStatus(sessionId, "active");
+        } else if (lastSessionEndIdx < 0 && session.status === "stopped") {
+          await store.updateSessionStatus(sessionId, "active");
+        }
       }
     }
   }
 
-  return c.json(events)
-})
+  return c.json(events);
+});
 
 // GET /sessions/:id/usage
-router.get('/sessions/:id/usage', async (c) => {
-  const store = c.get('store')
-  const sessionId = decodeURIComponent(c.req.param('id'))
-  const usage = await store.getSessionUsage(sessionId)
-  if (!usage) return apiError(c, 404, 'Session not found')
-  return c.json(usage)
-})
+router.get("/sessions/:id/usage", async (c) => {
+  const store = c.get("store");
+  let sessionId: string;
+  try {
+    sessionId = decodeURIComponent(c.req.param("id"));
+  } catch {
+    return c.json({ error: "Invalid URL encoding" }, 400);
+  }
+  const usage = await store.getSessionUsage(sessionId);
+  if (!usage) return apiError(c, 404, "Session not found");
+  return c.json(usage);
+});
 
 // GET /sessions/:id/context — per-turn context attribution breakdown
-router.get('/sessions/:id/context', async (c) => {
-  const store = c.get('store')
-  const sessionId = decodeURIComponent(c.req.param('id'))
-  const session = await store.getSessionById(sessionId)
-  if (!session) return apiError(c, 404, 'Session not found')
-  const events = await store.getEventsForSession(sessionId)
-  const breakdown = computeSessionContext(events)
-  return c.json(breakdown)
-})
+router.get("/sessions/:id/context", async (c) => {
+  const store = c.get("store");
+  let sessionId: string;
+  try {
+    sessionId = decodeURIComponent(c.req.param("id"));
+  } catch {
+    return c.json({ error: "Invalid URL encoding" }, 400);
+  }
+  const session = await store.getSessionById(sessionId);
+  if (!session) return apiError(c, 404, "Session not found");
+  const MAX_CONTEXT_EVENTS = 10_000;
+  const events = await store.getEventsForSession(sessionId, {
+    limit: MAX_CONTEXT_EVENTS,
+  });
+  if (events.length >= MAX_CONTEXT_EVENTS) {
+    return apiError(
+      c,
+      413,
+      `Session has too many events (>= ${MAX_CONTEXT_EVENTS}) for context computation`,
+    );
+  }
+  const breakdown = computeSessionContext(events);
+  return c.json(breakdown);
+});
 
 // PATCH /sessions/:id — update session table fields (slug, projectId)
-router.patch('/sessions/:id', async (c) => {
-  const store = c.get('store')
-  const broadcastToAll = c.get('broadcastToAll')
+router.patch("/sessions/:id", async (c) => {
+  const contentType = c.req.header("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    return c.json({ error: "Content-Type must be application/json" }, 415);
+  }
+  const store = c.get("store");
+  const broadcastToAll = c.get("broadcastToAll");
 
   try {
-    const sessionId = decodeURIComponent(c.req.param('id'))
-    const data = (await c.req.json()) as Record<string, unknown>
+    let sessionId: string;
+    try {
+      sessionId = decodeURIComponent(c.req.param("id"));
+    } catch {
+      return c.json({ error: "Invalid URL encoding" }, 400);
+    }
+    const data = (await c.req.json()) as Record<string, unknown>;
 
-    if (typeof data.slug === 'string') {
-      const slug = data.slug.trim()
-      if (!slug) return apiError(c, 400, 'slug must not be empty')
-      await store.updateSessionSlug(sessionId, slug)
+    if (typeof data.slug === "string") {
+      const slug = data.slug.trim();
+      if (!slug) return apiError(c, 400, "slug must not be empty");
+      await store.updateSessionSlug(sessionId, slug);
 
-      if (LOG_LEVEL === 'debug') {
-        console.log(`[METADATA] Session ${sessionId.slice(0, 8)} slug: ${slug}`)
+      if (LOG_LEVEL === "debug") {
+        console.log(
+          `[METADATA] Session ${sessionId.slice(0, 8)} slug: ${slug}`,
+        );
       }
 
-      broadcastToAll({ type: 'session_update', data: { id: sessionId, slug } as any })
-    }
-
-    if (data.projectId && typeof data.projectId === 'number') {
-      await store.updateSessionProject(sessionId, data.projectId)
       broadcastToAll({
-        type: 'session_update',
-        data: { id: sessionId, projectId: data.projectId },
-      })
+        type: "session_update",
+        data: { id: sessionId, slug } as any,
+      });
     }
 
-    return c.json({ ok: true })
+    if (data.projectId && typeof data.projectId === "number") {
+      await store.updateSessionProject(sessionId, data.projectId);
+      broadcastToAll({
+        type: "session_update",
+        data: { id: sessionId, projectId: data.projectId },
+      });
+    }
+
+    return c.json({ ok: true });
   } catch {
-    return apiError(c, 400, 'Invalid request')
+    return apiError(c, 400, "Invalid request");
   }
-})
+});
 
 // PATCH /sessions/:id/metadata — merge keys into session metadata JSON
-router.patch('/sessions/:id/metadata', async (c) => {
-  const store = c.get('store')
+router.patch("/sessions/:id/metadata", async (c) => {
+  const contentType = c.req.header("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    return c.json({ error: "Content-Type must be application/json" }, 415);
+  }
+  const store = c.get("store");
 
   try {
-    const sessionId = decodeURIComponent(c.req.param('id'))
-    const patch = (await c.req.json()) as Record<string, unknown>
+    let sessionId: string;
+    try {
+      sessionId = decodeURIComponent(c.req.param("id"));
+    } catch {
+      return c.json({ error: "Invalid URL encoding" }, 400);
+    }
+    const patch = (await c.req.json()) as Record<string, unknown>;
 
-    if (!patch || typeof patch !== 'object' || Object.keys(patch).length === 0) {
-      return apiError(c, 400, 'Provide at least one key to patch')
+    if (
+      !patch ||
+      typeof patch !== "object" ||
+      Object.keys(patch).length === 0
+    ) {
+      return apiError(c, 400, "Provide at least one key to patch");
     }
 
-    await store.patchSessionMetadata(sessionId, patch)
-    return c.json({ ok: true })
+    await store.patchSessionMetadata(sessionId, patch);
+    return c.json({ ok: true });
   } catch {
-    return apiError(c, 400, 'Invalid request')
+    return apiError(c, 400, "Invalid request");
   }
-})
+});
 
-export default router
+export default router;

@@ -138,6 +138,7 @@ export interface EventStore {
    * Returns a summary of what was repaired.
    */
   repairOrphans(): Promise<OrphanRepairResult>
+  close(): void
 }
 
 export interface OrphanRepairResult {

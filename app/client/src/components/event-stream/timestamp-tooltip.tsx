@@ -15,6 +15,7 @@ export function useTimestampTooltip(): TooltipCallbacks {
 }
 
 function formatFullDate(ts: number): string {
+  if (!isFinite(ts) || ts <= 0) return '—'
   const d = new Date(ts)
   const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
   const month = d.toLocaleDateString('en-US', { month: 'long' })

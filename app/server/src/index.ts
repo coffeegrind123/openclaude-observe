@@ -32,7 +32,15 @@ store.repairOrphans().then((result) => {
 const app = createApp(store, broadcastToSession, broadcastToAll, broadcastActivity)
 
 function start(retries = 3) {
-  const server = serve({ fetch: app.fetch, port: PORT }, () => {
+  const hostname = process.env.AGENTS_OBSERVE_SERVER_HOST || 'localhost'
+  const server = serve({ fetch: app.fetch, port: PORT, hostname }, () => {
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== '::1') {
+      console.warn(
+        `[startup] WARNING: Server is listening on non-localhost interface (${hostname}). ` +
+          `This exposes the unauthenticated API to the network. ` +
+          `Set AGENTS_OBSERVE_SERVER_HOST=localhost to restrict to local only.`,
+      )
+    }
     console.log(`Server running on http://localhost:${PORT}`)
     console.log(`POST events: http://localhost:${PORT}/api/events`)
   })
@@ -50,5 +58,14 @@ function start(retries = 3) {
   attachWebSocket(server as unknown as Server)
   startConsumerSweep()
 }
+
+function gracefulShutdown(signal: string) {
+  console.log(`\n${signal} received, shutting down gracefully...`)
+  store.close()
+  process.exit(0)
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
 
 start()

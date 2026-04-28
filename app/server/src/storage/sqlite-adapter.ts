@@ -11,6 +11,10 @@ import type {
 } from './types'
 import type { InstanceRow } from '../types'
 
+function escapeLike(str: string): string {
+  return str.replace(/[%_]/g, '\\$&')
+}
+
 export class SqliteAdapter implements EventStore {
   private db: Database.Database
 
@@ -110,6 +114,13 @@ export class SqliteAdapter implements EventStore {
       const projectIdNotNull = (projectIdInfo as any).notnull === 1
       if (projectIdNotNull) {
         // Recreate the sessions table without the NOT NULL constraint.
+        // Only the 14 columns from the original CREATE TABLE — token columns
+        // haven't been added yet (they're added further down after this
+        // block). Using SELECT * vs. the hardcoded 14 columns would crash
+        // with "20 columns but 14 values were supplied."
+        const beforeCount = (
+          this.db.prepare('SELECT COUNT(*) AS c FROM sessions').get() as { c: number }
+        ).c
         this.db.exec(`
           PRAGMA foreign_keys = OFF;
           BEGIN;
@@ -126,21 +137,27 @@ export class SqliteAdapter implements EventStore {
             agent_count INTEGER NOT NULL DEFAULT 0,
             last_activity INTEGER,
             last_notification_ts INTEGER,
-            total_input_tokens INTEGER NOT NULL DEFAULT 0,
-            total_output_tokens INTEGER NOT NULL DEFAULT 0,
-            total_cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-            total_cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
-            total_duration_ms INTEGER NOT NULL DEFAULT 0,
-            llm_call_count INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
           );
-          INSERT INTO sessions_new SELECT * FROM sessions;
+          INSERT INTO sessions_new SELECT
+            id, project_id, slug, status, started_at, stopped_at,
+            transcript_path, metadata, event_count, agent_count,
+            last_activity, last_notification_ts, created_at, updated_at
+          FROM sessions;
           DROP TABLE sessions;
           ALTER TABLE sessions_new RENAME TO sessions;
           COMMIT;
           PRAGMA foreign_keys = ON;
         `)
+        const afterCount = (
+          this.db.prepare('SELECT COUNT(*) AS c FROM sessions').get() as { c: number }
+        ).c
+        if (afterCount !== beforeCount) {
+          throw new Error(
+            `sessions migration lost rows: had ${beforeCount}, now have ${afterCount}`,
+          )
+        }
       }
     }
 
@@ -453,69 +470,74 @@ export class SqliteAdapter implements EventStore {
 
   async insertEvent(params: InsertEventParams): Promise<number> {
     const now = Date.now()
-    const result = this.db
-      .prepare(
-        `
-      INSERT INTO events (agent_id, session_id, type, subtype, tool_name, timestamp, created_at, payload, tool_use_id, instance_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-      )
-      .run(
-        params.agentId,
-        params.sessionId,
-        params.type,
-        params.subtype,
-        params.toolName,
-        params.timestamp,
-        now,
-        JSON.stringify(params.payload),
-        params.toolUseId || null,
-        params.instanceId || null,
-      )
+    // Wrap the INSERT + counter UPDATEs in a single transaction so a
+    // mid-operation failure doesn't leave the event count out of sync.
+    const tx = this.db.transaction(() => {
+      const result = this.db
+        .prepare(
+          `
+        INSERT INTO events (agent_id, session_id, type, subtype, tool_name, timestamp, created_at, payload, tool_use_id, instance_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+        )
+        .run(
+          params.agentId,
+          params.sessionId,
+          params.type,
+          params.subtype,
+          params.toolName,
+          params.timestamp,
+          now,
+          JSON.stringify(params.payload),
+          params.toolUseId || null,
+          params.instanceId || null,
+        )
 
-    // Update cached counters on session. `last_activity` is the
-    // max across all events; `last_notification_ts` only advances for
-    // Notification-subtype events. "Pending" is inferred from those
-    // two columns (see getSessionsWithPendingNotifications).
-    const isNotification = config.notificationEventSubtypes.has(params.subtype)
-    this.db
-      .prepare(
-        `UPDATE sessions SET
-          event_count = event_count + 1,
-          last_activity = MAX(COALESCE(last_activity, 0), ?),
-          last_notification_ts = CASE
-            WHEN ? = 1 THEN MAX(COALESCE(last_notification_ts, 0), ?)
-            ELSE last_notification_ts
-          END
-        WHERE id = ?`,
-      )
-      .run(params.timestamp, isNotification ? 1 : 0, params.timestamp, params.sessionId)
-
-    // Accumulate token counters for LLM events
-    if (params.subtype === 'LLMGeneration') {
-      const p = params.payload as Record<string, any>
+      // Update cached counters on session. `last_activity` is the
+      // max across all events; `last_notification_ts` only advances for
+      // Notification-subtype events. "Pending" is inferred from those
+      // two columns (see getSessionsWithPendingNotifications).
+      const isNotification = config.notificationEventSubtypes.has(params.subtype)
       this.db
         .prepare(
           `UPDATE sessions SET
-            total_input_tokens = total_input_tokens + ?,
-            total_output_tokens = total_output_tokens + ?,
-            total_cache_read_tokens = total_cache_read_tokens + ?,
-            total_cache_creation_tokens = total_cache_creation_tokens + ?,
-            total_duration_ms = total_duration_ms + ?,
-            llm_call_count = llm_call_count + 1
+            event_count = event_count + 1,
+            last_activity = MAX(COALESCE(last_activity, 0), ?),
+            last_notification_ts = CASE
+              WHEN ? = 1 THEN MAX(COALESCE(last_notification_ts, 0), ?)
+              ELSE last_notification_ts
+            END
           WHERE id = ?`,
         )
-        .run(
-          (p.input_tokens as number) || 0,
-          (p.output_tokens as number) || 0,
-          (p.cache_read_tokens as number) || 0,
-          (p.cache_creation_tokens as number) || 0,
-          (p.duration_ms as number) || 0,
-          params.sessionId,
-        )
-    }
+        .run(params.timestamp, isNotification ? 1 : 0, params.timestamp, params.sessionId)
 
-    return Number(result.lastInsertRowid)
+      // Accumulate token counters for LLM events
+      if (params.subtype === 'LLMGeneration') {
+        const p = params.payload as Record<string, any>
+        this.db
+          .prepare(
+            `UPDATE sessions SET
+              total_input_tokens = total_input_tokens + ?,
+              total_output_tokens = total_output_tokens + ?,
+              total_cache_read_tokens = total_cache_read_tokens + ?,
+              total_cache_creation_tokens = total_cache_creation_tokens + ?,
+              total_duration_ms = total_duration_ms + ?,
+              llm_call_count = llm_call_count + 1
+            WHERE id = ?`,
+          )
+          .run(
+            (p.input_tokens as number) || 0,
+            (p.output_tokens as number) || 0,
+            (p.cache_read_tokens as number) || 0,
+            (p.cache_creation_tokens as number) || 0,
+            (p.duration_ms as number) || 0,
+            params.sessionId,
+          )
+      }
+
+      return Number(result.lastInsertRowid)
+    })
+    return tx()
   }
 
   async getSessionsWithPendingNotifications(sinceTs: number): Promise<any[]> {
@@ -629,8 +651,8 @@ export class SqliteAdapter implements EventStore {
     }
 
     if (filters?.search) {
-      sql += ' AND payload LIKE ?'
-      const term = `%${filters.search}%`
+      sql += " AND payload LIKE ? ESCAPE '\\'"
+      const term = `%${escapeLike(filters.search)}%`
       params.push(term)
     }
 
@@ -725,32 +747,38 @@ export class SqliteAdapter implements EventStore {
   }
 
   async deleteSession(sessionId: string): Promise<{ events: number; agents: number }> {
-    this.db.prepare('DELETE FROM instances WHERE session_id = ?').run(sessionId)
-    const events = this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId).changes
-    const agents = this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId).changes
-    this.db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId)
-    return { events, agents }
+    const tx = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM instances WHERE session_id = ?').run(sessionId)
+      const events = this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId).changes
+      const agents = this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId).changes
+      this.db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId)
+      return { events, agents }
+    })
+    return tx()
   }
 
   async deleteProject(
     projectId: number,
   ): Promise<{ sessionIds: string[]; sessions: number; agents: number; events: number }> {
-    const rows = this.db.prepare('SELECT id FROM sessions WHERE project_id = ?').all(projectId) as {
-      id: string
-    }[]
-    const sessionIds = rows.map((s) => s.id)
-    let events = 0
-    let agents = 0
-    for (const sessionId of sessionIds) {
-      this.db.prepare('DELETE FROM instances WHERE session_id = ?').run(sessionId)
-      events += this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId).changes
-      agents += this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId).changes
-    }
-    const sessions = this.db
-      .prepare('DELETE FROM sessions WHERE project_id = ?')
-      .run(projectId).changes
-    this.db.prepare('DELETE FROM projects WHERE id = ?').run(projectId)
-    return { sessionIds, sessions, agents, events }
+    const tx = this.db.transaction(() => {
+      const rows = this.db.prepare('SELECT id FROM sessions WHERE project_id = ?').all(projectId) as {
+        id: string
+      }[]
+      const sessionIds = rows.map((s) => s.id)
+      let events = 0
+      let agents = 0
+      for (const sessionId of sessionIds) {
+        this.db.prepare('DELETE FROM instances WHERE session_id = ?').run(sessionId)
+        events += this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId).changes
+        agents += this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId).changes
+      }
+      const sessions = this.db
+        .prepare('DELETE FROM sessions WHERE project_id = ?')
+        .run(projectId).changes
+      this.db.prepare('DELETE FROM projects WHERE id = ?').run(projectId)
+      return { sessionIds, sessions, agents, events }
+    })
+    return tx()
   }
 
   async clearAllData(): Promise<{
@@ -804,14 +832,17 @@ export class SqliteAdapter implements EventStore {
   }
 
   async clearSessionEvents(sessionId: string): Promise<{ events: number; agents: number }> {
-    const events = this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId).changes
-    const agents = this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId).changes
-    this.db
-      .prepare(
-        'UPDATE sessions SET event_count = 0, agent_count = 0, last_activity = NULL, total_input_tokens = 0, total_output_tokens = 0, total_cache_read_tokens = 0, total_cache_creation_tokens = 0, total_duration_ms = 0, llm_call_count = 0 WHERE id = ?',
-      )
-      .run(sessionId)
-    return { events, agents }
+    const tx = this.db.transaction(() => {
+      const events = this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId).changes
+      const agents = this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId).changes
+      this.db
+        .prepare(
+          'UPDATE sessions SET event_count = 0, agent_count = 0, last_activity = NULL, total_input_tokens = 0, total_output_tokens = 0, total_cache_read_tokens = 0, total_cache_creation_tokens = 0, total_duration_ms = 0, llm_call_count = 0 WHERE id = ?',
+        )
+        .run(sessionId)
+      return { events, agents }
+    })
+    return tx()
   }
 
   async getSessionUsage(sessionId: string): Promise<{
@@ -914,117 +945,119 @@ export class SqliteAdapter implements EventStore {
   }
 
   async repairOrphans(): Promise<OrphanRepairResult> {
-    const result: OrphanRepairResult = {
-      sessionsReassigned: 0,
-      agentsDeleted: 0,
-      agentsReparented: 0,
-      eventsDeleted: 0,
-    }
+    return this.db.transaction(() => {
+      const result: OrphanRepairResult = {
+        sessionsReassigned: 0,
+        agentsDeleted: 0,
+        agentsReparented: 0,
+        eventsDeleted: 0,
+      }
 
-    // 1. Sessions with invalid project_id (project doesn't exist or is null).
-    //    Reassign to the 'unknown' project, creating it if needed.
-    const orphanedSessions = this.db
-      .prepare(
-        `SELECT s.id FROM sessions s
-         LEFT JOIN projects p ON p.id = s.project_id
-         WHERE p.id IS NULL`,
-      )
-      .all() as { id: string }[]
+      // 1. Sessions with invalid project_id (project doesn't exist or is null).
+      //    Reassign to the 'unknown' project, creating it if needed.
+      const orphanedSessions = this.db
+        .prepare(
+          `SELECT s.id FROM sessions s
+           LEFT JOIN projects p ON p.id = s.project_id
+           WHERE p.id IS NULL`,
+        )
+        .all() as { id: string }[]
 
-    if (orphanedSessions.length > 0) {
-      // Get-or-create the 'unknown' project
-      let unknownProject = this.db
-        .prepare('SELECT id FROM projects WHERE slug = ?')
-        .get('unknown') as { id: number } | undefined
-      if (!unknownProject) {
+      if (orphanedSessions.length > 0) {
+        // Get-or-create the 'unknown' project
+        let unknownProject = this.db
+          .prepare('SELECT id FROM projects WHERE slug = ?')
+          .get('unknown') as { id: number } | undefined
+        if (!unknownProject) {
+          const now = Date.now()
+          const ins = this.db
+            .prepare(
+              'INSERT INTO projects (slug, name, transcript_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+            )
+            .run('unknown', 'unknown', null, now, now)
+          unknownProject = { id: Number(ins.lastInsertRowid) }
+        }
+        const update = this.db.prepare(
+          'UPDATE sessions SET project_id = ?, updated_at = ? WHERE id = ?',
+        )
         const now = Date.now()
-        const ins = this.db
-          .prepare(
-            'INSERT INTO projects (slug, name, transcript_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-          )
-          .run('unknown', 'unknown', null, now, now)
-        unknownProject = { id: Number(ins.lastInsertRowid) }
+        for (const s of orphanedSessions) {
+          update.run(unknownProject.id, now, s.id)
+          result.sessionsReassigned++
+        }
       }
-      const update = this.db.prepare(
-        'UPDATE sessions SET project_id = ?, updated_at = ? WHERE id = ?',
-      )
-      const now = Date.now()
-      for (const s of orphanedSessions) {
-        update.run(unknownProject.id, now, s.id)
-        result.sessionsReassigned++
+
+      // 2. Agents with invalid session_id -> delete (no recovery possible since
+      //    the session and all its events are gone).
+      //    Note: we have to delete events for these agents first or the events
+      //    table FK from agents would also fail when something tries to read them.
+      const orphanedAgents = this.db
+        .prepare(
+          `SELECT a.id FROM agents a
+           LEFT JOIN sessions s ON s.id = a.session_id
+           WHERE s.id IS NULL`,
+        )
+        .all() as { id: string }[]
+      if (orphanedAgents.length > 0) {
+        const deleteEvents = this.db.prepare('DELETE FROM events WHERE agent_id = ?')
+        const deleteAgent = this.db.prepare('DELETE FROM agents WHERE id = ?')
+        for (const a of orphanedAgents) {
+          const eventDel = deleteEvents.run(a.id)
+          result.eventsDeleted += eventDel.changes
+          deleteAgent.run(a.id)
+          result.agentsDeleted++
+        }
       }
-    }
 
-    // 2. Agents with invalid session_id → delete (no recovery possible since
-    //    the session and all its events are gone).
-    //    Note: we have to delete events for these agents first or the events
-    //    table FK from agents would also fail when something tries to read them.
-    const orphanedAgents = this.db
-      .prepare(
-        `SELECT a.id FROM agents a
-         LEFT JOIN sessions s ON s.id = a.session_id
-         WHERE s.id IS NULL`,
-      )
-      .all() as { id: string }[]
-    if (orphanedAgents.length > 0) {
-      const deleteEvents = this.db.prepare('DELETE FROM events WHERE agent_id = ?')
-      const deleteAgent = this.db.prepare('DELETE FROM agents WHERE id = ?')
-      for (const a of orphanedAgents) {
-        const eventDel = deleteEvents.run(a.id)
-        result.eventsDeleted += eventDel.changes
-        deleteAgent.run(a.id)
-        result.agentsDeleted++
+      // 3. Agents with invalid parent_agent_id (parent has been deleted but
+      //    the child remains). Null out the parent rather than deleting — the
+      //    agent itself is still meaningful, just no longer part of a hierarchy.
+      const reparented = this.db
+        .prepare(
+          `UPDATE agents
+           SET parent_agent_id = NULL, updated_at = ?
+           WHERE parent_agent_id IS NOT NULL
+           AND parent_agent_id NOT IN (SELECT id FROM agents)`,
+        )
+        .run(Date.now())
+      result.agentsReparented = reparented.changes
+
+      // 4. Events with invalid session_id -> delete. Also covers events that
+      //    survived an interrupted delete cascade.
+      //    Note: this is a NOT IN subquery against the full events table, so
+      //    it scans all events. For very large databases (100k+ events) it
+      //    may take a few hundred ms — acceptable since this only runs once
+      //    on server startup.
+      const orphanedSessionEvents = this.db
+        .prepare(
+          `DELETE FROM events
+           WHERE session_id NOT IN (SELECT id FROM sessions)`,
+        )
+        .run()
+      result.eventsDeleted += orphanedSessionEvents.changes
+
+      // 5. Events with invalid agent_id -> delete (similar to above).
+      const orphanedAgentEvents = this.db
+        .prepare(
+          `DELETE FROM events
+           WHERE agent_id NOT IN (SELECT id FROM agents)`,
+        )
+        .run()
+      result.eventsDeleted += orphanedAgentEvents.changes
+
+      // 6. Recompute cached counts on sessions if anything was repaired,
+      //    since insertEvent/upsertAgent maintain these incrementally.
+      if (result.sessionsReassigned > 0 || result.agentsDeleted > 0 || result.eventsDeleted > 0) {
+        this.db.exec(`
+          UPDATE sessions SET
+            event_count = (SELECT COUNT(*) FROM events WHERE session_id = sessions.id),
+            agent_count = (SELECT COUNT(*) FROM agents WHERE session_id = sessions.id),
+            last_activity = (SELECT MAX(timestamp) FROM events WHERE session_id = sessions.id)
+        `)
       }
-    }
 
-    // 3. Agents with invalid parent_agent_id (parent has been deleted but
-    //    the child remains). Null out the parent rather than deleting — the
-    //    agent itself is still meaningful, just no longer part of a hierarchy.
-    const reparented = this.db
-      .prepare(
-        `UPDATE agents
-         SET parent_agent_id = NULL, updated_at = ?
-         WHERE parent_agent_id IS NOT NULL
-         AND parent_agent_id NOT IN (SELECT id FROM agents)`,
-      )
-      .run(Date.now())
-    result.agentsReparented = reparented.changes
-
-    // 4. Events with invalid session_id → delete. Also covers events that
-    //    survived an interrupted delete cascade.
-    //    Note: this is a NOT IN subquery against the full events table, so
-    //    it scans all events. For very large databases (100k+ events) it
-    //    may take a few hundred ms — acceptable since this only runs once
-    //    on server startup.
-    const orphanedSessionEvents = this.db
-      .prepare(
-        `DELETE FROM events
-         WHERE session_id NOT IN (SELECT id FROM sessions)`,
-      )
-      .run()
-    result.eventsDeleted += orphanedSessionEvents.changes
-
-    // 5. Events with invalid agent_id → delete (similar to above).
-    const orphanedAgentEvents = this.db
-      .prepare(
-        `DELETE FROM events
-         WHERE agent_id NOT IN (SELECT id FROM agents)`,
-      )
-      .run()
-    result.eventsDeleted += orphanedAgentEvents.changes
-
-    // 6. Recompute cached counts on sessions if anything was repaired,
-    //    since insertEvent/upsertAgent maintain these incrementally.
-    if (result.sessionsReassigned > 0 || result.agentsDeleted > 0 || result.eventsDeleted > 0) {
-      this.db.exec(`
-        UPDATE sessions SET
-          event_count = (SELECT COUNT(*) FROM events WHERE session_id = sessions.id),
-          agent_count = (SELECT COUNT(*) FROM agents WHERE session_id = sessions.id),
-          last_activity = (SELECT MAX(timestamp) FROM events WHERE session_id = sessions.id)
-      `)
-    }
-
-    return result
+      return result
+    })()
   }
 
   upsertInstance(
@@ -1085,5 +1118,9 @@ export class SqliteAdapter implements EventStore {
     } catch (err: any) {
       return { ok: false, error: err.message || 'Unknown database error' }
     }
+  }
+
+  close(): void {
+    this.db.close()
   }
 }
