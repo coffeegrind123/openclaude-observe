@@ -1,5 +1,19 @@
 # Changelog
 
+## 29.04.2026
+
+Two fixes that block the dashboard's session-management workflow.
+
+### Fixes
+
+- **Bulk session delete crashed with `FOREIGN KEY constraint failed`** — `deleteSessions()` (the path used by the Sessions-tab "delete selected" button) wiped events → agents → sessions but skipped `instances`. Single-session `deleteSession()` cleaned instances first; the bulk version didn't. Any session whose openclaude REPL had ever heartbeated (i.e. any active session) had an `instances` row pointing at it, and `instances.session_id REFERENCES sessions.id` is enforced — so `DELETE FROM sessions` violated the FK and the whole transaction rolled back. Surfaced as 500 Internal Server Error in the dashboard. Fix: mirror `deleteSession()`'s order — `instances → events → agents → sessions`.
+- **Client `tsc -b` build broken — three TypeScript errors** —
+  - `session-list.tsx` used `<Badge>` at lines 131,133 without importing it. Added `import { Badge } from '@/components/ui/badge'`.
+  - `agent-label.tsx:75` referenced `agent.agentClass` but the `Agent` interface in `types/index.ts` only declares `agentType`. Removed the extra comparison line — `agentType` already covers display-relevant identity.
+  - `api-client.test.ts:568` cast a partial mock as `Response`, which TS rejected (missing 14 properties, casts must overlap). Switched to the standard `as unknown as Response` escape used for test-only mocks.
+
+  `tsc -b && vite build` now passes; `docker compose build observe` succeeds end-to-end.
+
 ## 28.04.2026
 
 Security hardening — adversarial bug-hunter pass across the full codebase. 20 fixes covering SQLite migration safety, transaction atomicity, DoS prevention, input validation, and error handling.
