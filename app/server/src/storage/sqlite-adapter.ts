@@ -801,14 +801,23 @@ export class SqliteAdapter implements EventStore {
     if (sessionIds.length === 0) return { events: 0, agents: 0, sessions: 0 }
     // Wrap in a transaction so a mid-loop failure doesn't leave orphaned
     // events/agents pointing at a deleted session row.
+    //
+    // Mirror deleteSession()'s child-cleanup order: instances → events →
+    // agents → sessions. The previous version skipped `instances` and
+    // crashed with `FOREIGN KEY constraint failed` whenever any session in
+    // the bulk had an instances row pointing at it (instances.session_id
+    // REFERENCES sessions.id). Single-session delete worked because that
+    // path already wiped instances first; the bulk path didn't.
     const tx = this.db.transaction((ids: string[]) => {
       let events = 0
       let agents = 0
       let sessions = 0
+      const delInstances = this.db.prepare('DELETE FROM instances WHERE session_id = ?')
       const delEvents = this.db.prepare('DELETE FROM events WHERE session_id = ?')
       const delAgents = this.db.prepare('DELETE FROM agents WHERE session_id = ?')
       const delSession = this.db.prepare('DELETE FROM sessions WHERE id = ?')
       for (const id of ids) {
+        delInstances.run(id)
         events += delEvents.run(id).changes
         agents += delAgents.run(id).changes
         sessions += delSession.run(id).changes
