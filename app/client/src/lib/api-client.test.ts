@@ -565,7 +565,7 @@ describe('api.deleteSession', () => {
   })
 
   it('should resolve to undefined on success', async () => {
-    vi.mocked(fetch).mockResolvedValue({ ok: true, json: undefined } as Response)
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: undefined } as unknown as Response)
 
     const result = await api.deleteSession('sess-1')
     expect(result).toBeUndefined()

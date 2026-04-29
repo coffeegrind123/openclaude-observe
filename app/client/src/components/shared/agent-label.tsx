@@ -72,7 +72,6 @@ function agentFieldsEqual(a: Agent | null | undefined, b: Agent | null | undefin
     a.name === b.name &&
     a.description === b.description &&
     a.agentType === b.agentType &&
-    a.agentClass === b.agentClass &&
     a.cwd === b.cwd &&
     a.parentAgentId === b.parentAgentId
   )
