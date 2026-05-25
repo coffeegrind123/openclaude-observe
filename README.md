@@ -32,8 +32,9 @@ OpenClaude is an autonomous agent — it spawns subagents, runs tools, calls the
 - **Split chat / event view** — conversation on the right with full markdown; raw stream on the left. Resizable, collapsible, sticky-to-newest
 - **Full agent hierarchy** — subagent ↔ parent links with threaded color cues throughout the UI
 - **Multi-instance topology** — daemon, pipes, coordinator, bridge events badged by `instance_id`, with heartbeat tracking
-- **Token accounting** — input / output / cache / creation tokens + LLM call counts tallied per session and per agent. Compact badges in the sidebar; full breakdown via `GET /api/sessions/:id/usage`
-- **Filter, search, expand** — by agent, event type, tool, instance, or free-text. Every event expands to its raw payload with one-click copy on every field
+- **Token & cost accounting** — input / output / cache / creation tokens + LLM call counts per session and per agent (sidebar badges + `GET /api/sessions/:id/usage`), plus an opt-in **transcript stats** panel that parses `~/.claude/projects` JSONL for per-prompt / per-model token *and dollar-cost* breakdowns (models.dev pricing)
+- **User-defined filters** — DB-backed, regex (RE2) filter rules editable in Settings → Filters with live preview, per-filter color, and pill-name templating; plus search, agent / event-type / tool / instance facets, and one-click raw-payload copy on every field
+- **Keyboard navigation** — region-jump shortcuts (search `s`, agents `a`, filters `f`, sidebar `b`, event stream `e`) with arrow-key row nav; full list in Settings → Keyboard
 - **Timeline rewind** — scrub a session frame-by-frame, click any dot to jump
 - **Newest-on-top mode** — optional reverse-chronological feed (Settings → Display)
 - **Session bookmarks** — pin sessions, attach labels, fork-resume in one click

@@ -51,9 +51,9 @@ start.mjs          # Local server entrypoint (non-Docker) — used by `just dev`
 
 ## Environment Variables
 
-Server config is centralized in `app/server/src/config.ts`. Every var below
-(except `AGENTS_OBSERVE_DATA_DIR`, which is only read by `docker-compose.yml`)
-is consumed there.
+Server config is centralized in `app/server/src/config.ts`. Every var below is
+consumed there, except the two bind-mount overrides marked _(compose only)_,
+which are read by `docker-compose.yml`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -63,10 +63,14 @@ is consumed there.
 | `AGENTS_OBSERVE_SHUTDOWN_DELAY_MS` | `30000` | Auto-shutdown after last consumer disconnects; `0` disables |
 | `AGENTS_OBSERVE_LOG_LEVEL` | `warn` | `warn`, `debug`, or `trace` |
 | `AGENTS_OBSERVE_DB_PATH` | `data/observe.db` | SQLite database path |
+| `AGENTS_OBSERVE_DATA_DIR` | (DB dir) | Persistent state dir outside the DB — currently the models.dev pricing cache. Defaults to the DB's directory; also the host dir bind-mounted to `/data` in compose |
 | `AGENTS_OBSERVE_ALLOW_DB_RESET` | `backup` | DB reset policy: `allow`, `backup`, or `deny` |
 | `AGENTS_OBSERVE_CLIENT_DIST_PATH` | (auto) | Override the client dist directory |
 | `AGENTS_OBSERVE_STORAGE_ADAPTER` | `sqlite` | Storage backend |
-| `AGENTS_OBSERVE_DATA_DIR` | `./data` | Host directory bind-mounted into the container (compose only) |
+| `AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS` | `Notification` | Comma-separated event subtypes that raise a sidebar/desktop notification (e.g. `Notification,Stop,SubagentStop`) |
+| `AGENTS_OBSERVE_TRANSCRIPT_STATS` | `1` | `1` enables on-demand transcript token/cost stats; `0` disables |
+| `AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE` | `$HOME/.claude/projects` | _(compose only)_ host transcripts dir, bind-mounted read-only into the container |
+| `AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_CONTAINER_BASE` | `/host/.claude/projects` | _(compose only)_ in-container mount path the DB's host `transcript_path` is translated to |
 
 ## Worktrees
 
