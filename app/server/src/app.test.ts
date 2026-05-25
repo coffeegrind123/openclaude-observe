@@ -6,7 +6,11 @@ const stubStore = {
 } as unknown as EventStore
 const noop = () => {}
 
-describe('dev mode redirect', () => {
+// Each test resets the module registry and re-imports ./app, so every test
+// pays the full cold-start transform of the app's router graph. esbuild's
+// per-test transform is slow under load, so give these integration tests
+// headroom beyond the 5s default — a real hang would still exceed this.
+describe('dev mode redirect', { timeout: 20000 }, () => {
   beforeEach(() => {
     vi.resetModules()
   })
@@ -21,6 +25,7 @@ describe('dev mode redirect', () => {
         clientDistPath: '',
         isDev: true,
         devClientPort: 5174,
+        transcriptStats: { enabled: false },
       },
     }))
 
@@ -38,6 +43,7 @@ describe('dev mode redirect', () => {
         clientDistPath: '',
         isDev: true,
         devClientPort: 5174,
+        transcriptStats: { enabled: false },
       },
     }))
 
@@ -55,6 +61,7 @@ describe('dev mode redirect', () => {
         clientDistPath: '',
         isDev: true,
         devClientPort: 5174,
+        transcriptStats: { enabled: false },
       },
     }))
 
@@ -71,6 +78,7 @@ describe('dev mode redirect', () => {
         clientDistPath: '',
         isDev: false,
         devClientPort: 5174,
+        transcriptStats: { enabled: false },
       },
     }))
 
@@ -87,6 +95,7 @@ describe('dev mode redirect', () => {
         clientDistPath: '',
         isDev: true,
         devClientPort: 9999,
+        transcriptStats: { enabled: false },
       },
     }))
 

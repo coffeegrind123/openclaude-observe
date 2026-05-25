@@ -1,5 +1,8 @@
 import { useMemo } from 'react'
 import type { ParsedEvent } from '@/types'
+import { useFilterStore } from '@/stores/filter-store'
+import { applyFilters } from '@/lib/filters/matcher'
+import { passesAllFilter } from '@/lib/filters/all-filter'
 
 export interface PayloadSnapshot {
   subtype: string
@@ -33,6 +36,7 @@ export interface DedupedEventsResult {
  * set of rows/dots.
  */
 export function useDedupedEvents(events: ParsedEvent[] | undefined): DedupedEventsResult {
+  const compiled = useFilterStore((s) => s.compiled)
   return useMemo(() => {
     if (!events)
       return {
@@ -132,12 +136,24 @@ export function useDedupedEvents(events: ParsedEvent[] | undefined): DedupedEven
         result.push(e)
       }
     }
+    // Tag each displayed row with the filter pills it matches + whether
+    // it passes the All filter's exclusions. Map the native event shape
+    // (subtype) onto the matcher's RawEvent (hookName). New objects keep
+    // the same id, so pairedPayloads / mergedIdMap keying is unaffected.
+    const tagged = result.map((e) => {
+      const raw = { hookName: e.subtype, payload: e.payload }
+      return {
+        ...e,
+        filters: applyFilters(raw, e.toolName, compiled),
+        displayEventStream: passesAllFilter(raw, e.toolName, compiled),
+      }
+    })
     return {
-      deduped: result,
+      deduped: tagged,
       spawnToolUseIds: spawns,
       spawnInfo: info,
       mergedIdMap: idMap,
       pairedPayloads,
     }
-  }, [events])
+  }, [events, compiled])
 }

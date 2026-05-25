@@ -7,9 +7,12 @@ import { EventStream } from '@/components/event-stream/event-stream'
 import { ChatPanel } from '@/components/chat-feed/chat-panel'
 import { HomePage } from './home-page'
 import { ProjectPage } from './project-page'
+import { useRegionShortcuts } from '@/hooks/use-region-shortcuts'
 
 export function MainPanel() {
   const { selectedProjectId, selectedProjectSlug, selectedSessionId } = useUIStore()
+
+  useRegionShortcuts()
 
   // The URL hash populates `selectedProjectSlug` / `selectedSessionId`
   // synchronously on store init, but `selectedProjectId` is resolved

@@ -1,5 +1,56 @@
 # Changelog
 
+## 25.05.2026
+
+Ported eight feature groups from upstream (`simple10/agents-observe`, through `v0.9.8`) that stand on their own without the agent-class registry refactor the fork deliberately skips. Headline additions: transcript-based per-prompt token/cost stats, a DB-backed user-defined regex filter system (RE2), event deduplication at ingestion, and session-view keyboard navigation. The recurring adaptation throughout was translating upstream's three-layer event shape (`event.hookName` + opaque `payload`) onto the fork's native-OTel model (`event.subtype` / `event.toolName` / `event.toolUseId`). Also fixed a latent client build break the branch had been carrying.
+
+### Transcript token stats
+
+On-demand per-prompt, per-model token + cost breakdowns parsed from `~/.claude/projects` JSONL transcripts, surfaced in the session Stats tab. From upstream's transcript-token-stats + subagent-dir-scan work.
+
+- New `app/server/src/transcript-parser/` — JSONL parser deduping by `message.id`, walking `parentUuid` chains for per-prompt attribution, with subagent discovery via filesystem scan and session-wide tool stats. **Codex transcript support was intentionally dropped** (removed the codex parser, its dispatch branch, and the codex bind-mount base) per project scope.
+- Pricing comes from models.dev (`models-pricing.ts`), cached on disk under a new `config.dataDir` (defaults to the DB directory) with a 24h TTL and stale-cache fallback, so a fresh server start serves pricing without a network round-trip.
+- New `GET /api/sessions/:id/transcript-stats` route with disabled / no-transcript / not-found / too-large / unreadable / parse-error branches; `storage.getSessionTranscriptPath`; and `services/transcript-path.ts` that translates the host-side `transcript_path` stored in the DB to the in-container path.
+- Stats tab restructured into collapsible Overview / Tools / Token Usage sections (`settings/sections/*`: collapsible-section, model-badge, sortable-table, token-usage-section). Falls back to event-derived stats when transcripts are unavailable.
+- Docker: `~/.claude/projects` is bind-mounted read-only into the container (`docker-compose.yml`), wired via `AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_{HOST,CONTAINER}_BASE`. Enabled by default; `AGENTS_OBSERVE_TRANSCRIPT_STATS=0` disables. The transcript-stats route lazy-imports the parser so the server (and test harness) doesn't load the models.dev graph until the endpoint is hit.
+
+### Unified filters
+
+Replaced the static `config/filters.ts` filter set with DB-backed, user-defined regex filters (the largest single port — ~75 upstream commits).
+
+- Filters are stored server-side (`filters` table), seeded with defaults (including a `default-all` exclusion filter), served over REST (`/api/filters` CRUD + duplicate + defaults/reset) and pushed live over WS (`filter:created|updated|deleted|bulk-changed`). Regexes are backed by RE2 (`re2js`) for linear-time, ReDoS-safe matching; the server validates patterns on create.
+- New client `lib/filters/` (pure: `compile`, `matcher`, `all-filter`, `types`), `filter-store` + `filter-draft-store`, and a full **Filters tab** in Settings with a live-preview editor, per-filter color, primary/secondary display, negate / case-insensitive flags, and pill-name templating.
+- **Architecture note:** upstream computes per-event filter matches inside its agent-class `processEvent`. The fork has no such registry, so `event.filters` (`{ primary, secondary }`) and `event.displayEventStream` are computed in `use-deduped-events.ts` instead — each deduped row is matched against the compiled filter set, mapping the native event onto the matcher's `{ hookName: subtype, payload }` shape. The event-filter-bar derives its pills from those tagged events; the event stream filters by the All-filter gate plus the active-pill union.
+- `ui-store` filter selections renamed `activeStaticFilters`/`activeToolFilters` → `activePrimaryFilters`/`activeSecondaryFilters`.
+
+### Event deduplication
+
+Native OTel can re-deliver the same span (exporter retries, duplicate exporters); duplicates are now collapsed at ingestion.
+
+- New `utils/event-signature.ts` hashes a canonical (sorted-key) view of the event's identifying fields (`session_id`, `subtype`, `tool_name`, `tool_use_id`, `instance_id`, `cwd`, raw payload) plus a 5-second timestamp bucket. Identical events within the bucket collapse; >5s apart they're treated as distinct.
+- `events` gains a `signature_hash` column with a UNIQUE index (existing rows stay NULL — SQLite treats NULLs as distinct). `POST /events` does a pre-check and skips the whole pipeline on a re-delivery, with a race handler that catches the UNIQUE-constraint violation on concurrent inserts and returns the winner's id.
+
+### Session-view keyboard navigation
+
+Region-jump shortcuts with no architectural coupling (DOM-attribute driven): `s` / `/` focus search, `a` opens the agents picker, `f` jumps to the filter pills, `b` focuses the sidebar, `e` focuses the event stream. Arrow keys navigate siblings within sidebar rows and filter pills; window scroll shortcuts route to the event-stream pane. New `lib/keyboard-nav.ts` + `hooks/use-region-shortcuts.ts`, focus-visible rings on keyboard-reachable controls, and a **Keyboard** tab in Settings listing the bindings.
+
+### Other ports
+
+- **Worktree project detection** — a session whose cwd is a `.?worktrees?` checkout now joins its parent repo's project (match-only) instead of spawning a sibling project. `findExistingWorktreeProjectSlug` in the project resolver.
+- **Raw-log modal search** — incremental search across the raw event logs using the CSS Custom Highlight API, with match navigation and a jump-from-log-row-to-the-event-in-the-stream link.
+- **AskUserQuestion rendering** — the event detail pane renders AskUserQuestion tool calls with the question, option cards (selected option outlined in green), and the answer (custom/"Other" answers visually distinguished). Answers are read from the paired PostToolUse event via the thread.
+- **Configurable notification events** — `AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS` (comma-separated subtypes, default `Notification`) extends which event subtypes raise a sidebar/desktop notification, e.g. `Notification,Stop,SubagentStop`.
+
+### Fixes
+
+- Fixed a latent client build break the branch had been shipping: `session-list.tsx` used `Badge` without importing it (the import had been wrongly dropped as "unused"), and `agent-label.tsx` compared a non-existent `agentClass` field. Both surfaced only under `tsc -b` (the real build), not `tsc --noEmit`.
+
+### Skipped / deferred
+
+- **Icon registry** (upstream `8cbca69`/`9191e24`/`6b73a69`) — skipped. The fork already has the equivalent (`lib/dynamic-icon.tsx` for any-lucide-icon resolution, `hooks/use-icon-customizations.ts` with localStorage migration + color presets, customization-first resolution in `config/event-icons.ts`). Upstream's version only adds per-agent-class layer isolation, moot for the single-class fork.
+- **Paired-event runtime pill** — deferred; depends on upstream's `turnId` / agent-class registry the fork doesn't have.
+- The **three-layer contract refactor**, hook-library rewrites, and Codex support remain intentionally out of scope.
+
 ## 20.04.2026
 
 Deep-cleaned the fork of upstream remnants and post-plugin dead code, then systematically merged 19 commits from upstream (`simple10/agents-observe`) that worked without the agent-class registry refactor we chose to skip.

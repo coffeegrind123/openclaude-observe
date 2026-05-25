@@ -3,7 +3,9 @@ import { screen } from '@testing-library/react'
 import { renderWithProviders } from '@/test/test-utils'
 import { EventStream } from './event-stream'
 import { useUIStore } from '@/stores/ui-store'
-import type { ParsedEvent, Agent } from '@/types'
+import { useFilterStore } from '@/stores/filter-store'
+import { compileFilters } from '@/lib/filters/compile'
+import type { ParsedEvent, Agent, Filter } from '@/types'
 
 // ── Mock hooks ──────────────────────────────────────────────
 
@@ -37,6 +39,49 @@ function setMockEvents(events: ParsedEvent[]) {
 function setMockAgents(agents: Agent[]) {
   mockAgents.length = 0
   mockAgents.push(...agents)
+}
+
+/**
+ * Seed the filter store so useDedupedEvents can tag each event with
+ * `filters.primary` / `filters.secondary`. A `Prompts` primary filter and
+ * a `{toolName}` secondary filter cover the cases exercised below.
+ */
+function initializeFilterStore() {
+  const seedFilters: Filter[] = [
+    {
+      id: 'default-dynamic-tool-name',
+      name: 'Dynamic tool name',
+      pillName: '{toolName}',
+      display: 'secondary',
+      combinator: 'and',
+      patterns: [
+        { target: 'hook', regex: '^(PreToolUse|PostToolUse|PostToolUseFailure|PostToolBatch)$' },
+      ],
+      kind: 'default',
+      enabled: true,
+      config: {},
+      createdAt: 0,
+      updatedAt: 0,
+    },
+    {
+      id: 'default-prompts',
+      name: 'Prompts',
+      pillName: 'Prompts',
+      display: 'primary',
+      combinator: 'and',
+      patterns: [{ target: 'hook', regex: '^(UserPromptSubmit|UserPromptExpansion)$' }],
+      kind: 'default',
+      enabled: true,
+      config: {},
+      createdAt: 0,
+      updatedAt: 0,
+    },
+  ]
+  useFilterStore.setState({
+    filters: seedFilters,
+    compiled: compileFilters(seedFilters),
+    loaded: true,
+  })
 }
 
 function makeEvent(overrides: Partial<ParsedEvent>): ParsedEvent {
@@ -74,14 +119,15 @@ function makeAgent(overrides: Partial<Agent>): Agent {
 beforeEach(() => {
   setMockEvents([])
   setMockAgents([])
+  initializeFilterStore()
 
   // Reset UI store
   useUIStore.setState({
     selectedProjectId: 1,
     selectedSessionId: 'sess-1',
     selectedAgentIds: [],
-    activeStaticFilters: [],
-    activeToolFilters: [],
+    activePrimaryFilters: [],
+    activeSecondaryFilters: [],
     searchQuery: '',
     autoFollow: true,
     expandedEventIds: new Set(),
@@ -288,7 +334,7 @@ describe('EventStream', () => {
     setMockAgents([makeAgent({ id: 'agent-1' })])
 
     // Only show Prompts
-    useUIStore.setState({ activeStaticFilters: ['Prompts'] })
+    useUIStore.setState({ activePrimaryFilters: ['Prompts'] })
 
     renderWithProviders(<EventStream />)
 
@@ -318,7 +364,7 @@ describe('EventStream', () => {
     setMockAgents([makeAgent({ id: 'agent-1' })])
 
     // Only show Bash tools
-    useUIStore.setState({ activeToolFilters: ['Bash'] })
+    useUIStore.setState({ activeSecondaryFilters: ['Bash'] })
 
     renderWithProviders(<EventStream />)
 
@@ -348,7 +394,7 @@ describe('EventStream', () => {
     setMockAgents([makeAgent({ id: 'agent-1' })])
 
     // Filter to only Prompts (1 visible out of 2 raw)
-    useUIStore.setState({ activeStaticFilters: ['Prompts'] })
+    useUIStore.setState({ activePrimaryFilters: ['Prompts'] })
 
     renderWithProviders(<EventStream />)
 

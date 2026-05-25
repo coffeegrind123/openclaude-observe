@@ -80,6 +80,12 @@ export interface ParsedEvent {
   // included in GET /sessions/:id/events only when ?fields=createdAt.
   createdAt?: number
   payload: Record<string, unknown>
+  /** Pill names this event matches, by display category. Computed
+   *  client-side in useDedupedEvents from the compiled filter set. */
+  filters?: { primary: string[]; secondary: string[] }
+  /** Whether this event passes the All filter's exclusions (visible in
+   *  the stream / timeline). Computed alongside `filters`. */
+  displayEventStream?: boolean
 }
 
 export interface RecentSession {
@@ -119,5 +125,50 @@ export type WSMessage =
   | { type: 'notification'; data: { sessionId: string; projectId: number; ts: number } }
   | { type: 'notification_clear'; data: { sessionId: string; ts: number } }
   | { type: 'activity'; data: { sessionId: string; eventId: number; ts: number } }
+  | { type: 'filter:created'; filter: Filter }
+  | { type: 'filter:updated'; filter: Filter }
+  | { type: 'filter:deleted'; id: string }
+  | { type: 'filter:bulk-changed' }
 
 export type WSClientMessage = { type: 'subscribe'; sessionId: string } | { type: 'unsubscribe' }
+
+// === Filters (mirror server shape) ===
+
+export type {
+  FilterTarget,
+  FilterDisplay,
+  FilterCombinator,
+  FilterKind,
+} from '@/lib/filters/types'
+import type {
+  FilterDisplay,
+  FilterCombinator,
+  FilterKind,
+  FilterTarget,
+} from '@/lib/filters/types'
+
+export interface FilterPattern {
+  target: FilterTarget
+  regex: string
+  /** Inverts the match: the pattern "matches" when the regex does NOT
+   *  match the target. Lets users express negation without lookahead
+   *  (RE2 has no lookahead). Default false / absent. */
+  negate?: boolean
+  /** RE2-portable flag subset: `i` / `m` / `s`. */
+  flags?: string
+}
+
+export interface Filter {
+  id: string
+  name: string
+  pillName: string
+  display: FilterDisplay
+  combinator: FilterCombinator
+  patterns: FilterPattern[]
+  kind: FilterKind
+  enabled: boolean
+  /** Free-form JSON config bag (e.g. `color`). Server passes it through. */
+  config: Record<string, unknown>
+  createdAt: number
+  updatedAt: number
+}

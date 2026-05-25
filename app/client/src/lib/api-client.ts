@@ -6,6 +6,7 @@ import type {
   ServerAgent,
   ParsedEvent,
   NotificationPayload,
+  Filter,
 } from '@/types'
 
 /**
@@ -207,4 +208,174 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionIds }),
     }),
+  // Unlike other api.* methods which throw ApiError on non-2xx, this
+  // endpoint returns a discriminated-union response. The UI maps each
+  // `error` code to a distinct user-facing message; treating these as
+  // exceptions would lose that information.
+  getTranscriptStats: async (sessionId: string): Promise<TranscriptStatsResponse> => {
+    const res = await fetch(
+      `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/transcript-stats`,
+    )
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        error: (body.error as TranscriptStatsErrorCode) ?? 'unknown',
+        message: body.message ?? 'Unknown error',
+      }
+    }
+    return { ok: true, status: 200, data: body as TranscriptStatsData }
+  },
+
+  // ── Filters ──
+  listFilters: () => fetchJson<Filter[]>('/filters'),
+  createFilter: (input: {
+    name: string
+    pillName: string
+    display: 'primary' | 'secondary'
+    combinator: 'and' | 'or'
+    patterns: { target: 'hook' | 'tool' | 'payload'; regex: string }[]
+    config?: Record<string, unknown>
+  }) =>
+    fetchJson<Filter>('/filters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+  updateFilter: (
+    id: string,
+    patch: Partial<{
+      name: string
+      pillName: string
+      display: 'primary' | 'secondary'
+      combinator: 'and' | 'or'
+      patterns: { target: 'hook' | 'tool' | 'payload'; regex: string }[]
+      enabled: boolean
+      config: Record<string, unknown>
+    }>,
+  ) =>
+    fetchJson<Filter>(`/filters/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
+  deleteFilter: (id: string) =>
+    fetchVoid(`/filters/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  duplicateFilter: (id: string) =>
+    fetchJson<Filter>(`/filters/${encodeURIComponent(id)}/duplicate`, { method: 'POST' }),
+  resetDefaultFilters: () => fetchJson<Filter[]>(`/filters/defaults/reset`, { method: 'POST' }),
 }
+
+// ── Transcript stats types (V2: matches server transcript-parser) ──
+
+export interface TranscriptStatsByModel {
+  model: string
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreate5mTokens: number
+  cacheCreate1hTokens: number
+  costCents: number | null
+}
+
+export interface TranscriptStatsPrompt {
+  promptId: string
+  text: string
+  timestamp: number
+  durationMs: number | null
+  toolCount: number
+  requests: number
+  /** Bundled input (fresh + cache_read + cache_write). */
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreate5mTokens: number
+  cacheCreate1hTokens: number
+  models: string[]
+  costCents: number | null
+}
+
+export interface TranscriptStatsSubagent {
+  agentId: string
+  agentType: string | null
+  description: string | null
+  toolUseId: string | null
+  model: string
+  requests: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreate5mTokens: number
+  cacheCreate1hTokens: number
+  durationMs: number
+  toolCount: number
+  costCents: number | null
+}
+
+export interface TranscriptStatsModelPricing {
+  inputPerM: number
+  outputPerM: number
+  cacheReadPerM: number
+  cacheCreate5mPerM: number
+  cacheCreate1hPerM: number
+}
+
+export interface TranscriptStatsParseError {
+  scope: 'main' | 'subagent'
+  agentId?: string
+  code: 'missing' | 'unreadable' | 'parse_error'
+  message: string
+}
+
+export interface TranscriptStatsToolStat {
+  name: string
+  count: number
+  minMs: number | null
+  medianMs: number | null
+  maxMs: number | null
+  longestToolUseId: string | null
+}
+
+export interface TranscriptStatsData {
+  source: 'jsonl'
+  summary: {
+    totalCalls: number
+    inputTotal: number
+    outputTotal: number
+    cacheHitRate: number
+    costTotalCents: number | null
+    startedAt: number | null
+    durationMs: number | null
+    toolCalls: number
+    filesRead: number
+    filesEdited: number
+    gitCommits: number
+    toolStats: TranscriptStatsToolStat[]
+    userPrompts: number
+  }
+  byModel: TranscriptStatsByModel[]
+  prompts: TranscriptStatsPrompt[]
+  subagents: TranscriptStatsSubagent[]
+  models: Record<string, { pricing: TranscriptStatsModelPricing | null }>
+  errors: TranscriptStatsParseError[]
+}
+
+export type TranscriptStatsErrorCode =
+  | 'disabled'
+  | 'no_transcript'
+  | 'file_not_found'
+  | 'file_unreadable'
+  | 'file_too_large'
+  | 'parse_error'
+  | 'unknown'
+
+export type TranscriptStatsResponse =
+  | { ok: true; status: 200; data: TranscriptStatsData }
+  | {
+      ok: false
+      status: number
+      error: TranscriptStatsErrorCode
+      message: string
+    }

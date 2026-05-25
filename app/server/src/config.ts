@@ -59,6 +59,13 @@ export const config = {
   logLevel,
   verbose: logLevel === 'debug' || logLevel === 'trace',
   dbPath: resolve(process.env.AGENTS_OBSERVE_DB_PATH || '../../data/observe.db'),
+  // Directory for persistent server state outside the SQLite DB —
+  // currently just the models.dev pricing cache. Defaults to the same
+  // directory as the DB so docker volume mounts cover both.
+  dataDir: resolve(
+    process.env.AGENTS_OBSERVE_DATA_DIR ||
+      dirname(resolve(process.env.AGENTS_OBSERVE_DB_PATH || '../../data/observe.db')),
+  ),
   storageAdapter: process.env.AGENTS_OBSERVE_STORAGE_ADAPTER || 'sqlite',
   clientDistPath: process.env.AGENTS_OBSERVE_CLIENT_DIST_PATH || '',
   devClientPort: parseInt(process.env.AGENTS_OBSERVE_DEV_CLIENT_PORT || '5174', 10),
@@ -76,4 +83,35 @@ export const config = {
   consumerTtlMs: 30_000,
   sweepIntervalMs: 10_000,
   startupGraceMs: 60_000,
+
+  // Which event subtypes raise a sidebar/desktop notification. Defaults to
+  // just `Notification`; set AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS to a
+  // comma-separated list (e.g. "Notification,Stop,SubagentStop") to also
+  // notify on turn/subagent completion. Any subtype NOT in this set bubbles
+  // a notification_clear so bells auto-dismiss when the agent resumes.
+  notificationOnSubtypes: new Set(
+    (process.env.AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS || 'Notification')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  ),
+
+  transcriptStats: {
+    enabled: process.env.AGENTS_OBSERVE_TRANSCRIPT_STATS !== '0',
+    // Bind-mount base for translating a session's host-side
+    // transcript_path into the path the server can read inside its
+    // runtime. Trailing slashes stripped defensively.
+    bases: [
+      {
+        agentClass: 'claude-code' as const,
+        host: (process.env.AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE || '').replace(/\/$/, ''),
+        container: (process.env.AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_CONTAINER_BASE || '').replace(
+          /\/$/,
+          '',
+        ),
+      },
+    ],
+    // 100 MB safety cap — defensive, not an expected operating point.
+    maxFileBytes: 100 * 1024 * 1024,
+  },
 }

@@ -1,6 +1,14 @@
 // app/server/src/storage/types.ts
 
 import type { InstanceRow } from '../types'
+import type { Filter } from '../types'
+
+export class DuplicateEventSignatureError extends Error {
+  constructor(public readonly signatureHash: string) {
+    super(`Duplicate event signature: ${signatureHash}`)
+    this.name = 'DuplicateEventSignatureError'
+  }
+}
 
 export interface InsertEventParams {
   agentId: string
@@ -12,6 +20,12 @@ export interface InsertEventParams {
   payload: Record<string, unknown>
   toolUseId?: string | null
   instanceId?: string | null
+  /** Stable signature for dedup. When set, a UNIQUE constraint is enforced. */
+  signatureHash?: string | null
+  /** Whether this event advances last_notification_ts. Computed by the
+   *  route from config.notificationOnSubtypes; falls back to the
+   *  `Notification` subtype when omitted. */
+  isNotification?: boolean
 }
 
 export interface EventFilters {
@@ -78,6 +92,7 @@ export interface EventStore {
   updateSessionProject(sessionId: string, projectId: number): Promise<void>
   updateAgentName(agentId: string, name: string): Promise<void>
   insertEvent(params: InsertEventParams): Promise<number>
+  findEventBySignatureHash(hash: string): Promise<{ id: number } | null>
   upsertInstance(
     id: string,
     sessionId: string,
@@ -91,6 +106,7 @@ export interface EventStore {
   getProjects(): Promise<any[]>
   getSessionsForProject(projectId: number): Promise<any[]>
   getSessionById(sessionId: string): Promise<any | null>
+  getSessionTranscriptPath(sessionId: string): Promise<string | null>
   getAgentById(agentId: string): Promise<any | null>
   getSessionsWithPendingNotifications(sinceTs: number): Promise<any[]>
   getAgentsForSession(sessionId: string): Promise<any[]>
@@ -137,6 +153,32 @@ export interface EventStore {
    * Returns a summary of what was repaired.
    */
   repairOrphans(): Promise<OrphanRepairResult>
+  // === Filters ===
+  listFilters(): Promise<Filter[]>
+  getFilterById(id: string): Promise<Filter | null>
+  createFilter(input: {
+    name: string
+    pillName: string
+    display: 'primary' | 'secondary'
+    combinator: 'and' | 'or'
+    patterns: { target: 'hook' | 'tool' | 'payload'; regex: string }[]
+  }): Promise<Filter>
+  updateFilter(
+    id: string,
+    patch: Partial<{
+      name: string
+      pillName: string
+      display: 'primary' | 'secondary'
+      combinator: 'and' | 'or'
+      patterns: { target: 'hook' | 'tool' | 'payload'; regex: string }[]
+      enabled: boolean
+    }>,
+  ): Promise<Filter>
+  deleteFilter(id: string): Promise<void>
+  duplicateFilter(id: string): Promise<Filter>
+  resetDefaultFilters(): Promise<Filter[]>
+  /** Idempotent. Inserts missing defaults; updates name/pill_name/display/combinator/patterns of existing rows; never touches enabled. */
+  seedDefaultFilters(): Promise<void>
 }
 
 export interface OrphanRepairResult {

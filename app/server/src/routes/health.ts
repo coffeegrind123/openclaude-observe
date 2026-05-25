@@ -25,6 +25,7 @@ router.get('/health', async (c) => {
       dbPath: config.dbPath,
       activeConsumers: getConsumerCount(),
       activeClients: getClientCount(),
+      transcriptStatsEnabled: config.transcriptStats.enabled,
       ...(result.error ? { error: result.error } : {}),
     },
     result.ok ? 200 : 503,

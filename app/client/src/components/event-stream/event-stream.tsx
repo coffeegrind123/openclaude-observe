@@ -11,7 +11,6 @@ import { api } from '@/lib/api-client'
 import { useUIStore } from '@/stores/ui-store'
 import { EventRow } from './event-row'
 import { CompactionBoundary } from './compaction-boundary'
-import { eventMatchesFilters } from '@/config/filters'
 import { format } from 'timeago.js'
 import { buildAgentColorMap } from '@/lib/agent-utils'
 import { QueryBoundary } from '@/components/shared/query-boundary'
@@ -22,8 +21,8 @@ export function EventStream() {
   const {
     selectedSessionId,
     selectedAgentIds,
-    activeStaticFilters,
-    activeToolFilters,
+    activePrimaryFilters,
+    activeSecondaryFilters,
     searchQuery,
     autoFollow,
     expandAllCounter,
@@ -37,8 +36,8 @@ export function EventStream() {
   } = useUIStore()
 
   // Defer filter values so the UI stays responsive during filter changes
-  const deferredStaticFilters = useDeferredValue(activeStaticFilters)
-  const deferredToolFilters = useDeferredValue(activeToolFilters)
+  const deferredPrimaryFilters = useDeferredValue(activePrimaryFilters)
+  const deferredSecondaryFilters = useDeferredValue(activeSecondaryFilters)
   const deferredSearchQuery = useDeferredValue(searchQuery)
 
   const eventsQuery = useEffectiveEvents(selectedSessionId)
@@ -95,9 +94,12 @@ export function EventStream() {
     return m
   }, [compactionMap])
 
-  // Apply all client-side filters: agent selection + static/tool filters
+  // Apply all client-side filters: displayEventStream gate + agent
+  // selection + primary/secondary pill union + search.
   const filteredEvents = useMemo(() => {
-    let filtered = deduped
+    // Start with events the all-filter marked as displayable (computed in
+    // useDedupedEvents). Rows that explicitly opt out are dropped here.
+    let filtered = deduped.filter((e) => e.displayEventStream !== false)
 
     // Agent chip filtering (client-side, includes spawning Tool:Agent calls)
     if (selectedAgentIds.length > 0) {
@@ -113,11 +115,18 @@ export function EventStream() {
       )
     }
 
-    // Static + dynamic tool filters
-    if (deferredStaticFilters.length > 0 || deferredToolFilters.length > 0) {
-      filtered = filtered.filter((e) =>
-        eventMatchesFilters(e, deferredStaticFilters, deferredToolFilters),
-      )
+    // Pill filters across both rows behave as a union: an event passes
+    // if it matches ANY active pill, regardless of which row that pill
+    // lives in.
+    if (deferredPrimaryFilters.length > 0 || deferredSecondaryFilters.length > 0) {
+      filtered = filtered.filter((e) => {
+        const primary = e.filters?.primary ?? []
+        const secondary = e.filters?.secondary ?? []
+        return (
+          deferredPrimaryFilters.some((name) => primary.includes(name)) ||
+          deferredSecondaryFilters.some((name) => secondary.includes(name))
+        )
+      })
     }
 
     // Text search — case-insensitive substring match across key fields and payload
@@ -139,8 +148,8 @@ export function EventStream() {
     deduped,
     selectedAgentIds,
     spawnToolUseIds,
-    deferredStaticFilters,
-    deferredToolFilters,
+    deferredPrimaryFilters,
+    deferredSecondaryFilters,
     deferredSearchQuery,
   ])
 
@@ -183,11 +192,53 @@ export function EventStream() {
     const id = lastExpandedRef.current
     if (id == null) return
     setScrollToEventId(id)
-  }, [deferredStaticFilters, deferredToolFilters, deferredSearchQuery, setScrollToEventId])
+  }, [deferredPrimaryFilters, deferredSecondaryFilters, deferredSearchQuery, setScrollToEventId])
 
   const showAgentLabel = agents.length > 1
   const scrollRef = useRef<HTMLDivElement>(null)
   const hasInitiallyScrolled = useRef(false)
+
+  // Browser-level scroll shortcuts route to the event stream pane. The
+  // pane owns its own scrollbar (for virtualization), which means the
+  // document's Cmd+Up / Cmd+Down / Home / End / PageUp / PageDown
+  // shortcuts don't scroll it by default. We intercept those on window
+  // keydown and forward them here — unless focus is inside an input or
+  // a Radix dialog, so typing and modal dialogs keep working normally.
+  useEffect(() => {
+    function handleKeydown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null
+      if (target) {
+        const tag = target.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return
+        // Don't steal shortcuts from an open dialog — it should handle
+        // its own scrolling.
+        if (target.closest('[role="dialog"]')) return
+      }
+      const container = scrollRef.current
+      if (!container) return
+
+      const toTop = (e.metaKey && e.key === 'ArrowUp') || e.key === 'Home'
+      const toBottom = (e.metaKey && e.key === 'ArrowDown') || e.key === 'End'
+      const pageUp = e.key === 'PageUp' && !e.metaKey && !e.ctrlKey
+      const pageDown = e.key === 'PageDown' && !e.metaKey && !e.ctrlKey
+
+      if (toTop) {
+        e.preventDefault()
+        container.scrollTop = 0
+      } else if (toBottom) {
+        e.preventDefault()
+        container.scrollTop = container.scrollHeight
+      } else if (pageUp) {
+        e.preventDefault()
+        container.scrollBy({ top: -container.clientHeight * 0.9 })
+      } else if (pageDown) {
+        e.preventDefault()
+        container.scrollBy({ top: container.clientHeight * 0.9 })
+      }
+    }
+    window.addEventListener('keydown', handleKeydown)
+    return () => window.removeEventListener('keydown', handleKeydown)
+  }, [])
 
   // Virtualizer: only renders rows in (and near) the viewport, so sessions
   // with thousands of events don't destroy performance.
@@ -458,7 +509,12 @@ export function EventStream() {
                 </span>
               )}
             </div>
-            <div ref={scrollRef} className="flex-1 overflow-y-auto">
+            <div
+              ref={scrollRef}
+              data-region-target="events"
+              tabIndex={0}
+              className="flex-1 overflow-y-auto focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+            >
               {displayedEvents.length === 0 ? (
                 <EmptyState text="No events match the current filters" />
               ) : (

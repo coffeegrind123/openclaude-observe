@@ -14,7 +14,18 @@ services:
       AGENTS_OBSERVE_CLIENT_DIST_PATH: /app/client/dist
       AGENTS_OBSERVE_LOG_LEVEL: "${AGENTS_OBSERVE_LOG_LEVEL:-debug}"
       AGENTS_OBSERVE_RUNTIME: docker
+      # Transcript token stats. On-demand parse of ~/.claude/projects JSONL
+      # transcripts for per-prompt / per-model token + cost breakdowns.
+      # Set AGENTS_OBSERVE_TRANSCRIPT_STATS=0 to disable. The host base is
+      # translated to the in-container mount path below; transcript_path
+      # values stored in the DB are always host paths.
+      AGENTS_OBSERVE_TRANSCRIPT_STATS: "${AGENTS_OBSERVE_TRANSCRIPT_STATS:-1}"
+      AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE: "${AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE:-${HOME}/.claude/projects}"
+      AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_CONTAINER_BASE: /host/.claude/projects
     ports:
       - "${AGENTS_OBSERVE_SERVER_PORT:-4981}:${AGENTS_OBSERVE_SERVER_PORT:-4981}"
     volumes:
       - ${AGENTS_OBSERVE_DATA_DIR:-./data}:/data
+      # Read-only mount of the host's Claude transcripts so the server can
+      # parse them for the Token Usage stats panel.
+      - ${AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE:-${HOME}/.claude/projects}:/host/.claude/projects:ro

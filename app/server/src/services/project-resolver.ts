@@ -6,6 +6,41 @@ import {
   normalizeCwd,
 } from '../utils/slug'
 
+const WORKTREE_SEGMENT_RE = /^\.?worktrees?$/
+
+/**
+ * Detects a worktree-style cwd and returns the slug of the most likely
+ * parent-repo project for a *match-only* lookup. Walks the path from
+ * right to left for a `worktree` / `worktrees` / `.worktree` /
+ * `.worktrees` segment, then continues leftward past any dotfile
+ * directory (e.g. `.claude`) to the first non-dot ancestor. Returns
+ * `null` when no worktree segment is found, when the worktree segment
+ * is at the root, or when every ancestor is a dotfile dir.
+ *
+ * The returned slug is the lowercased ancestor basename — matching the
+ * first candidate `deriveSlugCandidatesFromCwd` produces when creating
+ * a project from that directory — so it compares directly against
+ * `projects.slug`.
+ */
+export function findExistingWorktreeProjectSlug(cwd: string | null): string | null {
+  if (!cwd) return null
+  const parts = cwd.split('/').filter(Boolean)
+  let worktreeIdx = -1
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (WORKTREE_SEGMENT_RE.test(parts[i])) {
+      worktreeIdx = i
+      break
+    }
+  }
+  if (worktreeIdx <= 0) return null
+  for (let i = worktreeIdx - 1; i >= 0; i--) {
+    if (!parts[i].startsWith('.')) {
+      return parts[i].toLowerCase()
+    }
+  }
+  return null
+}
+
 export interface ResolveProjectInput {
   sessionId: string
   slug: string | null
@@ -60,6 +95,21 @@ export async function resolveProject(
     const existing = await store.getProjectByCwd(cwd)
     if (existing) {
       return { projectId: existing.id, projectSlug: existing.slug, created: false }
+    }
+    // Worktree-aware match against an EXISTING project. Match-only —
+    // never creates from the walk-up candidate, so unrelated ancestor
+    // dirs cannot become projects. A worktree checkout (e.g.
+    // /repo/.worktrees/feature-x) joins its parent repo's project.
+    const worktreeSlug = findExistingWorktreeProjectSlug(cwd)
+    if (worktreeSlug) {
+      const worktreeParent = await store.getProjectBySlug(worktreeSlug)
+      if (worktreeParent) {
+        return {
+          projectId: worktreeParent.id,
+          projectSlug: worktreeParent.slug,
+          created: false,
+        }
+      }
     }
     // Fall through to creation; prefer cwd-derived slug candidates so
     // the slug reflects the project directory rather than a transcript

@@ -1,9 +1,11 @@
 // app/server/src/routes/events.ts
 import { Hono } from 'hono'
 import type { EventStore } from '../storage/types'
+import { DuplicateEventSignatureError } from '../storage/types'
 import type { ParsedEvent } from '../types'
 import { parseRawEvent } from '../parser'
 import { resolveProject } from '../services/project-resolver'
+import { computeEventSignature } from '../utils/event-signature'
 import { config } from '../config'
 import { apiError } from '../errors'
 
@@ -99,6 +101,28 @@ router.post('/events', async (c) => {
 
     const parsed = parseRawEvent(hookPayload)
     const eventCwd = (parsed.metadata.cwd as string | undefined) ?? null
+
+    // Dedup pre-check. Native OTel can re-deliver the same span (exporter
+    // retries, duplicate exporters); hash the identifying fields + a 5-second
+    // bucket and skip the whole pipeline on a re-delivery so side-effects
+    // (session/agent upsert, broadcast) don't fire twice.
+    const signatureHash = computeEventSignature(parsed, eventCwd)
+    const duplicate = await store.findEventBySignatureHash(signatureHash)
+    if (duplicate) {
+      if (LOG_LEVEL === 'debug' || LOG_LEVEL === 'trace') {
+        console.log(
+          `[dedup] subtype=${parsed.subtype} session=${parsed.sessionId} orig_event_id=${duplicate.id}`,
+        )
+      }
+      return c.json(
+        {
+          status: 'OK',
+          deduplicated: true,
+          meta: { event_id: duplicate.id, session_id: parsed.sessionId },
+        },
+        201,
+      )
+    }
 
     // Resolve project - only on first event for this session
     const existingSession = await store.getSessionById(parsed.sessionId)
@@ -292,17 +316,47 @@ router.post('/events', async (c) => {
     }
 
     const now = Date.now()
-    const eventId = await store.insertEvent({
-      agentId,
-      sessionId: parsed.sessionId,
-      type: parsed.type,
-      subtype: parsed.subtype,
-      toolName: parsed.toolName,
-      timestamp: parsed.timestamp,
-      payload: parsed.raw,
-      toolUseId: parsed.toolUseId,
-      instanceId: parsed.instanceId,
-    })
+    const isNotification = config.notificationOnSubtypes.has(parsed.subtype ?? '')
+    let eventId: number
+    try {
+      eventId = await store.insertEvent({
+        agentId,
+        sessionId: parsed.sessionId,
+        type: parsed.type,
+        subtype: parsed.subtype,
+        toolName: parsed.toolName,
+        timestamp: parsed.timestamp,
+        payload: parsed.raw,
+        toolUseId: parsed.toolUseId,
+        instanceId: parsed.instanceId,
+        signatureHash,
+        isNotification,
+      })
+    } catch (err) {
+      // Race: a concurrent identical POST inserted the row between our
+      // pre-check and this INSERT. The UNIQUE constraint surfaces as
+      // DuplicateEventSignatureError — return the winner's id and skip the
+      // rest of the pipeline; the original event already ran its side-effects.
+      if (err instanceof DuplicateEventSignatureError) {
+        const winner = await store.findEventBySignatureHash(signatureHash)
+        if (winner) {
+          if (LOG_LEVEL === 'debug' || LOG_LEVEL === 'trace') {
+            console.log(
+              `[dedup:race] subtype=${parsed.subtype} session=${parsed.sessionId} orig_event_id=${winner.id}`,
+            )
+          }
+          return c.json(
+            {
+              status: 'OK',
+              deduplicated: true,
+              meta: { event_id: winner.id, session_id: parsed.sessionId },
+            },
+            201,
+          )
+        }
+      }
+      throw err
+    }
 
     if (parsed.instanceId) {
       const instanceRole = (hookPayload.instance_role as string) || 'main'
@@ -378,7 +432,7 @@ router.post('/events', async (c) => {
     // bells can light up regardless of which session the viewer is on.
     // Any non-Notification event also bubbles as a clear signal so the
     // UI can auto-dismiss bells once the agent resumes working.
-    if (parsed.subtype === 'Notification') {
+    if (isNotification) {
       broadcastToAll({
         type: 'notification',
         data: {

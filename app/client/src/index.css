@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme inline {
   --color-background: var(--background);
@@ -42,7 +42,7 @@
   --secondary: oklch(0.94 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.94 0 0);
-  --muted-foreground: oklch(0.40 0 0);
+  --muted-foreground: oklch(0.4 0 0);
   --accent: oklch(0.94 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
@@ -81,6 +81,49 @@
 }
 
 @keyframes flash-ring {
-  0%, 100% { box-shadow: none; }
-  50% { box-shadow: 0 0 0 2px oklch(0.6 0.15 250 / 0.6); }
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 0 2px oklch(0.6 0.15 250 / 0.6);
+  }
+}
+
+/* CSS Custom Highlight API integration for the raw-event logs search.
+   logs-search-current has higher priority so the active match shows
+   orange over yellow. */
+::highlight(logs-search-all) {
+  background-color: rgb(250 204 21 / 0.35);
+}
+::highlight(logs-search-current) {
+  background-color: rgb(249 115 22 / 0.75);
+  color: black;
+}
+
+/* CSS Custom Highlight API integration for the filter live-preview.
+   Each pattern in the editor gets a palette slot keyed by its index in
+   the compiled filter. Patterns beyond index 4 cycle back to slot 0. The
+   <pre> body is rendered in muted gray; each rule re-asserts
+   `var(--foreground)` so matched bytes stay crisp against the colored
+   background. */
+::highlight(filter-preview-0) {
+  background-color: rgb(168 85 247 / 0.35);
+  color: var(--foreground);
+}
+::highlight(filter-preview-1) {
+  background-color: rgb(56 189 248 / 0.35);
+  color: var(--foreground);
+}
+::highlight(filter-preview-2) {
+  background-color: rgb(132 204 22 / 0.35);
+  color: var(--foreground);
+}
+::highlight(filter-preview-3) {
+  background-color: rgb(245 158 11 / 0.35);
+  color: var(--foreground);
+}
+::highlight(filter-preview-4) {
+  background-color: rgb(236 72 153 / 0.35);
+  color: var(--foreground);
 }

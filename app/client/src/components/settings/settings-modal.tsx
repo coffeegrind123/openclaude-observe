@@ -6,8 +6,22 @@ import { SessionsTab } from './sessions-tab'
 import { LabelsModalBody } from '@/components/labels/labels-modal'
 import { IconSettings } from './icon-settings'
 import { DisplayTab } from './display-tab'
+import { FiltersTab } from './filters-tab'
+import { KeyboardSettings } from './keyboard-settings'
 import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useUIStore } from '@/stores/ui-store'
+import { useFilterStore } from '@/stores/filter-store'
+import { useFilterDraftStore } from '@/stores/filter-draft-store'
 import { getServerHealth } from '@/lib/server-health'
 import { useDbStats } from '@/hooks/use-db-stats'
 import { formatBytes } from '@/lib/format-bytes'
@@ -29,8 +43,28 @@ export function SettingsModal() {
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null)
   const dbStats = useDbStats(open)
 
+  const draftCount = useFilterDraftStore((s) => s.drafts.size)
+  const clearAllDrafts = useFilterDraftStore((s) => s.clearAll)
+  const filtersDirty = useFilterStore((s) => s.dirty)
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false)
+  const [confirmRefreshOpen, setConfirmRefreshOpen] = useState(false)
+
   const onOpenChange = (o: boolean) => {
-    if (!o) closeSettings()
+    if (o) return
+    if (draftCount > 0) {
+      // Intercept the close — show the AlertDialog instead. The modal
+      // stays open until the user picks Discard or Cancel.
+      setConfirmDiscardOpen(true)
+      return
+    }
+    if (filtersDirty) {
+      // Filter set has changed since page load. Running event pipeline
+      // pins the compiled filters from page-load time, so changes only
+      // take effect after refresh. Prompt the user.
+      setConfirmRefreshOpen(true)
+      return
+    }
+    closeSettings()
   }
 
   useEffect(() => {
@@ -50,7 +84,13 @@ export function SettingsModal() {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         aria-describedby={undefined}
-        className="w-[720px] max-w-[90vw] max-h-[80vh] flex flex-col p-0"
+        // Filters tab needs more horizontal room for the sidebar + editor;
+        // every other tab stays at the default 720×80vh.
+        className={
+          activeTab === 'filters'
+            ? 'w-[1100px] max-w-[95vw] max-h-[90vh] flex flex-col p-0'
+            : 'w-[720px] max-w-[90vw] max-h-[80vh] flex flex-col p-0'
+        }
       >
         <div className="flex items-center px-6 pt-6 pb-0">
           <DialogTitle>Settings</DialogTitle>
@@ -73,7 +113,9 @@ export function SettingsModal() {
               <TabsTrigger value="icons">Icons</TabsTrigger>
               <TabsTrigger value="projects">Projects</TabsTrigger>
               <TabsTrigger value="labels">Labels</TabsTrigger>
+              <TabsTrigger value="filters">Filters</TabsTrigger>
               <TabsTrigger value="sessions">Sessions</TabsTrigger>
+              <TabsTrigger value="keyboard">Keyboard</TabsTrigger>
             </TabsList>
           </div>
           <TabsContent value="display" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
@@ -96,8 +138,16 @@ export function SettingsModal() {
           <TabsContent value="labels" className="flex-1 min-h-0 flex flex-col">
             <LabelsModalBody />
           </TabsContent>
+          {/* Filters tab manages its own scrolling + sidebar/editor
+              layout, so it skips the outer padding like Labels. */}
+          <TabsContent value="filters" className="flex-1 min-h-0 flex flex-col">
+            <FiltersTab />
+          </TabsContent>
           <TabsContent value="sessions" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
             <SessionsTab />
+          </TabsContent>
+          <TabsContent value="keyboard" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
+            <KeyboardSettings />
           </TabsContent>
         </Tabs>
         {serverInfo && (
@@ -120,6 +170,72 @@ export function SettingsModal() {
           </div>
         )}
       </DialogContent>
+
+      <AlertDialog open={confirmDiscardOpen} onOpenChange={setConfirmDiscardOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Discard unsaved changes to {draftCount} filter
+              {draftCount === 1 ? '' : 's'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              You have in-progress edits that haven&apos;t been saved. Closing the modal will
+              discard them. To keep the edits, click Cancel, then Save on each filter.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={(e) => {
+                e.preventDefault()
+                clearAllDrafts()
+                setConfirmDiscardOpen(false)
+                if (filtersDirty) {
+                  setConfirmRefreshOpen(true)
+                } else {
+                  closeSettings()
+                }
+              }}
+            >
+              Discard &amp; close
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmRefreshOpen} onOpenChange={setConfirmRefreshOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Refresh page to apply filter changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Filter changes have been saved but won&apos;t affect the events shown in this session
+              until the page is refreshed. Created filters won&apos;t show pills yet, and
+              enable/disable toggles won&apos;t take effect.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                // "Close anyway" — just shut the modal; changes stay
+                // queued for the next refresh. dirty remains true.
+                setConfirmRefreshOpen(false)
+                closeSettings()
+              }}
+            >
+              Close anyway
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                window.location.reload()
+              }}
+            >
+              Refresh now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }

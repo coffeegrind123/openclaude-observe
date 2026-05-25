@@ -154,7 +154,9 @@ export function ProjectList({ collapsed }: ProjectListProps) {
               <Tooltip key={project.id}>
                 <TooltipTrigger asChild>
                   <button
-                    className="relative flex h-8 w-8 mx-auto items-center justify-center rounded-md text-xs cursor-pointer text-muted-foreground hover:bg-accent"
+                    data-sidebar-item=""
+                    aria-current={isSelected ? 'true' : undefined}
+                    className="relative flex h-8 w-8 mx-auto items-center justify-center rounded-md text-xs cursor-pointer text-muted-foreground hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     onClick={() =>
                       setSelectedProject(
                         isSelected ? null : project.id,
@@ -185,6 +187,8 @@ export function ProjectList({ collapsed }: ProjectListProps) {
               <div
                 role="button"
                 tabIndex={0}
+                data-sidebar-item=""
+                aria-current={isSelected ? 'true' : undefined}
                 className="group flex items-center gap-2 w-full rounded-md px-2 py-0.5 text-sm transition-colors cursor-pointer text-foreground hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 onClick={toggleProject}
                 onKeyDown={(e) => {

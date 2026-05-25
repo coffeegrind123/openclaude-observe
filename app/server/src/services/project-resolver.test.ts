@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest'
 import { SqliteAdapter } from '../storage/sqlite-adapter'
-import { resolveProject } from './project-resolver'
+import { findExistingWorktreeProjectSlug, resolveProject } from './project-resolver'
 
 let store: SqliteAdapter
 
@@ -235,5 +235,88 @@ describe('resolveProject', () => {
     })
     expect(result.projectSlug).toBe('other-app')
     expect(result.created).toBe(true)
+  })
+})
+
+describe('findExistingWorktreeProjectSlug', () => {
+  test('returns null for null cwd', () => {
+    expect(findExistingWorktreeProjectSlug(null)).toBeNull()
+  })
+
+  test('returns null for empty string', () => {
+    expect(findExistingWorktreeProjectSlug('')).toBeNull()
+  })
+
+  test('returns null when no worktree segment is present', () => {
+    expect(findExistingWorktreeProjectSlug('/Users/joe/dev/my-app/src')).toBeNull()
+  })
+
+  test('matches `.worktrees` and returns parent dir slug', () => {
+    expect(findExistingWorktreeProjectSlug('/Users/joe/dev/my-app/.worktrees/feat-foo')).toBe(
+      'my-app',
+    )
+  })
+
+  test('matches `.claude/worktrees` and skips `.claude` dotfile ancestor', () => {
+    expect(
+      findExistingWorktreeProjectSlug('/Users/joe/dev/my-app/.claude/worktrees/feat-foo'),
+    ).toBe('my-app')
+  })
+
+  test('matches plain `worktrees` (no leading dot)', () => {
+    expect(findExistingWorktreeProjectSlug('/Users/joe/dev/my-app/worktrees/feat')).toBe('my-app')
+  })
+
+  test('matches singular `worktree`', () => {
+    expect(findExistingWorktreeProjectSlug('/Users/joe/dev/my-app/worktree/feat')).toBe('my-app')
+  })
+
+  test('returns null when every ancestor is a dotfile dir', () => {
+    expect(findExistingWorktreeProjectSlug('/.dev/.repo/.worktrees/x')).toBeNull()
+  })
+
+  test('tolerates a trailing slash on cwd', () => {
+    expect(findExistingWorktreeProjectSlug('/Users/joe/dev/my-app/.worktrees/feat-foo/')).toBe(
+      'my-app',
+    )
+  })
+
+  test('returns null when worktree segment has no non-dot ancestor', () => {
+    expect(findExistingWorktreeProjectSlug('/.worktrees/feat')).toBeNull()
+  })
+
+  test('lowercases the parent dir to match project slug derivation', () => {
+    expect(findExistingWorktreeProjectSlug('/Users/joe/dev/My-App/.worktrees/feat')).toBe('my-app')
+  })
+})
+
+describe('resolveProject — worktree routing', () => {
+  test('routes a worktree cwd into the existing parent project', async () => {
+    const parent = await resolveProject(store, {
+      sessionId: 'sess-parent',
+      slug: null,
+      transcriptPath: null,
+      cwd: '/Users/joe/dev/my-app',
+    })
+    expect(parent.created).toBe(true)
+
+    const worktree = await resolveProject(store, {
+      sessionId: 'sess-wt',
+      slug: null,
+      transcriptPath: null,
+      cwd: '/Users/joe/dev/my-app/.worktrees/feat-foo',
+    })
+    expect(worktree.projectId).toBe(parent.projectId)
+    expect(worktree.created).toBe(false)
+  })
+
+  test('creates a new project from the worktree dir when no parent project exists', async () => {
+    const worktree = await resolveProject(store, {
+      sessionId: 'sess-wt2',
+      slug: null,
+      transcriptPath: null,
+      cwd: '/Users/joe/dev/orphan-app/.worktrees/feat-bar',
+    })
+    expect(worktree.created).toBe(true)
   })
 })

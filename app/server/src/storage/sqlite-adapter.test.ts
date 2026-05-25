@@ -266,6 +266,30 @@ describe('SqliteAdapter — sessions', () => {
     expect(rows[0].count).toBe(1)
   })
 
+  test('isNotification param advances last_notification_ts on a non-Notification subtype', async () => {
+    const projId = await store.createProject('proj1', 'Project 1', null)
+    await store.upsertSession('sess1', projId, null, null, 100)
+    await store.upsertAgent('sess1', 'sess1', null, null, null)
+
+    // Configurable notifications (AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS) let the
+    // route mark e.g. a Stop event as notifying. The adapter honors the flag
+    // regardless of subtype.
+    await store.insertEvent({
+      agentId: 'sess1',
+      sessionId: 'sess1',
+      type: 'hook',
+      subtype: 'Stop',
+      toolName: null,
+      timestamp: 2000,
+      payload: {},
+      isNotification: true,
+    })
+
+    const rows = await store.getSessionsWithPendingNotifications(0)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].last_notification_ts).toBe(2000)
+  })
+
   test('auto-clears once a non-notification event arrives after the notification', async () => {
     const projId = await store.createProject('proj1', 'Project 1', null)
     await store.upsertSession('sess1', projId, null, null, 100)
@@ -1534,5 +1558,213 @@ describe('SqliteAdapter — repairOrphans', () => {
     const found = recentAfter.find((r: { id: string }) => r.id === 's1')
     expect(found).toBeDefined()
     expect(found.project_slug).toBe('unknown')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Event dedup (signature_hash)
+// ---------------------------------------------------------------------------
+describe('SqliteAdapter — event dedup', () => {
+  async function insert(signatureHash: string | null) {
+    await seedBasic()
+    return store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PreToolUse',
+      toolName: 'Bash',
+      timestamp: 1000,
+      payload: { a: 1 },
+      signatureHash,
+    })
+  }
+
+  test('findEventBySignatureHash returns null when absent', async () => {
+    await seedBasic()
+    expect(await store.findEventBySignatureHash('nope')).toBeNull()
+  })
+
+  test('insertEvent persists signature_hash and findEventBySignatureHash locates it', async () => {
+    const id = await insert('sig-abc')
+    const found = await store.findEventBySignatureHash('sig-abc')
+    expect(found).toEqual({ id })
+  })
+
+  test('duplicate signature_hash throws DuplicateEventSignatureError', async () => {
+    await insert('sig-dup')
+    await expect(
+      store.insertEvent({
+        agentId: 'a1',
+        sessionId: 'sess1',
+        type: 'tool',
+        subtype: 'PreToolUse',
+        toolName: 'Bash',
+        timestamp: 1001,
+        payload: { a: 2 },
+        signatureHash: 'sig-dup',
+      }),
+    ).rejects.toMatchObject({ name: 'DuplicateEventSignatureError', signatureHash: 'sig-dup' })
+  })
+
+  test('multiple NULL signature_hash rows are allowed (NULLs distinct under UNIQUE)', async () => {
+    const id1 = await insert(null)
+    const id2 = await store.insertEvent({
+      agentId: 'a1',
+      sessionId: 'sess1',
+      type: 'tool',
+      subtype: 'PostToolUse',
+      toolName: 'Bash',
+      timestamp: 1002,
+      payload: {},
+      signatureHash: null,
+    })
+    expect(id1).not.toBe(id2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Filters
+// ---------------------------------------------------------------------------
+describe('filters', () => {
+  test('getFilterById returns null for missing id', async () => {
+    const adapter = new SqliteAdapter(':memory:')
+    expect(await adapter.getFilterById('nope')).toBeNull()
+  })
+
+  test('createFilter inserts a user-kind row with a generated UUID', async () => {
+    const adapter = new SqliteAdapter(':memory:')
+    const f = await adapter.createFilter({
+      name: 'task_completed',
+      pillName: 'task_completed',
+      display: 'primary',
+      combinator: 'and',
+      patterns: [{ target: 'hook', regex: '^Stop$' }],
+    })
+    expect(f.kind).toBe('user')
+    expect(f.enabled).toBe(true)
+    expect(f.id).toMatch(/^[0-9a-f-]{36}$/) // UUID
+    const userFilters = (await adapter.listFilters()).filter((x) => x.kind === 'user')
+    expect(userFilters.length).toBe(1)
+  })
+
+  test('deleteFilter removes the row', async () => {
+    const adapter = new SqliteAdapter(':memory:')
+    const f = await adapter.createFilter({
+      name: 'x',
+      pillName: 'x',
+      display: 'primary',
+      combinator: 'and',
+      patterns: [{ target: 'hook', regex: '.' }],
+    })
+    await adapter.deleteFilter(f.id)
+    const userFilters = (await adapter.listFilters()).filter((x) => x.kind === 'user')
+    expect(userFilters).toEqual([])
+  })
+
+  test('updateFilter patches selected fields', async () => {
+    const adapter = new SqliteAdapter(':memory:')
+    const f = await adapter.createFilter({
+      name: 'x',
+      pillName: 'x',
+      display: 'primary',
+      combinator: 'and',
+      patterns: [{ target: 'hook', regex: '.' }],
+    })
+    const updated = await adapter.updateFilter(f.id, { name: 'renamed', enabled: false })
+    expect(updated.name).toBe('renamed')
+    expect(updated.enabled).toBe(false)
+    expect(updated.pillName).toBe('x') // untouched
+  })
+
+  test('duplicateFilter creates an independent user copy with "(copy)" suffix', async () => {
+    const adapter = new SqliteAdapter(':memory:')
+    const orig = await adapter.createFilter({
+      name: 'orig',
+      pillName: 'orig',
+      display: 'primary',
+      combinator: 'and',
+      patterns: [{ target: 'hook', regex: '.' }],
+    })
+    const dup = await adapter.duplicateFilter(orig.id)
+    expect(dup.id).not.toBe(orig.id)
+    expect(dup.name).toBe('orig (copy)')
+    expect(dup.pillName).toBe('orig')
+    expect(dup.kind).toBe('user')
+  })
+
+  test('seedDefaultFilters inserts all seeds and preserves enabled on subsequent runs', async () => {
+    const adapter = new SqliteAdapter(':memory:')
+    await adapter.seedDefaultFilters()
+    const first = await adapter.listFilters()
+    expect(first.length).toBeGreaterThan(5)
+    expect(first.every((f) => f.kind === 'default' && f.enabled === true)).toBe(true)
+
+    // Disable one
+    const target = first[0]
+    await adapter.updateFilter(target.id, { enabled: false })
+
+    // Re-run seed — should NOT re-enable
+    await adapter.seedDefaultFilters()
+    const second = await adapter.getFilterById(target.id)
+    expect(second?.enabled).toBe(false)
+  })
+
+  test('seedDefaultFilters inserts the default-all exclusion row', async () => {
+    const adapter = new SqliteAdapter(':memory:')
+    await adapter.seedDefaultFilters()
+    const all = await adapter.getFilterById('default-all')
+    expect(all).not.toBeNull()
+    expect(all?.name).toBe('All')
+    expect(all?.pillName).toBe('All')
+    expect(all?.kind).toBe('default')
+    expect(all?.enabled).toBe(true)
+    expect(all?.combinator).toBe('and')
+    expect(all?.patterns).toEqual([{ target: 'hook', regex: '^PostToolBatch$', negate: true }])
+    expect(all?.config).toEqual({ role: 'all-exclusions' })
+  })
+
+  test('init backfills missing seed defaults on upgrade without touching existing rows', async () => {
+    // Simulate the upgrade scenario: an installation already has the
+    // filters table populated, but a new release adds a seed (default-all)
+    // that's missing. The init pass must insert the missing seed without
+    // disturbing user customizations to other defaults.
+    const adapter = new SqliteAdapter(':memory:')
+    await adapter.seedDefaultFilters()
+
+    // User customizes an existing default.
+    await adapter.updateFilter('default-tools', { name: 'My Tools', enabled: false })
+
+    // Delete default-all to mimic the pre-upgrade state.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;((adapter as any).db as { prepare: (s: string) => { run: (...a: unknown[]) => void } })
+      .prepare("DELETE FROM filters WHERE id = 'default-all'")
+      .run()
+    expect(await adapter.getFilterById('default-all')).toBeNull()
+
+    // Run the upgrade hook: install only missing seeds.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(adapter as any).installMissingSeedDefaults()
+
+    // default-all is now present.
+    const all = await adapter.getFilterById('default-all')
+    expect(all).not.toBeNull()
+    expect(all?.name).toBe('All')
+
+    // The user's customization on default-tools is preserved.
+    const tools = await adapter.getFilterById('default-tools')
+    expect(tools?.name).toBe('My Tools')
+    expect(tools?.enabled).toBe(false)
+  })
+
+  test('resetDefaultFilters reapplies seed content but preserves enabled', async () => {
+    const adapter = new SqliteAdapter(':memory:')
+    await adapter.seedDefaultFilters()
+    const before = (await adapter.listFilters())[0]
+    await adapter.updateFilter(before.id, { name: 'mutated', enabled: false })
+
+    await adapter.resetDefaultFilters()
+    const after = await adapter.getFilterById(before.id)
+    expect(after?.name).not.toBe('mutated') // seed name restored
+    expect(after?.enabled).toBe(false) // enabled preserved
   })
 })

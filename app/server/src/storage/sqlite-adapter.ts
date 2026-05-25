@@ -8,7 +8,11 @@ import type {
   StoredEvent,
   OrphanRepairResult,
 } from './types'
+import { DuplicateEventSignatureError } from './types'
 import type { InstanceRow } from '../types'
+import type { Filter, FilterRow, FilterPattern } from '../types'
+import { randomUUID } from 'node:crypto'
+import { SEED_FILTERS } from './seed-filters'
 
 export class SqliteAdapter implements EventStore {
   private db: Database.Database
@@ -156,6 +160,7 @@ export class SqliteAdapter implements EventStore {
         created_at INTEGER NOT NULL,
         payload TEXT NOT NULL,
         tool_use_id TEXT,
+        signature_hash TEXT,
         FOREIGN KEY (agent_id) REFERENCES agents(id),
         FOREIGN KEY (session_id) REFERENCES sessions(id)
       )
@@ -175,6 +180,12 @@ export class SqliteAdapter implements EventStore {
     }
     if (!eventCols.some((c) => c.name === 'instance_id')) {
       this.db.exec('ALTER TABLE events ADD COLUMN instance_id TEXT')
+    }
+    // Additive migration: signature_hash column for event dedup. Existing
+    // rows stay NULL (SQLite treats NULLs as distinct under UNIQUE, so they
+    // don't collide).
+    if (!eventCols.some((c) => c.name === 'signature_hash')) {
+      this.db.exec('ALTER TABLE events ADD COLUMN signature_hash TEXT')
     }
 
     // Run the token backfill now that the events table is guaranteed to exist.
@@ -206,6 +217,46 @@ export class SqliteAdapter implements EventStore {
       )
     `)
 
+    // First-boot setup for the filters table. We don't have any users
+    // in the wild with a partial filters schema yet (this branch hasn't
+    // shipped), so the install path is intentionally one-shot: create
+    // the table with all current columns, seed the defaults once, then
+    // leave it alone forever. After this, both schema and rows are
+    // user-controlled — seeds don't re-apply on subsequent boots, and
+    // the only way to bring defaults back to their original values is
+    // the "Reload defaults" button (which routes through
+    // resetDefaultFilters → runSeedDefaults with the explicit upsert).
+    //
+    // Side effect: a default the user deletes will stay deleted across
+    // restarts. Users who want to silence a default should disable it
+    // rather than delete it.
+    const filtersTableExists = !!this.db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='filters'")
+      .get()
+    if (!filtersTableExists) {
+      this.db.exec(`
+        CREATE TABLE filters (
+          id          TEXT PRIMARY KEY,
+          name        TEXT NOT NULL,
+          pill_name   TEXT NOT NULL,
+          display     TEXT NOT NULL CHECK(display IN ('primary','secondary')),
+          combinator  TEXT NOT NULL CHECK(combinator IN ('and','or')) DEFAULT 'and',
+          patterns    TEXT NOT NULL,
+          kind        TEXT NOT NULL CHECK(kind IN ('default','user')),
+          enabled     INTEGER NOT NULL DEFAULT 1,
+          config      TEXT NOT NULL DEFAULT '{}',
+          created_at  INTEGER NOT NULL,
+          updated_at  INTEGER NOT NULL
+        )
+      `)
+      this.runSeedDefaults()
+    } else {
+      // Existing installations: backfill seeds added in newer releases.
+      // Purely additive — never updates an existing row, so user
+      // customizations to defaults are preserved.
+      this.installMissingSeedDefaults()
+    }
+
     // Create indexes
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug)')
     this.db.exec(
@@ -219,6 +270,9 @@ export class SqliteAdapter implements EventStore {
       'CREATE INDEX IF NOT EXISTS idx_events_session_agent ON events(session_id, agent_id, timestamp)',
     )
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_events_tool_use_id ON events(tool_use_id)')
+    this.db.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_events_signature_hash ON events(signature_hash)',
+    )
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_agent_id)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id)')
@@ -410,31 +464,46 @@ export class SqliteAdapter implements EventStore {
 
   async insertEvent(params: InsertEventParams): Promise<number> {
     const now = Date.now()
-    const result = this.db
-      .prepare(
-        `
-      INSERT INTO events (agent_id, session_id, type, subtype, tool_name, timestamp, created_at, payload, tool_use_id, instance_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    let result
+    try {
+      result = this.db
+        .prepare(
+          `
+      INSERT INTO events (agent_id, session_id, type, subtype, tool_name, timestamp, created_at, payload, tool_use_id, instance_id, signature_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-      )
-      .run(
-        params.agentId,
-        params.sessionId,
-        params.type,
-        params.subtype,
-        params.toolName,
-        params.timestamp,
-        now,
-        JSON.stringify(params.payload),
-        params.toolUseId || null,
-        params.instanceId || null,
-      )
+        )
+        .run(
+          params.agentId,
+          params.sessionId,
+          params.type,
+          params.subtype,
+          params.toolName,
+          params.timestamp,
+          now,
+          JSON.stringify(params.payload),
+          params.toolUseId || null,
+          params.instanceId || null,
+          params.signatureHash ?? null,
+        )
+    } catch (e: any) {
+      // A concurrent identical POST won the race to insert this signature.
+      // Surface it as a typed error so the route can return the winner's id.
+      if (
+        params.signatureHash &&
+        e?.code === 'SQLITE_CONSTRAINT_UNIQUE' &&
+        String(e.message ?? '').includes('events.signature_hash')
+      ) {
+        throw new DuplicateEventSignatureError(params.signatureHash)
+      }
+      throw e
+    }
 
     // Update cached counters on session. `last_activity` is the
     // max across all events; `last_notification_ts` only advances for
     // Notification-subtype events. "Pending" is inferred from those
     // two columns (see getSessionsWithPendingNotifications).
-    const isNotification = params.subtype === 'Notification'
+    const isNotification = params.isNotification ?? params.subtype === 'Notification'
     this.db
       .prepare(
         `UPDATE sessions SET
@@ -555,8 +624,203 @@ export class SqliteAdapter implements EventStore {
     )
   }
 
+  async findEventBySignatureHash(hash: string): Promise<{ id: number } | null> {
+    const row = this.db
+      .prepare('SELECT id FROM events WHERE signature_hash = ? LIMIT 1')
+      .get(hash) as { id: number } | undefined
+    return row ? { id: Number(row.id) } : null
+  }
+
+  async getSessionTranscriptPath(sessionId: string): Promise<string | null> {
+    const row = this.db
+      .prepare(`SELECT transcript_path FROM sessions WHERE id = ?`)
+      .get(sessionId) as { transcript_path: string | null } | undefined
+    return row?.transcript_path ?? null
+  }
+
   async getAgentById(agentId: string): Promise<any | null> {
     return this.db.prepare(`SELECT * FROM agents WHERE id = ?`).get(agentId) || null
+  }
+
+  async listFilters(): Promise<Filter[]> {
+    const rows = this.db.prepare('SELECT * FROM filters ORDER BY kind, name').all() as FilterRow[]
+    return rows.map((r) => this.rowToFilter(r))
+  }
+
+  async getFilterById(id: string): Promise<Filter | null> {
+    const row = this.db.prepare('SELECT * FROM filters WHERE id = ?').get(id) as
+      | FilterRow
+      | undefined
+    return row ? this.rowToFilter(row) : null
+  }
+
+  async createFilter(input: {
+    name: string
+    pillName: string
+    display: 'primary' | 'secondary'
+    combinator: 'and' | 'or'
+    patterns: FilterPattern[]
+    config?: Record<string, unknown>
+  }): Promise<Filter> {
+    const id = randomUUID()
+    const now = Date.now()
+    this.db
+      .prepare(
+        `INSERT INTO filters (id, name, pill_name, display, combinator, patterns, kind, enabled, config, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'user', 1, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        input.name,
+        input.pillName,
+        input.display,
+        input.combinator,
+        JSON.stringify(input.patterns),
+        JSON.stringify(input.config ?? {}),
+        now,
+        now,
+      )
+    return (await this.getFilterById(id)) as Filter
+  }
+
+  async deleteFilter(id: string): Promise<void> {
+    this.db.prepare('DELETE FROM filters WHERE id = ?').run(id)
+  }
+
+  async updateFilter(
+    id: string,
+    patch: Partial<{
+      name: string
+      pillName: string
+      display: 'primary' | 'secondary'
+      combinator: 'and' | 'or'
+      patterns: FilterPattern[]
+      enabled: boolean
+      config: Record<string, unknown>
+    }>,
+  ): Promise<Filter> {
+    const existing = await this.getFilterById(id)
+    if (!existing) throw new Error(`filter ${id} not found`)
+    const merged = {
+      name: patch.name ?? existing.name,
+      pillName: patch.pillName ?? existing.pillName,
+      display: patch.display ?? existing.display,
+      combinator: patch.combinator ?? existing.combinator,
+      patterns: patch.patterns ?? existing.patterns,
+      enabled: patch.enabled ?? existing.enabled,
+      config: patch.config ?? existing.config,
+    }
+    this.db
+      .prepare(
+        `UPDATE filters
+         SET name = ?, pill_name = ?, display = ?, combinator = ?, patterns = ?, enabled = ?, config = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        merged.name,
+        merged.pillName,
+        merged.display,
+        merged.combinator,
+        JSON.stringify(merged.patterns),
+        merged.enabled ? 1 : 0,
+        JSON.stringify(merged.config),
+        Date.now(),
+        id,
+      )
+    return (await this.getFilterById(id)) as Filter
+  }
+
+  async duplicateFilter(id: string): Promise<Filter> {
+    const orig = await this.getFilterById(id)
+    if (!orig) throw new Error(`filter ${id} not found`)
+    return await this.createFilter({
+      name: `${orig.name} (copy)`,
+      pillName: orig.pillName,
+      display: orig.display,
+      combinator: orig.combinator,
+      patterns: orig.patterns,
+      config: orig.config,
+    })
+  }
+
+  // Insert (or, on explicit reset, upsert) the default filter seeds.
+  // Called from two places:
+  //   1. Constructor — only when the filters table is brand new, so
+  //      the ON CONFLICT branch never fires; this is effectively an
+  //      INSERT seeding a fresh DB.
+  //   2. resetDefaultFilters (the "Reload defaults" button) — here
+  //      the upsert is the point: each default's name, pillName,
+  //      display, combinator, patterns, and config snap back to seed
+  //      values. `enabled` is intentionally NOT touched so a user
+  //      who silenced a default keeps it silenced after a reset.
+  private runSeedDefaults(): void {
+    const insert = this.db.prepare(
+      `INSERT INTO filters (id, name, pill_name, display, combinator, patterns, kind, enabled, config, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'default', 1, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         pill_name = excluded.pill_name,
+         display = excluded.display,
+         combinator = excluded.combinator,
+         patterns = excluded.patterns,
+         config = excluded.config,
+         updated_at = excluded.updated_at`,
+    )
+    const now = Date.now()
+    const tx = this.db.transaction(() => {
+      for (const s of SEED_FILTERS) {
+        insert.run(
+          s.id,
+          s.name,
+          s.pillName,
+          s.display,
+          s.combinator,
+          JSON.stringify(s.patterns),
+          JSON.stringify(s.config ?? {}),
+          now,
+          now,
+        )
+      }
+    })
+    tx()
+  }
+
+  async seedDefaultFilters(): Promise<void> {
+    this.runSeedDefaults()
+  }
+
+  // Insert any SEED_FILTERS rows whose id isn't already in the filters
+  // table. Used during init on existing installs so a new release that
+  // adds a default (e.g. `default-all`) lands without disturbing rows
+  // the user has already customized. Never updates existing rows.
+  private installMissingSeedDefaults(): void {
+    const insert = this.db.prepare(
+      `INSERT OR IGNORE INTO filters
+       (id, name, pill_name, display, combinator, patterns, kind, enabled, config, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'default', 1, ?, ?, ?)`,
+    )
+    const now = Date.now()
+    const tx = this.db.transaction(() => {
+      for (const s of SEED_FILTERS) {
+        insert.run(
+          s.id,
+          s.name,
+          s.pillName,
+          s.display,
+          s.combinator,
+          JSON.stringify(s.patterns),
+          JSON.stringify(s.config ?? {}),
+          now,
+          now,
+        )
+      }
+    })
+    tx()
+  }
+
+  async resetDefaultFilters(): Promise<Filter[]> {
+    await this.seedDefaultFilters()
+    return (await this.listFilters()).filter((f) => f.kind === 'default')
   }
 
   async getAgentsForSession(sessionId: string): Promise<any[]> {
@@ -1024,6 +1288,30 @@ export class SqliteAdapter implements EventStore {
       return { ok: true }
     } catch (err: any) {
       return { ok: false, error: err.message || 'Unknown database error' }
+    }
+  }
+
+  private rowToFilter(row: FilterRow): Filter {
+    let config: Record<string, unknown> = {}
+    try {
+      const parsed = JSON.parse(row.config || '{}')
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) config = parsed
+    } catch {
+      // Bad JSON in the column — surface as an empty config rather than
+      // crashing the list endpoint.
+    }
+    return {
+      id: row.id,
+      name: row.name,
+      pillName: row.pill_name,
+      display: row.display as 'primary' | 'secondary',
+      combinator: row.combinator as 'and' | 'or',
+      patterns: JSON.parse(row.patterns),
+      kind: row.kind as 'default' | 'user',
+      enabled: row.enabled === 1,
+      config,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
     }
   }
 }

@@ -1,6 +1,7 @@
 import { useUIStore } from '@/stores/ui-store'
 import { cn } from '@/lib/utils'
 import { formatTokens } from '@/lib/format-utils'
+import { Badge } from '@/components/ui/badge'
 import { Clock, Folder, Activity } from 'lucide-react'
 import {
   NotificationIndicator,
