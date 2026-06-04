@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en" data-type="tight">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenClaude Observe — Redesign Concept v5 · Stream</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg stroke='%232f8fdc' stroke-width='6.5' stroke-linecap='round'%3E%3Cline x1='50' y1='44' x2='50' y2='10'/%3E%3Cline x1='53' y1='44.8' x2='67' y2='20.56'/%3E%3Cline x1='55.2' y1='47' x2='85.51' y2='29.5'/%3E%3Cline x1='56' y1='50' x2='83' y2='50'/%3E%3Cline x1='55.2' y1='53' x2='83.77' y2='69.5'/%3E%3Cline x1='53' y1='55.2' x2='67.5' y2='80.31'/%3E%3Cline x1='50' y1='56' x2='50' y2='92'/%3E%3Cline x1='47' y1='55.2' x2='34' y2='77.71'/%3E%3Cline x1='44.8' y1='53' x2='15.36' y2='70'/%3E%3Cline x1='44' y1='50' x2='14' y2='50'/%3E%3Cline x1='44.8' y1='47' x2='17.09' y2='31'/%3E%3Cline x1='47' y1='44.8' x2='33' y2='20.56'/%3E%3C/g%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;450;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* ============================================================
+   OpenClaude Observe — v5 "Stream"
+   River time-spine · tributaries · two voices (mono telemetry,
+   sans prose) · cool console base · inspector pops in · lens.
+   v5: time gutter fully LEFT of the spine (no bleed) ·
+   depth via SHADOW not borders · Inter Tight prose (no paper).
+   ============================================================ */
+
+/* ---- Light (cool / console) ---- */
+:root {
+  --hue: 250; --chroma: 0.13;
+
+  --paper:   #f0f3f7;
+  --paper-2: #e6eaf1;
+  --ink:     #121620;
+  --ink-2:   #4f5867;
+  --ink-3:   #8e97a6;
+  --ink-4:   #b9c1ce;
+  --sel:     oklch(0.58 0.13 var(--hue) / 0.09);
+  --rule:    #d2d8e2;
+
+  --accent:  oklch(0.52 0.15 var(--hue));
+  --accent-2:oklch(0.52 0.15 var(--hue) / .5);
+
+  --a-main:  oklch(0.52 0.14 250);
+  --a-clay:  oklch(0.56 0.10 45);
+  --a-sage:  oklch(0.52 0.07 150);
+  --a-slate: oklch(0.52 0.04 255);
+  --a-plum:  oklch(0.50 0.10 320);
+
+  --run:  oklch(0.55 0.12 155);
+  --fail: oklch(0.55 0.18 25);
+  --warm: oklch(0.62 0.12 65);
+  --add:  oklch(0.52 0.12 150);
+  --del:  oklch(0.55 0.16 25);
+
+  --sh-side:  2px 0 12px -5px rgba(18,22,40,.10);
+  --sh-float: 0 9px 18px -11px rgba(18,22,40,.22);
+  --sh-insp: -2px 0 14px -7px rgba(18,22,40,.10);
+  --sh-bead:  0 1px 2px rgba(18,22,40,.22);
+  --sh-pop:   0 18px 50px rgba(18,22,40,.20);
+
+  --font-prose: "Inter Tight", system-ui, -apple-system, sans-serif;
+  --font-mono:  "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+/* ---- Dark (slate) ---- */
+.dark {
+  --paper:   #0a0c10;
+  --paper-2: #0e1015;
+  --ink:     #e7e9ee;
+  --ink-2:   #99a0ac;
+  --ink-3:   #686d7a;
+  --ink-4:   #323540;
+  --sel:     oklch(0.74 0.13 var(--hue) / 0.10);
+  --rule:    #23252d;
+
+  --accent:  oklch(0.74 0.14 var(--hue));
+  --accent-2:oklch(0.74 0.14 var(--hue) / .5);
+
+  --a-main:  oklch(0.74 0.13 250);
+  --a-clay:  oklch(0.74 0.10 50);
+  --a-sage:  oklch(0.74 0.09 150);
+  --a-slate: oklch(0.72 0.05 255);
+  --a-plum:  oklch(0.72 0.11 320);
+
+  --run:  oklch(0.78 0.14 155);
+  --fail: oklch(0.70 0.17 25);
+  --warm: oklch(0.78 0.12 70);
+  --add:  oklch(0.75 0.14 150);
+  --del:  oklch(0.70 0.16 25);
+
+  --sh-side:  2px 0 16px -5px rgba(0,0,0,.55);
+  --sh-float: 0 10px 22px -11px rgba(0,0,0,.65);
+  --sh-insp: -2px 0 18px -7px rgba(0,0,0,.55);
+  --sh-bead:  0 1px 3px rgba(0,0,0,.6);
+  --sh-pop:   0 18px 50px rgba(0,0,0,.6);
+  color-scheme: dark;
+}
+
+/* prose type variants */
+:root[data-type="plex"]   { --font-prose: "IBM Plex Sans", system-ui, sans-serif; }
+:root[data-type="system"] { --font-prose: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; background: var(--paper); color: var(--ink);
+  font-family: var(--font-prose); font-size: 13.5px; line-height: 1.55; letter-spacing: -.006em;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-thumb { background: var(--ink-4); border-radius: 0; border: 3px solid var(--paper); }
+::selection { background: var(--accent-2); color: #fff; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+svg.i { width: 1em; height: 1em; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; fill: none; display: block; }
+
+.app { display: flex; height: 100vh; overflow: hidden; }
+
+/* ===================================================== sidebar */
+.sidebar { width: 244px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--paper-2);
+  box-shadow: var(--sh-side); z-index: 3; }
+.brand { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 18px; }
+.brand .mark { width: 24px; height: 24px; filter: drop-shadow(0 1px 2px rgba(31,111,196,.3)); }
+.brand .name { font-family: var(--font-mono); font-weight: 600; font-size: 14px; letter-spacing: -.02em; }
+.brand .name .o { color: var(--accent); }
+
+.s-search { margin: 6px 14px 14px; display: flex; align-items: center; gap: 8px; height: 30px;
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); border-bottom: 1px solid var(--rule); }
+.s-search input { flex: 1; background: none; border: none; outline: none; color: var(--ink); font: inherit; }
+.s-search kbd { font-size: 10px; color: var(--ink-3); }
+
+.s-scroll { flex: 1; overflow-y: auto; padding: 0 8px; }
+.s-cap { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-3); padding: 16px 10px 6px; }
+.s-cap .n { float: right; color: var(--ink-4); }
+
+.proj { display: flex; align-items: center; gap: 9px; padding: 5px 10px; font-family: var(--font-mono); font-size: 12px;
+  color: var(--ink-2); cursor: pointer; }
+.proj:hover { color: var(--ink); }
+.proj .tick { width: 6px; height: 6px; border-radius: 50%; box-shadow: var(--sh-bead); }
+.proj.open { color: var(--ink); font-weight: 500; }
+.proj .pn { margin-left: auto; font-size: 10px; color: var(--ink-4); }
+
+.sess { display: flex; align-items: center; gap: 9px; padding: 4px 10px 4px 25px; font-size: 12.5px;
+  color: var(--ink-2); cursor: pointer; position: relative; }
+.sess:hover { color: var(--ink); }
+.sess.active { color: var(--ink); font-weight: 500; }
+.sess.active::before { content: ""; position: absolute; left: 12px; top: 4px; bottom: 4px; width: 2px; background: var(--accent); }
+.sess .st { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; position: relative; box-shadow: var(--sh-bead); }
+.sess .st.live { background: var(--run); }
+.sess .st.live::after { content:""; position:absolute; inset:-4px; border-radius:50%; background:var(--run); opacity:.35; animation: ping 1.9s infinite; }
+.sess .st.idle { background: var(--ink-4); box-shadow: none; }
+@keyframes ping { 0%{transform:scale(.6);opacity:.5} 100%{transform:scale(2);opacity:0} }
+.sess .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sess .tk { font-family: var(--font-mono); font-size: 10px; color: var(--accent); }
+.sess .bell { color: var(--warm); animation: wig 1.2s infinite; }
+@keyframes wig { 0%,100%{transform:rotate(0)} 25%{transform:rotate(-12deg)} 75%{transform:rotate(12deg)} }
+
+.s-foot { height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 18px; color: var(--ink-3); }
+.s-foot button { color: var(--ink-3); display: grid; place-items: center; }
+.s-foot button:hover { color: var(--ink); }
+.s-foot .conn { margin-left: auto; display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10px; }
+.s-foot .conn .d { width: 5px; height: 5px; border-radius: 50%; background: var(--run); }
+
+/* ===================================================== main */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+/* header cluster floats over the river via a shared shadow on .now */
+.header { background: var(--paper); position: relative; z-index: 2; box-shadow: var(--sh-float); }
+.top { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 26px; }
+.crumb { display: flex; align-items: center; gap: 9px; font-family: var(--font-mono); font-size: 13px; }
+.crumb a { color: var(--ink-3); text-decoration: none; }
+.crumb a:hover { color: var(--ink); }
+.crumb .sep { color: var(--ink-4); }
+.crumb .cur { color: var(--ink); font-weight: 600; }
+.live { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .08em; color: var(--run); }
+.live .d { width: 6px; height: 6px; border-radius: 50%; background: var(--run); animation: blink 1.4s infinite; }
+@keyframes blink { 50%{opacity:.3} }
+.top .acts { margin-left: auto; display: flex; gap: 14px; color: var(--ink-3); }
+.top .acts button { color: var(--ink-3); display: grid; place-items: center; }
+.top .acts button:hover { color: var(--ink); }
+
+.readout { display: flex; align-items: center; gap: 0; padding: 0 26px 12px; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); }
+.readout .r { padding-right: 16px; }
+.readout .r b { color: var(--ink); font-weight: 600; }
+.readout .r.acc b { color: var(--accent); }
+.readout .right { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+.lens { display: flex; gap: 13px; }
+.lens button { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); }
+.lens button.on { color: var(--ink); }
+.lens button.on::after { content:""; display:block; height:1.5px; background: var(--accent); margin-top: 2px; }
+.readout .filter button { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); }
+.readout .filter button.on { color: var(--ink); }
+.readout .q { display: flex; align-items: center; gap: 6px; color: var(--ink-3); }
+
+.now { display: flex; align-items: center; gap: 22px; padding: 10px 26px; font-family: var(--font-mono); font-size: 11.5px;
+  border-top: 1px solid var(--rule); background: color-mix(in srgb, var(--paper-2) 55%, var(--paper)); }
+.now .lab { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.now .ag { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); }
+.now .ag .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); position: relative; box-shadow: var(--sh-bead); }
+.now .ag.working .dot::after { content:""; position:absolute; inset:-4px; border-radius:50%; background:var(--c); opacity:.3; animation: ping 1.6s infinite; }
+.now .ag .who { color: var(--c); font-weight: 600; }
+.now .ag .doing { color: var(--ink); }
+.now .ag .t { color: var(--ink-3); }
+.now .ag .t.slow { color: var(--warm); }
+.now .ag.done .who { color: var(--ink-3); }
+
+.work { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+.scroll { flex: 1; overflow-y: auto; }
+
+/* ===================================================== the river
+   geometry (px from .flow left edge, padding-left:0):
+   time gutter  14 … 92   |  clear channel  |  spine 118  |  content 140+  */
+.flow { position: relative; max-width: 1080px; padding: 22px 40px 80px 0; }
+.flow::before { content: ""; position: absolute; top: 0; bottom: 0; left: 118px; width: 1px; background: var(--rule); }
+
+.node { position: relative; padding: 7px 0 7px 140px; min-height: 30px; cursor: pointer; }
+.node:hover:not(.sel) { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.node .time { position: absolute; left: 14px; top: 9px; width: 78px; text-align: right; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); }
+.node .bead { position: absolute; left: 113px; top: 12px; width: 11px; height: 11px; border-radius: 50%; background: var(--paper); box-shadow: inset 0 0 0 2px var(--c, var(--ink-4)), var(--sh-bead); }
+.node .bead.fill { background: var(--c); box-shadow: var(--sh-bead); }
+.node .bead.live { box-shadow: inset 0 0 0 2px var(--c), var(--sh-bead); }
+.node .bead.live::after { content:""; position:absolute; inset:-5px; border-radius:50%; background:var(--c); opacity:.25; animation: ping 1.7s infinite; }
+.node .bead.diamond { border-radius: 2px; transform: rotate(45deg); top: 13px; }
+
+.spk { display: flex; align-items: baseline; gap: 10px; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); }
+.spk .who { color: var(--c, var(--ink)); font-weight: 700; }
+.spk .meta { color: var(--ink-3); }
+.spk .meta b { color: var(--ink-2); font-weight: 500; }
+.spk .ctx { margin-left: 6px; color: var(--c); }
+
+.prose { margin-top: 4px; font-size: 13.5px; line-height: 1.56; color: var(--ink); max-width: 62ch; }
+.prose.user { color: var(--ink); font-weight: 450; }
+.prose p + p { margin-top: 7px; }
+.prose code { font-family: var(--font-mono); font-size: 12px; background: color-mix(in srgb, var(--ink) 7%, transparent); padding: 0 4px; border-radius: 2px; }
+.prose pre { font-family: var(--font-mono); font-size: 11.5px; line-height: 1.65; margin: 8px 0; padding-left: 12px; border-left: 2px solid var(--rule); color: var(--ink-2); overflow-x: auto; letter-spacing: 0; }
+.thinking { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--a-plum); margin-bottom: 6px; cursor: pointer; }
+.thinking::before { content: ">"; }
+
+.tool { display: flex; align-items: baseline; gap: 10px; margin-top: 3px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); letter-spacing: 0; }
+.tool .verb { color: var(--c, var(--ink)); font-weight: 600; min-width: 52px; }
+.tool .arg { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool .arg .path { color: var(--ink); }
+.tool .res { color: var(--ink-3); margin-left: auto; padding-left: 16px; white-space: nowrap; }
+.tool.running .res { color: var(--run); }
+.tool .ok { color: var(--run); } .tool .bad { color: var(--fail); }
+.add { color: var(--add); } .del { color: var(--del); }
+
+.node.sel { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent), -26px 0 0 var(--sel), 40px 0 0 var(--sel); }
+
+/* tributary: branches right of the spine, own colored rail + elbow */
+.trib { position: relative; margin: 2px 0 2px 140px; padding-left: 22px; }
+.trib::before { content: ""; position: absolute; left: 0; top: -6px; bottom: 14px; width: 1px; background: var(--c); opacity: .55; }
+.trib::after { content: ""; position: absolute; left: -22px; top: -6px; width: 22px; height: 18px; border-left: 1px solid var(--c); border-bottom: 1px solid var(--c); opacity: .55; border-bottom-left-radius: 8px; }
+.trib .tnode { position: relative; padding: 5px 0 5px 18px; cursor: pointer; }
+.trib .tnode:hover { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.trib .tnode .bead { position: absolute; left: -27px; top: 9px; width: 9px; height: 9px; }
+.trib .tnode .time { position: absolute; left: -154px; top: 6px; width: 78px; text-align: right; font-family: var(--font-mono); font-size: 10px; color: var(--ink-3); }
+.trib .branch-lab { font-family: var(--font-mono); font-size: 11px; color: var(--c); font-weight: 700; margin-bottom: 2px; }
+.trib .merge { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); margin-top: 4px; }
+.trib .merge .ok { color: var(--run); }
+
+.compact { position: relative; padding: 16px 0 16px 140px; font-family: var(--font-mono); font-size: 11px; color: var(--a-plum); }
+.compact .l { display: inline-flex; align-items: center; gap: 8px; letter-spacing: .04em; }
+.compact .l::before, .compact .l::after { content: ""; width: 40px; height: 1px; background: currentColor; opacity: .4; }
+
+body[data-view="talk"] .node[data-kind="tool"],
+body[data-view="talk"] .node[data-kind="topology"],
+body[data-view="talk"] .trib,
+body[data-view="talk"] .compact { display: none; }
+
+/* ===================================================== inspector */
+.inspector { width: 384px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column;
+  background: color-mix(in srgb, var(--paper-2) 45%, var(--paper)); box-shadow: var(--sh-insp); z-index: 1; }
+.inspector.closed { display: none; }
+.insp-head { display: flex; align-items: center; gap: 10px; padding: 18px 20px 12px; }
+.insp-head .bead { width: 10px; height: 10px; border-radius: 2px; transform: rotate(45deg); background: var(--a-main); flex-shrink: 0; box-shadow: var(--sh-bead); }
+.insp-head .who { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--a-main); }
+.insp-head .sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); }
+.insp-head .x { margin-left: auto; color: var(--ink-3); }
+.insp-head .x:hover { color: var(--ink); }
+.insp-tabs { display: flex; gap: 16px; padding: 0 20px 12px; border-bottom: 1px solid var(--rule); font-family: var(--font-mono); font-size: 11px; }
+.insp-tabs button { color: var(--ink-3); }
+.insp-tabs button.on { color: var(--ink); }
+.insp-tabs button.on::after { content:""; display:block; height:1.5px; background:var(--accent); margin-top:5px; }
+.insp-body { padding: 16px 20px; overflow-y: auto; }
+.insp-sect { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 14px 0 7px; }
+.insp-sect:first-child { margin-top: 0; }
+.insp-body pre { font-family: var(--font-mono); font-size: 11.5px; line-height: 1.7; color: var(--ink-2); white-space: pre-wrap; word-break: break-word; letter-spacing: 0; }
+.dk { color: var(--a-slate); } .dstr { color: var(--add); } .dnum { color: var(--warm); }
+.meter { margin: 5px 0; }
+.meter .mr { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); margin-bottom: 3px; }
+.meter .mr b { color: var(--ink); }
+.meter .bar { height: 2px; background: var(--ink-4); }
+.meter .bar i { display: block; height: 100%; background: var(--c, var(--accent)); }
+.insp-resp { font-size: 13px; line-height: 1.55; color: var(--ink); }
+
+/* tweak panel */
+.tw { position: fixed; bottom: 18px; right: 18px; z-index: 50; display: flex; flex-direction: column; gap: 13px;
+  background: var(--paper); box-shadow: var(--sh-pop); border-radius: 6px; padding: 15px 16px; width: 236px; font-family: var(--font-mono); font-size: 11px; }
+.tw.hidden { display: none; }
+.tw h4 { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.tw label { color: var(--ink-2); margin-bottom: 6px; display: block; }
+.seg { display: flex; gap: 14px; }
+.seg button { color: var(--ink-3); }
+.seg button.on { color: var(--ink); }
+.seg button.on::after { content:""; display:block; height:1.5px; background: var(--accent); margin-top: 3px; }
+.hue { display: flex; gap: 9px; }
+.hue button { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; box-shadow: var(--sh-bead); }
+.hue button.on { border-color: var(--ink); }
+.twtoggle { position: fixed; bottom: 18px; right: 18px; z-index: 49; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; box-shadow: var(--sh-pop); }
+</style>
+</head>
+<body data-view="stream">
+<div class="app">
+  <!-- =============== sidebar =============== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="mark">
+        <svg viewBox="0 0 100 100" fill="none">
+          <defs><linearGradient id="b" x1="20" y1="12" x2="80" y2="88" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#5ec8f0"/><stop offset=".55" stop-color="#2f8fdc"/><stop offset="1" stop-color="#1f6fc4"/></linearGradient></defs>
+          <g stroke="url(#b)" stroke-width="7" stroke-linecap="round">
+            <line x1="50" y1="44" x2="50" y2="10"/><line x1="53" y1="44.8" x2="67" y2="20.56"/><line x1="55.2" y1="47" x2="85.51" y2="29.5"/>
+            <line x1="56" y1="50" x2="83" y2="50"/><line x1="55.2" y1="53" x2="83.77" y2="69.5"/><line x1="53" y1="55.2" x2="67.5" y2="80.31"/>
+            <line x1="50" y1="56" x2="50" y2="92"/><line x1="47" y1="55.2" x2="34" y2="77.71"/><line x1="44.8" y1="53" x2="15.36" y2="70"/>
+            <line x1="44" y1="50" x2="14" y2="50"/><line x1="44.8" y1="47" x2="17.09" y2="31"/><line x1="47" y1="44.8" x2="33" y2="20.56"/></g>
+        </svg>
+      </span>
+      <span class="name"><span class="o">open</span>claude observe</span>
+    </div>
+
+    <div class="s-search">
+      <svg class="i" viewBox="0 0 24 24" style="width:13px;height:13px"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input placeholder="search…" /><kbd>⌘K</kbd>
+    </div>
+
+    <div class="s-scroll">
+      <div class="s-cap">Pinned <span class="n">2</span></div>
+      <div class="sess active"><span class="st live"></span><span class="nm">redesign-observe-ui</span><span class="tk">214K</span></div>
+      <div class="sess"><span class="bell"><svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span><span class="nm">port-upstream-filters</span><span class="tk">88K</span></div>
+
+      <div class="s-cap">Projects <span class="n">4</span></div>
+      <div class="proj open"><span class="tick" style="background:var(--a-main)"></span> openclaude-observe <span class="pn">12</span></div>
+      <div class="sess active"><span class="st live"></span><span class="nm">redesign-observe-ui</span><span class="tk">214K</span></div>
+      <div class="sess"><span class="st live"></span><span class="nm">port-upstream-filters</span><span class="tk">88K</span></div>
+      <div class="sess"><span class="st idle"></span><span class="nm">fix-bulk-delete-fk</span></div>
+      <div class="proj"><span class="tick" style="background:var(--a-clay)"></span> openclaude <span class="pn">31</span></div>
+      <div class="proj"><span class="tick" style="background:var(--a-sage)"></span> cs16-reverse <span class="pn">7</span></div>
+      <div class="proj"><span class="tick" style="background:var(--a-slate)"></span> ghidra-mcp <span class="pn">5</span></div>
+    </div>
+
+    <div class="s-foot">
+      <button id="themeBtn" title="theme"><svg class="i" id="themeIcon" viewBox="0 0 24 24" style="width:15px;height:15px"></svg></button>
+      <button title="settings"><svg class="i" viewBox="0 0 24 24" style="width:15px;height:15px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H4.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 6 9.4l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 11 4.6V4.5a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2 1.17h.09a2 2 0 1 1 0 4H17a1.65 1.65 0 0 0-1.4 2z"/></svg></button>
+      <span class="conn"><span class="d"></span> live · v29.4</span>
+    </div>
+  </aside>
+
+  <!-- =============== main =============== -->
+  <main class="main">
+    <div class="header">
+      <div class="top">
+        <div class="crumb"><a href="#">openclaude-observe</a><span class="sep">/</span><span class="cur">redesign-observe-ui</span></div>
+        <span class="live"><span class="d"></span>LIVE</span>
+        <div class="acts">
+          <button title="rewind"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M11 19 2 12l9-7v14zM22 19l-9-7 9-7v14z"/></svg></button>
+          <button title="pin"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M12 17v5M9 10.76 6 14h12l-3-3.24V4H9z"/></svg></button>
+          <button title="logs"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></button>
+        </div>
+      </div>
+
+      <div class="readout">
+        <span class="r"><b>1,284</b> events</span>
+        <span class="r acc"><b>214K</b> tokens</span>
+        <span class="r"><b>78%</b> cached</span>
+        <span class="r"><b>$1.42</b></span>
+        <span class="right">
+          <span class="lens" id="lens"><button data-view="stream" class="on">stream</button><button data-view="talk">talk</button></span>
+          <span class="filter"><button class="on">all</button> <button>llm</button> <button>tools</button> <button>topology</button></span>
+          <span class="q"><svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg> filter…</span>
+        </span>
+      </div>
+
+      <div class="now">
+        <span class="lab">Now</span>
+        <span class="ag working" style="--c:var(--a-main)"><span class="dot"></span><span class="who">main</span><span class="doing">editing index.css</span><span class="t">12s</span></span>
+        <span class="ag working" style="--c:var(--a-sage)"><span class="dot"></span><span class="who">general-purpose</span><span class="doing">bash · build</span><span class="t slow">8.2s</span></span>
+        <span class="ag done" style="--c:var(--a-clay)"><span class="dot" style="background:var(--ink-4);box-shadow:none"></span><span class="who">Explore</span><span class="t">idle</span></span>
+      </div>
+    </div>
+
+    <div class="work">
+      <!-- =============== the river =============== -->
+      <div class="scroll">
+        <div class="flow">
+
+          <div class="node" data-kind="talk" style="--c:var(--accent)">
+            <span class="time">14:02:08</span><span class="bead fill"></span>
+            <div class="spk"><span class="who" style="--c:var(--ink-2)">you</span></div>
+            <div class="prose user">Completely re-design <code>openclaude-observe</code>. Use agentsview as reference, support dark + light themes, and pull the logo from the openclaude repo.</div>
+          </div>
+
+          <div class="node sel" data-kind="talk" style="--c:var(--a-main)">
+            <span class="time">14:02:14</span><span class="bead diamond fill"></span>
+            <div class="spk"><span class="who">main</span><span class="meta">opus-4-8 · in <b>4.2K</b> out <b>1.1K</b> · cache <b>78%</b> · 6.4s</span><span class="ctx">ctx 38%</span></div>
+            <div class="prose">
+              <span class="thinking">thinking · 1.4k · 2 passes</span>
+              <p>The current app sits on the default shadcn neutral palette — no brand colour. I'll re-skin it onto an <strong>OpenClaude blue-starburst</strong> identity and let the session read as one flowing river of agent activity.</p>
+              <pre>--accent: oklch(.52 .15 250)
+--voice:  mono = telemetry · sans = prose</pre>
+            </div>
+          </div>
+
+          <div class="node" data-kind="tool" style="--c:var(--a-main)">
+            <span class="time">14:02:21</span><span class="bead"></span>
+            <div class="tool"><span class="verb">read</span><span class="arg"><span class="path">app/client/src/index.css</span></span><span class="res">130 lines <span class="ok">✓</span></span></div>
+            <div class="tool"><span class="verb">grep</span><span class="arg">"--accent" <span style="color:var(--ink-3)">·</span> 23 matches in 6 files</span><span class="res ok">✓</span></div>
+            <div class="tool"><span class="verb">edit</span><span class="arg"><span class="path">index.css</span> <span class="add">+42</span> <span class="del">−12</span></span><span class="res ok">✓</span></div>
+          </div>
+
+          <div class="node" data-kind="topology" style="--c:var(--a-main)">
+            <span class="time">14:03:02</span><span class="bead" style="--c:var(--a-clay)"></span>
+            <div class="spk"><span class="who" style="--c:var(--a-clay)">spawn → Explore</span><span class="meta">search agentsview palette &amp; structure</span></div>
+          </div>
+          <div class="trib" style="--c:var(--a-clay)">
+            <div class="branch-lab">Explore</div>
+            <div class="tnode">
+              <span class="time">14:03:05</span><span class="bead" style="--c:var(--a-clay)"></span>
+              <div class="tool" style="--c:var(--a-clay)"><span class="verb">read</span><span class="arg"><span class="path">agentsview/frontend/src/app.css</span></span><span class="res">367 ln <span class="ok">✓</span></span></div>
+              <div class="tool" style="--c:var(--a-clay)"><span class="verb">grep</span><span class="arg">"--accent-*" <span style="color:var(--ink-3)">·</span> palette tokens</span><span class="res ok">✓</span></div>
+            </div>
+            <div class="merge">⤿ merged · <span class="ok">done</span> · 9.7K tok · 0:14</div>
+          </div>
+
+          <div class="compact"><span class="l">context compacted · 182K → 47K</span></div>
+
+          <div class="node" data-kind="talk" style="--c:var(--a-main)">
+            <span class="time">14:03:48</span><span class="bead diamond fill"></span>
+            <div class="spk"><span class="who">main</span><span class="meta">opus-4-8 · out <b>2.0K</b> · 5.1s</span></div>
+            <div class="prose"><p>Concept written. Spinning up a build check and a topology dispatch to a LAN peer to exercise the multi-instance view.</p></div>
+          </div>
+
+          <div class="node" data-kind="topology" style="--c:var(--a-main)">
+            <span class="time">14:03:55</span><span class="bead" style="--c:var(--a-sage)"></span>
+            <div class="spk"><span class="who" style="--c:var(--a-sage)">spawn → general-purpose</span><span class="meta">run the build &amp; test gate</span></div>
+          </div>
+          <div class="trib" style="--c:var(--a-sage)">
+            <div class="branch-lab">general-purpose</div>
+            <div class="tnode">
+              <span class="time">14:03:58</span><span class="bead live" style="--c:var(--a-sage)"></span>
+              <div class="tool running" style="--c:var(--a-sage)"><span class="verb">bash</span><span class="arg">just build &amp;&amp; just test</span><span class="res">running 8.2s</span></div>
+            </div>
+          </div>
+
+          <div class="node" data-kind="topology" style="--c:var(--a-slate)">
+            <span class="time">14:04:05</span><span class="bead fill" style="--c:var(--a-slate)"></span>
+            <div class="spk"><span class="who">coordinator</span><span class="meta">dispatch → pipe <b>peer-2</b> over LAN · bridge connected</span></div>
+          </div>
+
+          <div class="node" data-kind="talk" style="--c:var(--a-main)">
+            <span class="time">14:04:18</span><span class="bead live"></span>
+            <div class="spk"><span class="who">main</span><span class="meta">editing <b>index.css</b> · streaming…</span></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- =============== inspector =============== -->
+      <aside class="inspector" id="inspector">
+        <div class="insp-head">
+          <span class="bead"></span>
+          <div>
+            <div class="who">main · LLM</div>
+            <div class="sub">opus-4-8 · 14:02:14 · evt #b3f1</div>
+          </div>
+          <button class="x" id="inspClose" title="close"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="insp-tabs" id="inspTabs">
+          <button class="on" data-tab="usage">usage</button>
+          <button data-tab="request">request</button>
+          <button data-tab="response">response</button>
+          <button data-tab="raw">raw</button>
+        </div>
+        <div class="insp-body">
+          <div class="insp-pane" data-pane="usage">
+            <div class="insp-sect">Tokens</div>
+            <div class="meter" style="--c:var(--a-main)"><div class="mr">input <b>4,210</b></div><div class="bar"><i style="width:62%"></i></div></div>
+            <div class="meter" style="--c:var(--run)"><div class="mr">cache read <b>3,284 · 78%</b></div><div class="bar"><i style="width:78%"></i></div></div>
+            <div class="meter" style="--c:var(--accent)"><div class="mr">output <b>1,102</b></div><div class="bar"><i style="width:16%"></i></div></div>
+            <div class="insp-sect">Context window</div>
+            <div class="meter" style="--c:var(--warm)"><div class="mr">38% of 200K <b>76,400</b></div><div class="bar"><i style="width:38%"></i></div></div>
+            <div class="insp-sect">Cost</div>
+            <pre><span class="dk">prompt</span>   $0.0312
+<span class="dk">output</span>   $0.0148
+<span class="dk">total</span>    <span class="dnum">$0.0460</span></pre>
+          </div>
+          <div class="insp-pane" data-pane="request" hidden>
+            <div class="insp-sect">System</div>
+            <pre>You are Claude Code, Anthropic's official
+CLI for Claude. …</pre>
+            <div class="insp-sect">Params</div>
+            <pre><span class="dk">model</span>        <span class="dstr">claude-opus-4-8</span>
+<span class="dk">max_tokens</span>   <span class="dnum">8192</span>
+<span class="dk">temperature</span>  <span class="dnum">1.0</span>
+<span class="dk">tools</span>        <span class="dnum">18</span> defined</pre>
+          </div>
+          <div class="insp-pane" data-pane="response" hidden>
+            <div class="insp-sect">Assistant</div>
+            <div class="insp-resp">The current app sits on the default shadcn neutral palette — no brand colour. I'll re-skin it onto an OpenClaude blue-starburst identity and let the session read as one flowing river of agent activity.</div>
+            <div class="insp-sect">Stop reason</div>
+            <pre><span class="dstr">end_turn</span></pre>
+          </div>
+          <div class="insp-pane" data-pane="raw" hidden>
+            <pre>{
+  <span class="dk">"subtype"</span>: <span class="dstr">"LLMGeneration"</span>,
+  <span class="dk">"model"</span>: <span class="dstr">"claude-opus-4-8"</span>,
+  <span class="dk">"input_tokens"</span>: <span class="dnum">4210</span>,
+  <span class="dk">"output_tokens"</span>: <span class="dnum">1102</span>,
+  <span class="dk">"cache_read_tokens"</span>: <span class="dnum">3284</span>,
+  <span class="dk">"duration_ms"</span>: <span class="dnum">6412</span>,
+  <span class="dk">"agentId"</span>: <span class="dstr">"main"</span>
+}</pre>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<button class="twtoggle" id="twToggle" title="design controls">
+  <svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+</button>
+<div class="tw hidden" id="tw">
+  <h4>Stream · controls</h4>
+  <div><label>theme</label><div class="seg" id="themeSeg"><button data-theme="light">light</button><button data-theme="dark">dark</button></div></div>
+  <div><label>prose type</label><div class="seg" id="typeSeg"><button data-type="tight">tight</button><button data-type="plex">plex</button><button data-type="system">system</button></div></div>
+  <div><label>accent</label><div class="hue" id="hueRow">
+    <button data-hue="250" style="background:oklch(.55 .15 250)" title="blue"></button>
+    <button data-hue="225" style="background:oklch(.55 .15 225)" title="sky"></button>
+    <button data-hue="195" style="background:oklch(.55 .11 195)" title="cyan"></button>
+    <button data-hue="155" style="background:oklch(.55 .11 155)" title="sage"></button>
+    <button data-hue="35"  style="background:oklch(.58 .14 35)"  title="coral"></button>
+  </div></div>
+</div>
+
+<script>
+const root = document.documentElement;
+const LS = "observe-v5";
+const state = JSON.parse(localStorage.getItem(LS) || '{"theme":"light","hue":"250","type":"tight"}');
+function apply() {
+  root.classList.toggle("dark", state.theme === "dark");
+  root.style.setProperty("--hue", state.hue);
+  root.setAttribute("data-type", state.type);
+  document.querySelectorAll("#themeSeg button").forEach(b => b.classList.toggle("on", b.dataset.theme === state.theme));
+  document.querySelectorAll("#typeSeg button").forEach(b => b.classList.toggle("on", b.dataset.type === state.type));
+  document.querySelectorAll("#hueRow button").forEach(b => b.classList.toggle("on", b.dataset.hue === state.hue));
+  const sun = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19M5 19l1.4-1.4M17.6 6.4 19 5"/>';
+  const moon = '<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>';
+  document.getElementById("themeIcon").innerHTML = state.theme === "dark" ? sun : moon;
+  localStorage.setItem(LS, JSON.stringify(state));
+}
+document.getElementById("themeBtn").onclick = () => { state.theme = state.theme==="dark"?"light":"dark"; apply(); };
+document.getElementById("themeSeg").onclick = e => { if (e.target.dataset.theme){ state.theme=e.target.dataset.theme; apply(); } };
+document.getElementById("typeSeg").onclick = e => { if (e.target.dataset.type){ state.type=e.target.dataset.type; apply(); } };
+document.getElementById("hueRow").onclick = e => { if (e.target.dataset.hue){ state.hue=e.target.dataset.hue; apply(); } };
+document.getElementById("twToggle").onclick = () => {
+  const t = document.getElementById("tw"); t.classList.toggle("hidden");
+  document.getElementById("twToggle").style.display = t.classList.contains("hidden") ? "grid" : "none";
+};
+
+document.getElementById("lens").onclick = e => {
+  const v = e.target.dataset.view; if (!v) return;
+  document.body.dataset.view = v;
+  document.querySelectorAll("#lens button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+};
+
+const inspector = document.getElementById("inspector");
+document.getElementById("inspClose").onclick = () => {
+  inspector.classList.add("closed");
+  document.querySelectorAll(".node.sel").forEach(n => n.classList.remove("sel"));
+};
+document.querySelectorAll(".node").forEach(n => {
+  n.addEventListener("click", () => {
+    document.querySelectorAll(".node.sel").forEach(x => x.classList.remove("sel"));
+    n.classList.add("sel");
+    inspector.classList.remove("closed");
+  });
+});
+document.getElementById("inspTabs").onclick = e => {
+  const t = e.target.dataset.tab; if (!t) return;
+  document.querySelectorAll("#inspTabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
+  document.querySelectorAll(".insp-pane").forEach(p => p.hidden = p.dataset.pane !== t);
+};
+apply();
+</script>
+</body>
+</html>
