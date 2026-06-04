@@ -14,6 +14,15 @@ services:
       AGENTS_OBSERVE_CLIENT_DIST_PATH: /app/client/dist
       AGENTS_OBSERVE_LOG_LEVEL: "${AGENTS_OBSERVE_LOG_LEVEL:-debug}"
       AGENTS_OBSERVE_RUNTIME: docker
+      # Bind to all interfaces inside the container so Docker's published
+      # port can reach the server. The container network namespace is the
+      # boundary here; the default 'localhost' bind is only listenable from
+      # inside the container and yields ERR_EMPTY_RESPONSE on the host.
+      AGENTS_OBSERVE_SERVER_HOST: "${AGENTS_OBSERVE_SERVER_HOST:-0.0.0.0}"
+      # Idle auto-shutdown after the last dashboard/OpenClaude consumer
+      # disconnects. Default 30s; set to 0 (or below) to keep the server
+      # running indefinitely — handy while iterating on the dashboard.
+      AGENTS_OBSERVE_SHUTDOWN_DELAY_MS: "${AGENTS_OBSERVE_SHUTDOWN_DELAY_MS:-30000}"
       # Transcript token stats. On-demand parse of ~/.claude/projects JSONL
       # transcripts for per-prompt / per-model token + cost breakdowns.
       # Set AGENTS_OBSERVE_TRANSCRIPT_STATS=0 to disable. The host base is
