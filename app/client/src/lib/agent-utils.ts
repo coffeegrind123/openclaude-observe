@@ -97,6 +97,27 @@ export function getAgentColor(index: number): AgentColorClasses {
   return AGENT_COLORS[index % AGENT_COLORS.length]
 }
 
+// ── Agent identity colors for the "Stream" river ──────────────────────
+// Muted, harmonious CSS-variable palette (defined in index.css). Index 0
+// (the main agent, visited first by buildAgentColorMap) is the brand blue;
+// subagents cycle through the calmer hues. Returns a `var(--…)` string for
+// use in inline styles on beads, rails, and telemetry headers.
+const AGENT_STREAM_COLORS = [
+  'var(--a-main)',
+  'var(--a-clay)',
+  'var(--a-sage)',
+  'var(--a-slate)',
+  'var(--a-plum)',
+]
+
+export function getAgentStreamColor(index: number): string {
+  return AGENT_STREAM_COLORS[index % AGENT_STREAM_COLORS.length]
+}
+
+export function getAgentStreamColorById(agentId: string, colorMap: Map<string, number>): string {
+  return getAgentStreamColor(colorMap.get(agentId) ?? 0)
+}
+
 /** Convenience: get color classes for an agent by ID, given a color map. */
 export function getAgentColorById(
   agentId: string,

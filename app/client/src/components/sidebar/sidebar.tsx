@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { SettingsModal } from '@/components/settings/settings-modal'
 import { ChangelogModal } from '@/components/changelog-modal'
+import { Starburst } from '@/components/shared/starburst'
 
 interface SidebarProps {
   connected: boolean
@@ -80,12 +81,13 @@ export function Sidebar({ connected }: SidebarProps) {
               useUIStore.getState().setSelectedProject(null)
             }}
           >
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
-              O
-            </div>
-            <span className="text-sm font-semibold truncate">Observe</span>
+            <Starburst className="h-6 w-6 shrink-0" />
+            <span className="font-mono text-sm font-semibold tracking-tight truncate">
+              <span className="text-primary">open</span>claude observe
+            </span>
           </button>
         )}
+        {sidebarCollapsed && <Starburst className="h-6 w-6" />}
         {!sidebarCollapsed && <div className="flex-1" />}
         <Button
           variant="ghost"

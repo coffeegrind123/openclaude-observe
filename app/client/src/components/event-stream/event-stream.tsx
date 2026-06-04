@@ -13,6 +13,7 @@ import { useUIStore } from '@/stores/ui-store'
 import { EventRow } from './event-row'
 import { TimestampTooltipProvider } from './timestamp-tooltip'
 import { CompactionBoundary } from './compaction-boundary'
+import { classifyChatEvent } from '@/lib/chat-events'
 import { computeRuntimeMs } from '@/lib/runtime'
 import { format } from 'timeago.js'
 import { buildAgentColorMap } from '@/lib/agent-utils'
@@ -33,6 +34,7 @@ export function EventStream() {
     selectedEventId,
     rewindMode,
     reverseFeed,
+    talkMode,
     clearAllFilters,
     setSearchQuery,
     setSelectedAgentIds,
@@ -159,6 +161,13 @@ export function EventStream() {
       })
     }
 
+    // "talk" lens: collapse the river to the conversation — keep only events
+    // that classify as a chat message (prompts, assistant/subagent/task text),
+    // dropping tool + topology telemetry.
+    if (talkMode) {
+      filtered = filtered.filter((e) => classifyChatEvent(e) !== null)
+    }
+
     return filtered
   }, [
     deduped,
@@ -167,6 +176,7 @@ export function EventStream() {
     deferredPrimaryFilters,
     deferredSecondaryFilters,
     deferredSearchQuery,
+    talkMode,
   ])
 
   // The list actually fed to the virtualizer. When reverseFeed is on, we show
@@ -511,9 +521,9 @@ export function EventStream() {
       >
         {() => (
           <>
-            <div className="flex items-center gap-2 px-3 py-1 border-b border-border/50 shrink-0">
-              <span className="text-xs text-muted-foreground">
-                Events: <span className="text-foreground">{filteredEvents.length}</span>
+            <div className="flex items-center gap-2 px-4 py-1.5 shrink-0 font-mono">
+              <span className="text-[11px] text-ink-3">
+                <span className="text-foreground font-semibold">{filteredEvents.length}</span> events
                 {showRawCount && (
                   <button
                     type="button"
@@ -546,6 +556,13 @@ export function EventStream() {
               ) : (
                 <TimestampTooltipProvider>
                   <div className="relative" style={{ height: `${totalSize}px`, width: '100%' }}>
+                    {/* the river spine — one continuous rule the whole stream hangs off.
+                        x must match SPINE_X in event-row.tsx */}
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute top-0 bottom-0 w-px bg-rule"
+                      style={{ left: 92 }}
+                    />
                     {virtualItems.map((virtualItem) => {
                       const event = displayedEvents[virtualItem.index]
                       if (!event) return null
@@ -567,7 +584,7 @@ export function EventStream() {
                           key={virtualItem.key}
                           ref={virtualizer.measureElement}
                           data-index={virtualItem.index}
-                          className="absolute top-0 left-0 w-full border-b border-border/50"
+                          className="absolute top-0 left-0 w-full"
                           style={{ transform: `translateY(${virtualItem.start}px)` }}
                         >
                           {isPreCompact || isPostCompact ? (

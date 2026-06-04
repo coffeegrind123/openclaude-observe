@@ -28,7 +28,7 @@ export function SessionBreadcrumb() {
   const transcriptPath = session.transcriptPath || null
 
   return (
-    <div className="group/breadcrumb flex items-center gap-1.5 px-3 py-1 border-b border-border text-xs text-muted-foreground min-h-[28px]">
+    <div className="group/breadcrumb flex items-center gap-1.5 px-4 pt-2 pb-1 font-mono text-xs text-muted-foreground min-h-[28px]">
       <button
         className="hover:text-foreground transition-colors cursor-pointer truncate max-w-[150px]"
         onClick={() => setSelectedSessionId(null)}

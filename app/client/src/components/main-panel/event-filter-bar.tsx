@@ -149,7 +149,7 @@ export function EventFilterBar() {
 
   return (
     <div
-      className="flex flex-col gap-1 px-3 py-1.5 border-b border-border"
+      className="flex flex-col gap-1 px-4 pt-1 pb-2"
       onKeyDown={(e) => {
         const target = e.target as HTMLElement
         if (!target.matches('[data-filter-pill]')) return
@@ -188,7 +188,9 @@ export function EventFilterBar() {
       {/* Row 1: Primary category filters + search */}
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1 flex-wrap">
-          <span className="text-xs text-muted-foreground">Filters:</span>
+          <span className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mr-1">
+            filter
+          </span>
           <button
             data-filter-pill=""
             data-filter-row="0"
@@ -196,7 +198,7 @@ export function EventFilterBar() {
               'rounded-full px-2.5 py-0.5 text-xs transition-colors',
               !hasAnyFilter
                 ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary text-secondary-foreground hover:bg-accent',
+                : 'text-ink-3 hover:bg-foreground/5 hover:text-foreground',
             )}
             onClick={clearAllFilters}
           >
@@ -220,8 +222,8 @@ export function EventFilterBar() {
                         ? 'bg-violet-500 text-white border-violet-500'
                         : 'bg-primary text-primary-foreground border-primary'
                       : isUser
-                        ? 'bg-secondary text-secondary-foreground border-violet-500/40 hover:bg-accent'
-                        : 'bg-secondary text-secondary-foreground border-primary/40 hover:bg-accent',
+                        ? 'border-transparent text-a-plum/80 hover:bg-foreground/5 hover:text-foreground'
+                        : 'border-transparent text-ink-3 hover:bg-foreground/5 hover:text-foreground',
                 )}
                 style={
                   color

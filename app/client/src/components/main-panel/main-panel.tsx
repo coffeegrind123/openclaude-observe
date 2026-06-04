@@ -5,12 +5,13 @@ import { ScopeBar } from './scope-bar'
 import { EventFilterBar } from './event-filter-bar'
 import { ActivityTimeline } from '@/components/timeline/activity-timeline'
 import { EventStream } from '@/components/event-stream/event-stream'
-import { ChatPanel } from '@/components/chat-feed/chat-panel'
+import { Inspector } from '@/components/event-stream/inspector'
 import { HomePage } from './home-page'
 import { ProjectPage } from './project-page'
 
 export function MainPanel() {
-  const { selectedProjectId, selectedProjectSlug, selectedSessionId } = useUIStore()
+  const { selectedProjectId, selectedProjectSlug, selectedSessionId, selectedEventId } =
+    useUIStore()
 
   useRegionShortcuts({
     regions: [
@@ -41,14 +42,23 @@ export function MainPanel() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <SessionBreadcrumb />
-      <ScopeBar />
-      <EventFilterBar />
+      {/* Header cluster — grouped under one soft shadow instead of stacked
+          divider lines, so the chrome reads as a single floating surface
+          above the river (matches the Stream design language). */}
+      <div className="shadow-float relative z-10">
+        <SessionBreadcrumb />
+        <ScopeBar />
+        <EventFilterBar />
+      </div>
       <ActivityTimeline />
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* key= remounts EventStream on session change so virtualizer state resets cleanly */}
         <EventStream key={selectedSessionId} />
-        <ChatPanel />
+        {/* Detail inspector pops in when an event is selected (⌘/Ctrl/middle-click
+            a row, or click its select affordance); close returns the river to
+            full width. Replaces the old standalone chat panel — the conversation
+            now lives in the river via the stream↔talk lens. */}
+        {selectedEventId != null && <Inspector />}
       </div>
     </div>
   )

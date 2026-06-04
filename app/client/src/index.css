@@ -1,6 +1,18 @@
 @import 'tailwindcss';
 
+/* ============================================================
+   OpenClaude Observe — "Stream" design system
+   Cool console base · OpenClaude blue-starburst brand ·
+   two voices (Inter Tight prose / JetBrains Mono telemetry).
+   The shadcn token names below are kept so existing components
+   inherit the new look; brand accent lives on --primary, the
+   shadcn --accent stays the neutral hover surface. New stream
+   tokens (ink scale, agent identity colors, run/fail/warm,
+   shadows) are exposed for the river + chrome.
+   ============================================================ */
+
 @theme inline {
+  /* shadcn aliases */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -23,61 +35,210 @@
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-border: var(--sidebar-border);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+
+  /* stream tokens — exposed as Tailwind utilities (text-ink-2, bg-paper-2, …) */
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
+  --color-rule: var(--rule);
+  --color-brand: var(--brand);
+  --color-a-main: var(--a-main);
+  --color-a-clay: var(--a-clay);
+  --color-a-sage: var(--a-sage);
+  --color-a-slate: var(--a-slate);
+  --color-a-plum: var(--a-plum);
+  --color-run: var(--run);
+  --color-warn: var(--warm);
+  --color-fail: var(--fail);
+  --color-add: var(--add);
+  --color-del: var(--del);
+
+  --radius-sm: calc(var(--radius) - 3px);
+  --radius-md: calc(var(--radius) - 1px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: 'Inter Tight', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
 }
 
+/* ---- Light (cool / console-clean) ---- */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.94 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.94 0 0);
-  --muted-foreground: oklch(0.4 0 0);
-  --accent: oklch(0.94 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.85 0 0);
-  --input: oklch(0.85 0 0);
-  --ring: oklch(0.55 0 0);
-  --sidebar: oklch(0.97 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-border: oklch(0.85 0 0);
+  --hue: 250;
+  --chroma: 0.13;
+  --radius: 0.4rem;
+
+  --paper: #f0f3f7;
+  --paper-2: #e6eaf1;
+  --ink: #121620;
+  --ink-2: #4f5867;
+  --ink-3: #8e97a6;
+  --ink-4: #b9c1ce;
+  --rule: #d2d8e2;
+
+  --brand: oklch(0.52 var(--chroma) var(--hue));
+
+  /* agent identity — muted, harmonious */
+  --a-main: oklch(0.52 0.14 250);
+  --a-clay: oklch(0.56 0.1 45);
+  --a-sage: oklch(0.52 0.07 150);
+  --a-slate: oklch(0.52 0.04 255);
+  --a-plum: oklch(0.5 0.1 320);
+
+  --run: oklch(0.55 0.12 155);
+  --fail: oklch(0.55 0.18 25);
+  --warm: oklch(0.62 0.12 65);
+  --add: oklch(0.52 0.12 150);
+  --del: oklch(0.55 0.16 25);
+
+  --sh-side: 2px 0 12px -5px rgb(18 22 40 / 0.1);
+  --sh-float: 0 9px 18px -11px rgb(18 22 40 / 0.22);
+  --sh-insp: -2px 0 14px -7px rgb(18 22 40 / 0.1);
+  --sh-bead: 0 1px 2px rgb(18 22 40 / 0.22);
+  --sh-pop: 0 18px 50px rgb(18 22 40 / 0.2);
+
+  /* shadcn surface mapping */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: #ffffff;
+  --card-foreground: var(--ink);
+  --popover: #ffffff;
+  --popover-foreground: var(--ink);
+  --primary: var(--brand);
+  --primary-foreground: #ffffff;
+  --secondary: var(--paper-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-2);
+  --muted-foreground: var(--ink-2);
+  --accent: #e8ecf3;
+  --accent-foreground: var(--ink);
+  --destructive: var(--fail);
+  --destructive-foreground: var(--fail);
+  --border: var(--rule);
+  --input: var(--rule);
+  --ring: oklch(0.52 var(--chroma) var(--hue) / 0.5);
+  --sidebar: var(--paper-2);
+  --sidebar-foreground: var(--ink);
+  --sidebar-border: var(--rule);
+
+  color-scheme: light;
 }
 
+/* ---- Dark (slate) ---- */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --sidebar: oklch(0.17 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
+  --paper: #0a0c10;
+  --paper-2: #0e1015;
+  --ink: #e7e9ee;
+  --ink-2: #99a0ac;
+  --ink-3: #686d7a;
+  --ink-4: #323540;
+  --rule: #23252d;
+
+  --brand: oklch(0.74 var(--chroma) var(--hue));
+
+  --a-main: oklch(0.74 0.13 250);
+  --a-clay: oklch(0.74 0.1 50);
+  --a-sage: oklch(0.74 0.09 150);
+  --a-slate: oklch(0.72 0.05 255);
+  --a-plum: oklch(0.72 0.11 320);
+
+  --run: oklch(0.78 0.14 155);
+  --fail: oklch(0.7 0.17 25);
+  --warm: oklch(0.78 0.12 70);
+  --add: oklch(0.75 0.14 150);
+  --del: oklch(0.7 0.16 25);
+
+  --sh-side: 2px 0 16px -5px rgb(0 0 0 / 0.55);
+  --sh-float: 0 10px 22px -11px rgb(0 0 0 / 0.65);
+  --sh-insp: -2px 0 18px -7px rgb(0 0 0 / 0.55);
+  --sh-bead: 0 1px 3px rgb(0 0 0 / 0.6);
+  --sh-pop: 0 18px 50px rgb(0 0 0 / 0.6);
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: #15171f;
+  --card-foreground: var(--ink);
+  --popover: #15171f;
+  --popover-foreground: var(--ink);
+  --primary: var(--brand);
+  --primary-foreground: #07080c;
+  --secondary: #15171f;
+  --secondary-foreground: var(--ink);
+  --muted: #15171f;
+  --muted-foreground: var(--ink-2);
+  --accent: #1b1e27;
+  --accent-foreground: var(--ink);
+  --destructive: var(--fail);
+  --destructive-foreground: var(--fail);
+  --border: var(--rule);
+  --input: var(--rule);
+  --ring: oklch(0.74 var(--chroma) var(--hue) / 0.5);
+  --sidebar: var(--paper-2);
+  --sidebar-foreground: var(--ink);
+  --sidebar-border: var(--rule);
+
+  color-scheme: dark;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    letter-spacing: -0.006em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  /* JetBrains Mono has no tracking; reset the global negative tracking */
+  .font-mono,
+  code,
+  pre,
+  kbd {
+    letter-spacing: 0;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--ink-4);
+    border-radius: 5px;
+    border: 3px solid var(--background);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-3);
+    background-clip: padding-box;
+  }
+  ::selection {
+    background: oklch(0.52 var(--chroma) var(--hue) / 0.45);
+    color: #fff;
+  }
+  .dark ::selection {
+    background: oklch(0.74 var(--chroma) var(--hue) / 0.45);
+    color: #fff;
+  }
+}
+
+/* Stream shadow utilities (used by the chrome to add depth w/o borders) */
+.shadow-side {
+  box-shadow: var(--sh-side);
+}
+.shadow-float {
+  box-shadow: var(--sh-float);
+}
+.shadow-insp {
+  box-shadow: var(--sh-insp);
+}
+.shadow-bead {
+  box-shadow: var(--sh-bead);
+}
+.shadow-pop {
+  box-shadow: var(--sh-pop);
 }
 
 @keyframes flash-ring {

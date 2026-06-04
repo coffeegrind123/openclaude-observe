@@ -1,0 +1,41 @@
+import { useId } from 'react'
+import { cn } from '@/lib/utils'
+
+/**
+ * OpenClaude blue-starburst mark. The gradient id is per-instance (useId) so
+ * multiple starbursts on the page don't collide on the <defs> gradient.
+ */
+export function Starburst({ className }: { className?: string }) {
+  const id = useId()
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      fill="none"
+      className={cn('shrink-0', className)}
+      aria-label="OpenClaude"
+      role="img"
+    >
+      <defs>
+        <linearGradient id={id} x1="20" y1="12" x2="80" y2="88" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#5ec8f0" />
+          <stop offset="0.55" stopColor="#2f8fdc" />
+          <stop offset="1" stopColor="#1f6fc4" />
+        </linearGradient>
+      </defs>
+      <g stroke={`url(#${id})`} strokeWidth="7" strokeLinecap="round">
+        <line x1="50" y1="44" x2="50" y2="10" />
+        <line x1="53" y1="44.8" x2="67" y2="20.56" />
+        <line x1="55.2" y1="47" x2="85.51" y2="29.5" />
+        <line x1="56" y1="50" x2="83" y2="50" />
+        <line x1="55.2" y1="53" x2="83.77" y2="69.5" />
+        <line x1="53" y1="55.2" x2="67.5" y2="80.31" />
+        <line x1="50" y1="56" x2="50" y2="92" />
+        <line x1="47" y1="55.2" x2="34" y2="77.71" />
+        <line x1="44.8" y1="53" x2="15.36" y2="70" />
+        <line x1="44" y1="50" x2="14" y2="50" />
+        <line x1="44.8" y1="47" x2="17.09" y2="31" />
+        <line x1="47" y1="44.8" x2="33" y2="20.56" />
+      </g>
+    </svg>
+  )
+}

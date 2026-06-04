@@ -1,4 +1,5 @@
 import { useUIStore } from '@/stores/ui-store'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { LogsModal } from './logs-modal'
@@ -23,13 +24,40 @@ export function ScopeBar() {
     requestExpandAll,
     setEditingSessionId,
     reverseFeed,
+    talkMode,
+    setTalkMode,
   } = useUIStore()
 
   if (!selectedProjectId || !selectedSessionId) return null
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 border-b border-border min-h-[40px]">
+    <div className="flex items-center gap-2 px-4 py-1.5 min-h-[36px]">
       <AgentCombobox />
+
+      {/* View lens — stream (everything) vs talk (conversation only) */}
+      <div className="flex items-center gap-3 font-mono text-[11.5px] ml-1">
+        {(['stream', 'talk'] as const).map((mode) => {
+          const active = (mode === 'talk') === talkMode
+          return (
+            <button
+              key={mode}
+              onClick={() => setTalkMode(mode === 'talk')}
+              className={cn(
+                'cursor-pointer transition-colors',
+                active ? 'text-foreground' : 'text-ink-3 hover:text-foreground',
+              )}
+            >
+              {mode}
+              <span
+                className={cn(
+                  'mt-0.5 block h-px transition-colors',
+                  active ? 'bg-primary' : 'bg-transparent',
+                )}
+              />
+            </button>
+          )
+        })}
+      </div>
 
       <div className="flex items-center gap-1 shrink-0">
         {/* Follow — icon mirrors feed direction (top vs bottom) */}
