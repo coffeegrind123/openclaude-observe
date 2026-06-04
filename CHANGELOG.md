@@ -1,5 +1,34 @@
 # Changelog
 
+## 04.06.2026
+
+Complete visual redesign of the dashboard — the **"Stream" UI**. A session now reads as a single flowing river of agent activity instead of a boxy two-pane feed: a continuous time-spine with a bead per event, a two-voice type system (monospace telemetry / sans-serif prose), and a restrained palette built on the OpenClaude blue-starburst brand. Both light and dark themes are first-class. Also fixes a Docker port-binding bug that left the published server unreachable.
+
+### Design system
+
+- New token system in `app/client/src/index.css`: a cool console-grey light theme and a slate dark theme, with the OpenClaude blue brand mapped onto the shadcn `--primary` token (the shadcn `--accent` stays the neutral hover surface, so existing components inherit the new look without per-component edits). Adds stream tokens — an ink scale, muted agent-identity colors, run/fail/warm status colors, and a shadow set — and a tighter corner radius.
+- Typography is a deliberate two-voice system: **Inter Tight** for prose, **JetBrains Mono** for telemetry / numerics / code, loaded in `index.html`.
+- Brand: the OpenClaude blue starburst replaces the `O` placeholder. New `components/shared/starburst.tsx`, starburst `favicon.svg` + `favicon-alert.svg`, `favicon.ico`, and `openclaude-logo.png`; the sidebar shows the mark beside a mono `openclaude observe` wordmark.
+
+### The river (event stream)
+
+- `event-stream.tsx` draws one continuous spine down the virtualized list, and `event-row.tsx` is rebuilt onto it: a left timestamp gutter, a bead riding the spine (diamond = LLM, hollow ring = tool, filled = event, pulsing = running) colored by agent identity (main = blue; subagents = clay / sage / slate / plum), and two-voice content — a monospace telemetry header plus inline sans-serif prose for prompts and assistant / subagent / task messages. Subagent rows sit behind an agent-colored rail. Virtualization, inline expand, selection, flash, and keyboard navigation are all preserved. New agent-identity color helpers (`getAgentStreamColor*`) in `lib/agent-utils.ts`.
+
+### Lean chrome
+
+- The breadcrumb, scope bar, and filter bar are grouped under one soft shadow instead of stacked divider lines (`shadow-float`), with a monospace breadcrumb, a mono `filter` label, a mono events readout, and lightened inactive filter pills. The performance-critical animated activity timeline (with rewind) is unchanged.
+
+### Inspector + view lens
+
+- The standalone chat panel is replaced by a right-hand **inspector** (`components/event-stream/inspector.tsx`) that pops in when an event is selected and reuses the existing `EventDetail` renderer for all rich viewers (token usage, diffs, thread, tool output). Row interaction: plain click selects (opens the inspector); ⌘/Ctrl/middle-click expands inline (kept for power users, expand-all, and keyboard nav).
+- A **stream ↔ talk** view lens (in the scope bar) toggles the river between the full telemetry stream and a conversation-only view — `talkMode` in `ui-store`; the stream filters to chat-classified events via `classifyChatEvent`.
+- Removed the now-orphaned chat-feed panel components and the unused `chatPanel*` store state. `chat-feed/chat-markdown.tsx` is kept — it's still used by the event-stream viewers (compaction boundary, thinking block, read-tool viewer).
+
+### Docker reachability + idle shutdown
+
+- The server defaulted to binding `localhost` inside the container, so Docker's published port returned `ERR_EMPTY_RESPONSE`. `docker-compose.yml` now sets `AGENTS_OBSERVE_SERVER_HOST=0.0.0.0` (override-able) so the published port reaches the server.
+- Added an `AGENTS_OBSERVE_SHUTDOWN_DELAY_MS` passthrough (default 30s; set to `0` to disable the idle auto-shutdown while iterating on the dashboard).
+
 ## 25.05.2026
 
 Ported eight feature groups from upstream (`simple10/agents-observe`, through `v0.9.8`) that stand on their own without the agent-class registry refactor the fork deliberately skips. Headline additions: transcript-based per-prompt token/cost stats, a DB-backed user-defined regex filter system (RE2), event deduplication at ingestion, and session-view keyboard navigation. The recurring adaptation throughout was translating upstream's three-layer event shape (`event.hookName` + opaque `payload`) onto the fork's native-OTel model (`event.subtype` / `event.toolName` / `event.toolUseId`). Also fixed a latent client build break the branch had been carrying.
