@@ -9,8 +9,8 @@ const router = new Hono()
 /** Register or refresh a consumer. Body: { id: string } */
 router.post('/consumer/heartbeat', async (c) => {
   const body = await c.req.json<{ id?: string }>()
-  if (!body.id) {
-    return apiError(c, 400, 'id is required')
+  if (!body.id || typeof body.id !== 'string' || body.id.length > 256) {
+    return apiError(c, 400, 'Invalid consumer ID')
   }
   const activeConsumers = heartbeat(body.id)
   return c.json({ ok: true, activeConsumers })
@@ -19,8 +19,8 @@ router.post('/consumer/heartbeat', async (c) => {
 /** Deregister a consumer. Body: { id: string } */
 router.post('/consumer/deregister', async (c) => {
   const body = await c.req.json<{ id?: string }>()
-  if (!body.id) {
-    return apiError(c, 400, 'id is required')
+  if (!body.id || typeof body.id !== 'string' || body.id.length > 256) {
+    return apiError(c, 400, 'Invalid consumer ID')
   }
   const counts = deregister(body.id)
   return c.json({ ok: true, ...counts })

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect, useDeferredValue, useCallback } from 'react'
+import { useRegionShortcuts } from '@/hooks/use-region-shortcuts'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useQuery } from '@tanstack/react-query'
 import { useEffectiveEvents } from '@/hooks/use-effective-events'
@@ -10,7 +11,9 @@ import { getTimelineScrollTo, registerEventStreamScroll, withSyncLock } from '@/
 import { api } from '@/lib/api-client'
 import { useUIStore } from '@/stores/ui-store'
 import { EventRow } from './event-row'
+import { TimestampTooltipProvider } from './timestamp-tooltip'
 import { CompactionBoundary } from './compaction-boundary'
+import { computeRuntimeMs } from '@/lib/runtime'
 import { format } from 'timeago.js'
 import { buildAgentColorMap } from '@/lib/agent-utils'
 import { QueryBoundary } from '@/components/shared/query-boundary'
@@ -34,6 +37,8 @@ export function EventStream() {
     setSearchQuery,
     setSelectedAgentIds,
   } = useUIStore()
+
+  const { shortcuts } = useRegionShortcuts()
 
   // Defer filter values so the UI stays responsive during filter changes
   const deferredPrimaryFilters = useDeferredValue(activePrimaryFilters)
@@ -93,6 +98,17 @@ export function EventStream() {
     }
     return m
   }, [compactionMap])
+
+  // Pre-compute runtime for each event (Stop/SubagentStop → preceding event)
+  const runtimeMap = useMemo(() => {
+    const map = new Map<number, number>()
+    if (!events) return map
+    for (const event of events) {
+      const ms = computeRuntimeMs(event, events)
+      if (ms != null) map.set(event.id, ms)
+    }
+    return map
+  }, [events])
 
   // Apply all client-side filters: displayEventStream gate + agent
   // selection + primary/secondary pill union + search.
@@ -425,6 +441,16 @@ export function EventStream() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedEvents, selectedEventId])
 
+  // Keyboard navigation for the event stream — delegates to shortcuts.onKeyDown
+  // which handles ArrowUp/Down/PageUp/PageDown for the active region.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      shortcuts.onKeyDown(e)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [shortcuts])
+
   // Scroll to a requested event (set via setScrollToEventId — e.g. timeline dot click).
   // Resolves merged events (PostToolUse → displayed PreToolUse row), scrolls the
   // virtualizer to the target row, then sets flashingEventId so the row pulses.
@@ -512,57 +538,60 @@ export function EventStream() {
             <div
               ref={scrollRef}
               data-region-target="events"
-              tabIndex={0}
-              className="flex-1 overflow-y-auto focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+              tabIndex={-1}
+              className="flex-1 overflow-y-auto outline-none"
             >
               {displayedEvents.length === 0 ? (
                 <EmptyState text="No events match the current filters" />
               ) : (
-                <div className="relative" style={{ height: `${totalSize}px`, width: '100%' }}>
-                  {virtualItems.map((virtualItem) => {
-                    const event = displayedEvents[virtualItem.index]
-                    if (!event) return null
-                    // Render PreCompact/PostCompact as a distinct boundary card
-                    // instead of a normal event row so the compaction reads as
-                    // a visual break in the stream.
-                    const isPreCompact = event.subtype === 'PreCompact'
-                    const isPostCompact = event.subtype === 'PostCompact'
-                    const compactionInfo = isPreCompact
-                      ? (compactionMap.get(event.id) ?? null)
-                      : isPostCompact
-                        ? (() => {
-                            const preId = postToPreCompactionMap.get(event.id)
-                            return preId != null ? (compactionMap.get(preId) ?? null) : null
-                          })()
-                        : null
-                    return (
-                      <div
-                        key={virtualItem.key}
-                        ref={virtualizer.measureElement}
-                        data-index={virtualItem.index}
-                        className="absolute top-0 left-0 w-full border-b border-border/50"
-                        style={{ transform: `translateY(${virtualItem.start}px)` }}
-                      >
-                        {isPreCompact || isPostCompact ? (
-                          <CompactionBoundary
-                            event={event}
-                            info={compactionInfo}
-                            variant={isPreCompact ? 'pre' : 'post'}
-                          />
-                        ) : (
-                          <EventRow
-                            event={event}
-                            agentMap={agentMap}
-                            agentColorMap={agentColorMap}
-                            showAgentLabel={showAgentLabel}
-                            spawnInfo={spawnInfo.get(event.agentId)}
-                            pairedPayloads={pairedPayloads.get(event.id)}
-                          />
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                <TimestampTooltipProvider>
+                  <div className="relative" style={{ height: `${totalSize}px`, width: '100%' }}>
+                    {virtualItems.map((virtualItem) => {
+                      const event = displayedEvents[virtualItem.index]
+                      if (!event) return null
+                      // Render PreCompact/PostCompact as a distinct boundary card
+                      // instead of a normal event row so the compaction reads as
+                      // a visual break in the stream.
+                      const isPreCompact = event.subtype === 'PreCompact'
+                      const isPostCompact = event.subtype === 'PostCompact'
+                      const compactionInfo = isPreCompact
+                        ? (compactionMap.get(event.id) ?? null)
+                        : isPostCompact
+                          ? (() => {
+                              const preId = postToPreCompactionMap.get(event.id)
+                              return preId != null ? (compactionMap.get(preId) ?? null) : null
+                            })()
+                          : null
+                      return (
+                        <div
+                          key={virtualItem.key}
+                          ref={virtualizer.measureElement}
+                          data-index={virtualItem.index}
+                          className="absolute top-0 left-0 w-full border-b border-border/50"
+                          style={{ transform: `translateY(${virtualItem.start}px)` }}
+                        >
+                          {isPreCompact || isPostCompact ? (
+                            <CompactionBoundary
+                              event={event}
+                              info={compactionInfo}
+                              variant={isPreCompact ? 'pre' : 'post'}
+                            />
+                          ) : (
+                            <EventRow
+                              event={event}
+                              agentMap={agentMap}
+                              agentColorMap={agentColorMap}
+                              showAgentLabel={showAgentLabel}
+                              spawnInfo={spawnInfo.get(event.agentId)}
+                              pairedPayloads={pairedPayloads.get(event.id)}
+                              runtimeMs={runtimeMap.get(event.id) ?? null}
+                            />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </TimestampTooltipProvider>
               )}
             </div>
           </>

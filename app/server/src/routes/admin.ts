@@ -27,6 +27,10 @@ router.get('/db/stats', async (c) => {
 // POST /sessions/bulk-delete — delete multiple sessions and VACUUM
 // Body: { sessionIds: string[] }
 router.post('/sessions/bulk-delete', async (c) => {
+  const contentType = c.req.header('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    return c.json({ error: 'Content-Type must be application/json' }, 415)
+  }
   const body = await c.req.json().catch(() => null)
   const ids = body?.sessionIds
   if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) {
@@ -51,8 +55,27 @@ router.post('/sessions/bulk-delete', async (c) => {
   // VACUUM after delete so the file actually shrinks on disk. This is the
   // whole point of the Sessions tab; skipping it would leave users
   // confused about why "deleting 5GB of sessions" didn't free any space.
+  // VACUUM can fail with SQLITE_BUSY if concurrent writes are in-flight;
+  // retry once after a brief pause to let other operations settle.
   const vacuumStart = Date.now()
-  await store.vacuum()
+  let vacuumSuccess = true
+  try {
+    await store.vacuum()
+  } catch (err: any) {
+    vacuumSuccess = false
+    if (err?.code === 'SQLITE_BUSY') {
+      console.log('[admin] VACUUM got SQLITE_BUSY, retrying once after 100ms...')
+      await new Promise((r) => setTimeout(r, 100))
+      try {
+        await store.vacuum()
+        vacuumSuccess = true
+      } catch (retryErr: any) {
+        console.error('[admin] VACUUM retry also failed:', retryErr?.message || retryErr)
+      }
+    } else {
+      console.error('[admin] VACUUM failed:', err?.message || err)
+    }
+  }
   let sizeAfter = 0
   try {
     sizeAfter = statSync(config.dbPath).size
@@ -61,7 +84,7 @@ router.post('/sessions/bulk-delete', async (c) => {
   }
   const reclaimed = sizeBefore - sizeAfter
   console.log(
-    `[admin] vacuum: ${sizeBefore} -> ${sizeAfter} bytes (reclaimed ${reclaimed}) in ${Date.now() - vacuumStart}ms`,
+    `[admin] vacuum: ${sizeBefore} -> ${sizeAfter} bytes (reclaimed ${reclaimed}) in ${Date.now() - vacuumStart}ms${vacuumSuccess ? '' : ' (VACUUM skipped — file size may not reflect deletions)'}`,
   )
 
   return c.json({ ok: true, deleted, sizeBefore, sizeAfter })

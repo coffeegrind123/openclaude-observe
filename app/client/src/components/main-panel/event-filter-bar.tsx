@@ -4,9 +4,9 @@ import { useFilterStore } from '@/stores/filter-store'
 import { useEvents } from '@/hooks/use-events'
 import { useDedupedEvents } from '@/hooks/use-deduped-events'
 import { cn } from '@/lib/utils'
+import { focusSiblingMatching } from '@/lib/keyboard-nav'
 import { Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { focusSiblingMatching } from '@/lib/keyboard-nav'
 
 export function EventFilterBar() {
   const {

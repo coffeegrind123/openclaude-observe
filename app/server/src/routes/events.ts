@@ -8,6 +8,7 @@ import { resolveProject } from '../services/project-resolver'
 import { computeEventSignature } from '../utils/event-signature'
 import { config } from '../config'
 import { apiError } from '../errors'
+import { rateLimit } from '../middleware/rate-limit'
 
 type Env = {
   Variables: {
@@ -65,10 +66,15 @@ async function ensureRootAgent(store: EventStore, sessionId: string): Promise<st
 }
 
 // POST /events
-router.post('/events', async (c) => {
+router.post('/events', rateLimit, async (c) => {
   const store = c.get('store')
   const broadcastToSession = c.get('broadcastToSession')
   const broadcastToAll = c.get('broadcastToAll')
+
+  const contentType = c.req.header('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    return c.json({ error: 'Content-Type must be application/json' }, 415)
+  }
 
   try {
     const body = await c.req.json()
@@ -221,25 +227,30 @@ router.post('/events', async (c) => {
     // If the event has an ownerAgentId (from payload.agent_id), this event
     // belongs to that agent. Ensure the agent record exists.
     if (parsed.ownerAgentId && parsed.ownerAgentId !== rootAgentId) {
-      // Only consume a queue entry for agents we haven't named yet.
-      const sessionNamed = namedAgents.get(parsed.sessionId)
-      const alreadyNamed = sessionNamed?.has(parsed.ownerAgentId) ?? false
-      let pending: PendingAgentMeta | null = null
+      // Before awaiting store.upsertAgent(), capture pending metadata
+      // from the per-session FIFO queue. The queue is consumed
+      // synchronously here so two concurrent event handlers for the
+      // same session cannot interleave on the same array entry.
+      // namedAgents prevents a subagent appearing in multiple events
+      // from depleting the queue before its intended recipient arrives.
+      const alreadyNamed = namedAgents.get(parsed.sessionId)?.has(parsed.ownerAgentId) ?? false
+      let pending: PendingAgentMeta | undefined
 
       if (!alreadyNamed) {
-        const queue = pendingAgentMetaQueue.get(parsed.sessionId)
-        if (queue && queue.length > 0) {
-          pending = queue.shift()!
-          if (queue.length === 0) {
-            pendingAgentMetaQueue.delete(parsed.sessionId)
-          }
-        }
+        const queue = pendingAgentMetaQueue.get(parsed.sessionId) || []
+        pending = queue.shift()
         if (pending) {
+          pendingAgentMetaQueue.set(parsed.sessionId, queue)
+          // Mark this agent as named so subsequent events for the same
+          // agent don't also consume a queue entry.
+          const sessionNamed = namedAgents.get(parsed.sessionId)
           if (!sessionNamed) {
             namedAgents.set(parsed.sessionId, new Set([parsed.ownerAgentId]))
           } else {
             sessionNamed.add(parsed.ownerAgentId)
           }
+        } else if (queue.length === 0) {
+          pendingAgentMetaQueue.delete(parsed.sessionId)
         }
       }
 
@@ -316,7 +327,7 @@ router.post('/events', async (c) => {
     }
 
     const now = Date.now()
-    const isNotification = config.notificationOnSubtypes.has(parsed.subtype ?? '')
+    const isNotification = config.notificationEventSubtypes.has(parsed.subtype ?? '')
     let eventId: number
     try {
       eventId = await store.insertEvent({
@@ -359,27 +370,49 @@ router.post('/events', async (c) => {
     }
 
     if (parsed.instanceId) {
-      const instanceRole = (hookPayload.instance_role as string) || 'main'
-      const instanceName = (hookPayload.instance_name as string) || null
-      const machineId = (hookPayload.machine_id as string) || null
-      const pid = typeof hookPayload.pid === 'number' ? hookPayload.pid : null
-      store.upsertInstance(
-        parsed.instanceId,
-        parsed.sessionId,
-        instanceRole,
-        instanceName,
-        machineId,
-        pid,
-      )
+      // Validate instanceId: must be a non-empty string of reasonable length
+      if (
+        typeof parsed.instanceId !== 'string' ||
+        parsed.instanceId.length === 0 ||
+        parsed.instanceId.length > 255
+      ) {
+        // Silently skip invalid instance data instead of failing the whole event
+        console.warn(`[event] Invalid instanceId: ${parsed.instanceId}`)
+        // Jump past the instance block
+      } else {
+        const instanceRoleRaw = (hookPayload.instance_role as string) || 'main'
+        const VALID_INSTANCE_ROLES = new Set([
+          'main',
+          'daemon',
+          'pipe',
+          'coordinator',
+          'bridge',
+          'worker',
+          'subagent',
+          'unknown',
+        ])
+        const instanceRole = VALID_INSTANCE_ROLES.has(instanceRoleRaw) ? instanceRoleRaw : 'unknown'
+        const instanceName = (hookPayload.instance_name as string) || null
+        const machineId = (hookPayload.machine_id as string) || null
+        const pid = typeof hookPayload.pid === 'number' ? hookPayload.pid : null
+        store.upsertInstance(
+          parsed.instanceId,
+          parsed.sessionId,
+          instanceRole,
+          instanceName,
+          machineId,
+          pid,
+        )
 
-      if (parsed.subtype === 'DaemonHeartbeat') {
-        store.updateInstanceHeartbeat(parsed.instanceId, parsed.timestamp)
-      }
+        if (parsed.subtype === 'DaemonHeartbeat') {
+          store.updateInstanceHeartbeat(parsed.instanceId, parsed.timestamp)
+        }
 
-      const instances = store.getInstancesForSession(parsed.sessionId)
-      const instanceRow = instances.find((i) => i.id === parsed.instanceId)
-      if (instanceRow) {
-        broadcastToSession(parsed.sessionId, { type: 'instance_update', data: instanceRow })
+        const instances = store.getInstancesForSession(parsed.sessionId)
+        const instanceRow = instances.find((i) => i.id === parsed.instanceId)
+        if (instanceRow) {
+          broadcastToSession(parsed.sessionId, { type: 'instance_update', data: instanceRow })
+        }
       }
     }
 
@@ -494,6 +527,7 @@ router.post('/events', async (c) => {
 router.get('/events/:id/thread', async (c) => {
   const store = c.get('store')
   const eventId = parseInt(c.req.param('id'))
+  if (isNaN(eventId)) return c.json({ error: 'Invalid ID' }, 400)
   const rows = await store.getThreadForEvent(eventId)
   const events: ParsedEvent[] = rows.map((r) => ({
     id: r.id,

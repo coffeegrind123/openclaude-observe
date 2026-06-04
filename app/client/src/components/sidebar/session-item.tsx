@@ -115,15 +115,15 @@ export function SessionItem({
           aria-current={isSelected ? 'true' : undefined}
           data-sidebar-item=""
           className={cn(
-            'group rounded-md px-2 py-1 transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+            'group rounded-md px-2 py-1 transition-colors cursor-pointer',
+            'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
             isSelected
               ? 'bg-accent text-accent-foreground'
               : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
           )}
           onClick={() => !isEditing && onSelect()}
           onKeyDown={(e) => {
-            if (isEditing) return
-            if (e.key === 'Enter' || e.key === ' ') {
+            if (!isEditing && (e.key === 'Enter' || e.key === ' ')) {
               e.preventDefault()
               onSelect()
             }

@@ -23,7 +23,7 @@ export interface InsertEventParams {
   /** Stable signature for dedup. When set, a UNIQUE constraint is enforced. */
   signatureHash?: string | null
   /** Whether this event advances last_notification_ts. Computed by the
-   *  route from config.notificationOnSubtypes; falls back to the
+   *  route from config.notificationEventSubtypes; falls back to the
    *  `Notification` subtype when omitted. */
   isNotification?: boolean
 }
@@ -142,6 +142,7 @@ export interface EventStore {
   getDbStats(): Promise<{ sessionCount: number; eventCount: number }>
   vacuum(): Promise<void>
   getRecentSessions(limit?: number): Promise<any[]>
+  getUnassignedSessions(limit?: number): Promise<any[]>
   healthCheck(): Promise<{ ok: boolean; error?: string }>
   /**
    * Scan all tables for rows with broken foreign keys and repair them.
@@ -153,6 +154,7 @@ export interface EventStore {
    * Returns a summary of what was repaired.
    */
   repairOrphans(): Promise<OrphanRepairResult>
+  close(): void
   // === Filters ===
   listFilters(): Promise<Filter[]>
   getFilterById(id: string): Promise<Filter | null>

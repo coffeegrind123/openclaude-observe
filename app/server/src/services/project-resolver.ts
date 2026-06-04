@@ -60,8 +60,12 @@ async function pickAvailableSlug(store: EventStore, candidates: string[]): Promi
   }
   const base = candidates[0]
   let suffix = 2
-  while (!(await store.isSlugAvailable(`${base}-${suffix}`))) {
+  const MAX_SUFFIX = 1000
+  while (suffix <= MAX_SUFFIX && !(await store.isSlugAvailable(`${base}-${suffix}`))) {
     suffix++
+  }
+  if (suffix > MAX_SUFFIX) {
+    return `${base}-${Date.now().toString(36)}`
   }
   return `${base}-${suffix}`
 }

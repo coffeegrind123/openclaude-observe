@@ -55,7 +55,10 @@ export const config = {
       return 'unknown'
     }
   })(),
-  port: parseInt(process.env.AGENTS_OBSERVE_SERVER_PORT || '4981', 10),
+  port: (() => {
+    const rawPort = parseInt(process.env.AGENTS_OBSERVE_SERVER_PORT || '', 10)
+    return !isNaN(rawPort) && rawPort > 0 && rawPort < 65536 ? rawPort : 4981
+  })(),
   logLevel,
   verbose: logLevel === 'debug' || logLevel === 'trace',
   dbPath: resolve(process.env.AGENTS_OBSERVE_DB_PATH || '../../data/observe.db'),
@@ -68,7 +71,10 @@ export const config = {
   ),
   storageAdapter: process.env.AGENTS_OBSERVE_STORAGE_ADAPTER || 'sqlite',
   clientDistPath: process.env.AGENTS_OBSERVE_CLIENT_DIST_PATH || '',
-  devClientPort: parseInt(process.env.AGENTS_OBSERVE_DEV_CLIENT_PORT || '5174', 10),
+  devClientPort: (() => {
+    const rawPort = parseInt(process.env.AGENTS_OBSERVE_DEV_CLIENT_PORT || '', 10)
+    return !isNaN(rawPort) && rawPort > 0 && rawPort < 65536 ? rawPort : 5174
+  })(),
 
   // DB reset policy: 'allow' = permit, 'deny' = reject, 'backup' (default) = backup then reset
   // Unrecognized values are treated as 'deny' to prevent misconfiguration
@@ -77,24 +83,23 @@ export const config = {
       (process.env.AGENTS_OBSERVE_ALLOW_DB_RESET || 'backup').toLowerCase()
     ] ?? ('deny' as const),
 
+  // Notification event subtypes: comma-separated list of subtypes that trigger
+  // notification bells in the UI. Defaults to just 'Notification'. Set to empty
+  // string to disable all notification triggers, or include additional subtypes
+  // like 'Stop,SubagentStop' to get notified when agents finish.
+  notificationEventSubtypes: new Set(
+    (process.env.AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS || 'Notification')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  ),
+
   // Auto-shutdown: <= 0 disables, > 0 is delay in ms after last consumer disconnects
   shutdownDelayMs: parseInt(process.env.AGENTS_OBSERVE_SHUTDOWN_DELAY_MS || '30000', 10),
   // Consumer tracker tuning
   consumerTtlMs: 30_000,
   sweepIntervalMs: 10_000,
   startupGraceMs: 60_000,
-
-  // Which event subtypes raise a sidebar/desktop notification. Defaults to
-  // just `Notification`; set AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS to a
-  // comma-separated list (e.g. "Notification,Stop,SubagentStop") to also
-  // notify on turn/subagent completion. Any subtype NOT in this set bubbles
-  // a notification_clear so bells auto-dismiss when the agent resumes.
-  notificationOnSubtypes: new Set(
-    (process.env.AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS || 'Notification')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
-  ),
 
   transcriptStats: {
     enabled: process.env.AGENTS_OBSERVE_TRANSCRIPT_STATS !== '0',

@@ -185,7 +185,6 @@ const DotContainer = memo(DotContainerInner, (prev, next) => {
   return pe[pe.length - 1].id === ne[ne.length - 1].id
 })
 
-
 interface AgentLaneProps {
   agent: Agent
   parentAgent?: Agent | null

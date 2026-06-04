@@ -7,6 +7,8 @@ import { AgentLabel } from '@/components/shared/agent-label'
 import { useUIStore } from '@/stores/ui-store'
 import { EventDetail } from './event-detail'
 import { ContextBadge } from './context-badge'
+import { useTimestampTooltip } from './timestamp-tooltip'
+import { formatRuntime } from '@/lib/runtime'
 import { Check, X, Loader } from 'lucide-react'
 import type { ParsedEvent, Agent } from '@/types'
 import type { PairedPayloads } from '@/hooks/use-deduped-events'
@@ -23,10 +25,13 @@ interface EventRowProps {
   showAgentLabel: boolean
   spawnInfo?: SpawnInfo
   pairedPayloads?: PairedPayloads
+  runtimeMs?: number | null
 }
 
 function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString('en-US', {
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleTimeString('en-US', {
     hour12: false,
     hour: '2-digit',
     minute: '2-digit',
@@ -118,6 +123,7 @@ export const EventRow = memo(function EventRow({
   showAgentLabel,
   spawnInfo,
   pairedPayloads,
+  runtimeMs,
 }: EventRowProps) {
   // Individual selectors so only rows with changing slices re-render.
   // Destructuring from useUIStore() subscribes to the full store state and
@@ -133,6 +139,7 @@ export const EventRow = memo(function EventRow({
   const isFlashing = useUIStore((s) => s.flashingEventId === event.id)
   const toggleExpandedEvent = useUIStore((s) => s.toggleExpandedEvent)
   const setSelectedEventId = useUIStore((s) => s.setSelectedEventId)
+  const { show: showTimestampTooltip, hide: hideTimestampTooltip } = useTimestampTooltip()
 
   const agent = agentMap.get(event.agentId)
   const isSubagent = agent?.parentAgentId != null
@@ -271,20 +278,36 @@ export const EventRow = memo(function EventRow({
                 <ContextBadge sessionId={event.sessionId} llmEventId={event.id} />
               </span>
             </>
-          ) : displaySummary.includes('\n') ? (
-            <div className="text-xs text-muted-foreground flex-1 min-w-0">
-              {displaySummary.split('\n').map((line, i) => (
-                <div key={i} className="truncate">
-                  {line}
-                </div>
-              ))}
-            </div>
           ) : (
-            <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">
-              {displaySummary}
-            </span>
+            <>
+              {displaySummary.includes('\n') ? (
+                <div className="text-xs text-muted-foreground flex-1 min-w-0">
+                  {displaySummary.split('\n').map((line, i) => (
+                    <div key={i} className="truncate">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">
+                  {displaySummary}
+                </span>
+              )}
+              {/* Runtime pill for Stop / SubagentStop events */}
+              {runtimeMs != null && (
+                <span className="shrink-0 text-[10px] font-medium text-muted-foreground/70 dark:text-muted-foreground/50">
+                  {formatRuntime(runtimeMs)}
+                </span>
+              )}
+            </>
           )}
-          <span className="text-[10px] text-muted-foreground/80 dark:text-muted-foreground/60 tabular-nums shrink-0">
+          <span
+            className="text-[10px] text-muted-foreground/80 dark:text-muted-foreground/60 tabular-nums shrink-0"
+            onMouseEnter={(e) =>
+              showTimestampTooltip(event.timestamp, e.currentTarget.getBoundingClientRect())
+            }
+            onMouseLeave={hideTimestampTooltip}
+          >
             {formatTime(event.timestamp)}
           </span>
         </div>
@@ -296,6 +319,7 @@ export const EventRow = memo(function EventRow({
           agentMap={agentMap}
           spawnInfo={spawnInfo}
           pairedPayloads={pairedPayloads}
+          runtimeMs={runtimeMs}
         />
       )}
     </div>

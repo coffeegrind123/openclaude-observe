@@ -10,13 +10,24 @@ const LOG_LEVEL = config.logLevel
 const clientSessions = new Map<WebSocket, string>()
 const allClients = new Set<WebSocket>()
 
+const MAX_CLIENTS = 100
+
 export function attachWebSocket(server: Server) {
   const wss = new WebSocketServer({ server, path: '/api/events/stream' })
 
   wss.on('connection', (ws) => {
+    if (allClients.size >= MAX_CLIENTS) {
+      ws.close(1013, 'Too many connections')
+      return
+    }
     allClients.add(ws)
+    lastPongByClient.set(ws, Date.now())
     cancelPendingShutdown()
     console.log(`[WS] Client connected (${allClients.size} total)`)
+
+    ws.on('pong', () => {
+      lastPongByClient.set(ws, Date.now())
+    })
 
     ws.on('message', (raw) => {
       try {
@@ -37,12 +48,17 @@ export function attachWebSocket(server: Server) {
             )
           }
         }
-      } catch {}
+      } catch (err) {
+        if (config.verbose) {
+          console.warn('Invalid WebSocket message:', String(err))
+        }
+      }
     })
 
     ws.on('close', () => {
       allClients.delete(ws)
       clientSessions.delete(ws)
+      lastPongByClient.delete(ws)
       console.log(`[WS] Client disconnected (${allClients.size} remaining)`)
       checkShutdown()
     })
@@ -50,6 +66,7 @@ export function attachWebSocket(server: Server) {
     ws.on('error', () => {
       allClients.delete(ws)
       clientSessions.delete(ws)
+      lastPongByClient.delete(ws)
     })
   })
 
@@ -126,3 +143,24 @@ export function broadcastToAll(message: object): void {
 export function getClientCount(): number {
   return allClients.size
 }
+
+// Periodic sweep of stale connections — ping every 30 s, close clients
+// that haven't ponged within 5 s of the last ping.
+const lastPongByClient = new Map<WebSocket, number>()
+
+setInterval(() => {
+  const now = Date.now()
+  for (const client of allClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      const lastPong = lastPongByClient.get(client) ?? now
+      // Close clients that haven't ponged within 35 s of last ping cycle
+      if (now - lastPong > 35_000) {
+        client.close(1013, 'Stale connection')
+        allClients.delete(client)
+        clientSessions.delete(client)
+        lastPongByClient.delete(client)
+      }
+      client.ping()
+    }
+  }
+}, 30_000).unref()

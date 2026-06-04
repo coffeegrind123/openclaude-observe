@@ -24,9 +24,36 @@ export interface ParsedRawEvent {
 }
 
 export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
+  // Guard against excessively large payloads that could OOM the server.
+  try {
+    if (JSON.stringify(raw).length > 1_000_000) {
+      return {
+        projectName: null,
+        sessionId: 'rejected-oversized',
+        slug: null,
+        transcriptPath: null,
+        type: 'system',
+        subtype: 'RejectedOversized',
+        toolName: null,
+        toolUseId: null,
+        timestamp: Date.now(),
+        ownerAgentId: null,
+        subAgentId: null,
+        subAgentName: null,
+        subAgentDescription: null,
+        instanceId: null,
+        metadata: {},
+        raw,
+      }
+    }
+  } catch {
+    // If serialization throws (e.g. circular reference), continue parsing.
+  }
+
   const projectName = (raw.project_name as string) || null
-  const sessionId = (raw.session_id as string) || 'unknown'
-  const slug = (raw.slug as string) || null
+  const sessionId =
+    typeof raw.session_id === 'string' ? (raw.session_id as string).slice(0, 256) : 'unknown'
+  const slug = typeof raw.slug === 'string' ? (raw.slug as string).slice(0, 256) : null
   const transcriptPath = (raw.transcript_path as string) || null
   const meta = raw.meta as Record<string, unknown> | undefined
   const timestamp = parseTimestamp(meta?.timestamp ?? raw.timestamp)
@@ -178,7 +205,7 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
         break
       default:
         type = 'system'
-        subtype = hookEventName
+        subtype = hookEventName.slice(0, 200)
         break
     }
   } else {
@@ -208,7 +235,13 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
     'instance_id',
     'instance_role',
   ]) {
-    if (raw[key] !== undefined) metadata[key] = raw[key]
+    if (raw[key] !== undefined) {
+      let value = raw[key]
+      if (key === 'cwd' && typeof value === 'string') {
+        value = (value as string).slice(0, 1024)
+      }
+      metadata[key] = value
+    }
   }
 
   const instanceId = (raw.instance_id as string) || null
@@ -254,7 +287,7 @@ function parseTimestamp(ts: unknown): number {
 }
 
 function coerceTimestamp(ts: unknown): number {
-  if (typeof ts === 'number') return ts
+  if (typeof ts === 'number' && !isNaN(ts)) return ts
   if (typeof ts === 'string') {
     const parsed = new Date(ts).getTime()
     return isNaN(parsed) ? Date.now() : parsed

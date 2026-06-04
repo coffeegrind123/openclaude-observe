@@ -59,7 +59,8 @@ export function PinnedSessions({ collapsed }: { collapsed: boolean }) {
                   data-sidebar-item=""
                   aria-current={isSelected ? 'true' : undefined}
                   className={cn(
-                    'flex h-8 w-8 mx-auto items-center justify-center rounded-md text-[10px] font-semibold tracking-tight cursor-pointer border focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    'flex h-8 w-8 mx-auto items-center justify-center rounded-md text-[10px] font-semibold tracking-tight cursor-pointer border',
+                    'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
                     isSelected
                       ? 'bg-primary/10 text-primary border-primary/40'
                       : isActive

@@ -51,6 +51,148 @@ Region-jump shortcuts with no architectural coupling (DOM-attribute driven): `s`
 - **Paired-event runtime pill** — deferred; depends on upstream's `turnId` / agent-class registry the fork doesn't have.
 - The **three-layer contract refactor**, hook-library rewrites, and Codex support remain intentionally out of scope.
 
+## 29.04.2026
+
+Two fixes that block the dashboard's session-management workflow.
+
+### Fixes
+
+- **Bulk session delete crashed with `FOREIGN KEY constraint failed`** — `deleteSessions()` (the path used by the Sessions-tab "delete selected" button) wiped events → agents → sessions but skipped `instances`. Single-session `deleteSession()` cleaned instances first; the bulk version didn't. Any session whose openclaude REPL had ever heartbeated (i.e. any active session) had an `instances` row pointing at it, and `instances.session_id REFERENCES sessions.id` is enforced — so `DELETE FROM sessions` violated the FK and the whole transaction rolled back. Surfaced as 500 Internal Server Error in the dashboard. Fix: mirror `deleteSession()`'s order — `instances → events → agents → sessions`.
+- **Client `tsc -b` build broken — three TypeScript errors** —
+  - `session-list.tsx` used `<Badge>` at lines 131,133 without importing it. Added `import { Badge } from '@/components/ui/badge'`.
+  - `agent-label.tsx:75` referenced `agent.agentClass` but the `Agent` interface in `types/index.ts` only declares `agentType`. Removed the extra comparison line — `agentType` already covers display-relevant identity.
+  - `api-client.test.ts:568` cast a partial mock as `Response`, which TS rejected (missing 14 properties, casts must overlap). Switched to the standard `as unknown as Response` escape used for test-only mocks.
+
+  `tsc -b && vite build` now passes; `docker compose build observe` succeeds end-to-end.
+
+## 28.04.2026
+
+Security hardening — adversarial bug-hunter pass across the full codebase. 20 fixes covering SQLite migration safety, transaction atomicity, DoS prevention, input validation, and error handling.
+
+### Test expansion — 17 new test files, all server routes covered
+
+Full audit of all 26 existing test files for freshness (no stale tests found; 12 files flagged with significant coverage gaps). Added 408 tests across 17 files bringing the suite from 26→43 files and ~553→961 passing tests.
+
+**Server (8 new files, 162 tests):** All 10 route files now tested — sessions (9 endpoints including events status correction, context computation, metadata patching), projects (CRUD with slug validation), events (POST ingestion with session lifecycle, GET thread), health, instances, changelog. Plus unit tests for `apiError` helper and `rateLimit` middleware (window expiry, per-IP counters).
+
+**Client (9 new files, 246 tests):** Core lib coverage — `api-client` (every method with fetch mocking, error parsing, URL encoding), `format-utils` (`formatTokens`), `format-bytes`, `server-health` (memoization), `scroll-sync` (lock coordination), `utils` (`cn()` class merging, `isNewerVersion()` date-based/semver dual mode). Config coverage — `event-icons` (registry integrity, 47 required IDs, color presets, custom overrides, MCP collapsing), `time-ranges` (all 6 ranges with ms/ticks), `activity` (pulse config).
+
+**Fixes:** Server vitest binary (broken `.bin/vitest` symlink), client test setup (added `offsetWidth` mock for `@tanstack/react-virtual` in jsdom), `app.test.ts` flaky timeout 5s→10s. 7 pre-existing event-stream virtualizer failures remain (known jsdom limitation, component works correctly in real browsers).
+
+### Critical
+
+- **Sessions table migration crash** — the `INSERT INTO sessions_new SELECT * FROM sessions` at `sqlite-adapter.ts:138` referenced 20 columns in the new table but the original `CREATE TABLE sessions` only has 14 (token columns are added later via `ALTER TABLE`). Any database created before the nullable `project_id` change would crash on startup with "20 columns but 14 values were supplied." Fixed by explicitly listing the 14 source columns in both `CREATE TABLE sessions_new` and the `INSERT ... SELECT`, with a post-migration row-count safety check
+
+### High
+
+- **Atomic transactions**: `deleteProject`, `deleteSession`, `insertEvent` counter updates, `repairOrphans`, and `clearSessionEvents` now use `this.db.transaction()` wrappers — prevents mid-operation crashes from leaving orphaned rows or desynchronized session counters
+- **Unbounded slug suffix loop** (DoS): `pickAvailableSlug` now caps suffix at 1000, falling back to a timestamp-based unique slug. Attacker could previously pre-create 50k projects to force 50k DB queries per event
+- **CORS hardened** to localhost origins only — previously `cors()` with no config allowed cross-origin DELETE from any website
+- **Rate limiting** via new `middleware/rate-limit.ts`: 1000 requests per minute per IP, applied to `POST /api/events`. Stale entries swept every 5 minutes
+- **Request body size limit**: 10 MB cap, returns 413 before parsing. Prevents memory exhaustion from multi-GB JSON payloads
+- **WebSocket connection limit**: 100 max concurrent clients. Prevents `broadcastToAll` O(n) degradation from connection floods
+- **Instance data validation**: `instanceId` capped at 256 chars, `instanceRole` checked against expected values
+
+### Medium
+
+- **Graceful shutdown**: added `SqliteAdapter.close()` and `SIGINT`/`SIGTERM` handlers that close the database before exit — prevents WAL data loss on unclean shutdown
+- **VACUUM safety**: `admin.ts` bulk-delete wraps `store.vacuum()` in try/catch with `SQLITE_BUSY` retry
+- **State-changing GET**: `GET /api/sessions/:id/events` lazy status correction documented — intentional design, no longer a silent mutation
+- **NaN in SQL queries**: 6 `parseInt` sites on user-supplied params/routes now guard with `isNaN()` and return 400
+- **Context computation limit**: `GET /api/sessions/:id/context` caps events at 10,000 — prevents memory exhaustion on large sessions
+- **Subagent naming queue**: async interleaving fixed by capturing pending metadata synchronously before the `await store.upsertAgent()` call
+- **NaN timestamp passthrough**: parser now rejects NaN timestamps, defaults to `Date.now()`. Previously stored NaN in the DB, causing client-side garbage display
+
+### Low
+
+- Client timestamp display: `formatFullDate`, `formatRuntime`, `formatTime` all guard against NaN/Infinity with `'—'` fallback
+- LIKE wildcard escaping: `%` and `_` in search terms now escaped with `\` via `ESCAPE '\'` clause
+- WebSocket error logging: replaced empty `catch {}` with conditional `console.warn` when verbose
+- Slug length validation: 100 char max on `POST /projects`, 256 char truncation in parser
+- Consumer ID validation: type check (`typeof === 'string'`) and length cap (256 chars)
+- Content-Type validation: all POST/PATCH routes check for `application/json`, return 415 on mismatch
+- URI decode safety: `decodeURIComponent` wrapped in try/catch on all route params
+
+## 27.04.2026
+
+Completed selective cherry-pick from upstream (`simple10/agents-observe`, HEAD `38bdce6`) — 30 standalone improvements across bug fixes, performance, UX, and server enhancements, plus 4 full feature groups. Deferred the upstream three-layer contract refactor (Phases 1–8) 6–12 months until its agent-class extension model stabilizes and OpenClaude Observe has concrete agent classes to register.
+
+### Database Prune UI — Sessions · Projects · Labels tabs
+
+- Settings modal widened to 720px with tab persistence to localStorage. Five tabs: Display, Icons, Projects, Labels, Sessions. DB-size footer showing runtime (Docker/Local), dbPath, and formatted byte count via `GET /api/db/stats`
+- **Sessions tab**: sortable table (project, cwd, events, age, status), filterable by minimum event count and maximum age, bulk-delete with VACUUM, bulk label assignment dialog, inline label pills, per-session project-modal, select-all with indeterminate state
+- **Projects tab**: sortable table (name, sessions, events, created, activity), per-project create dialog with slug derivation, per-project delete confirmation, nuclear delete-all
+- **Labels tab**: cross-tab label management integrated as a Settings tab alongside Display/Icons
+- New server endpoints: `GET /api/db/stats`, `POST /api/sessions/bulk-delete`, `POST /api/projects`, `DELETE /api/data`
+- Sidebar: Projects | Labels tab strip reuses existing label data — no model changes
+
+### Keyboard shortcuts — region-based navigation
+
+- Region-jump keys: `e` = event stream, `/` = search, `a` = agent filter, `b` = sidebar
+- Arrow-key navigation between sidebar session items, project buttons, pinned sessions
+- Arrow-key navigation between filter pills (static + dynamic rows)
+- Window-level scroll shortcuts when event stream is active (ArrowUp/Down, PageUp/Down, Home/End)
+- Keyboard shortcut reference tab in Settings
+- New files: `lib/keyboard-nav.ts`, `hooks/use-region-shortcuts.ts`, `components/settings/keyboard-settings.tsx` with tests
+
+### Event icon registry
+
+- Centralized `EVENT_ICON_REGISTRY` with 19 color presets, per-event icons, and default colors — covers all 22 OpenClaude OTel event types, all known tool types, and per-phase tool coloring (PreToolUse/PostToolUse/PostToolUseFailure can have distinct colors)
+- `resolveEventIcon`/`resolveEventColor` with 3-tier fallback chain: exact match → MCP collapsed → generic phase match → default
+- Adapts `config/event-icons.ts` to delegate to the registry while preserving the existing `getEventIcon`/`getEventColor` API — all 7 call sites unchanged
+- Pass 2 localStorage migration: remaps old icon-customization keys to registry IDs, purges obsolete transcript-format keys. Idempotent — won't double-migrate
+- Skipped the agent-class layer-isolation parts (`6b73a69`) — our ParsedEvent model stays intact
+
+### Configurable notification events
+
+- New env var `AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS` — comma-separated list of subtypes that trigger notification bells. Default: `'Notification'` (backwards compatible). Supports extending to `'Notification,Stop,SubagentStop'` to get notified when agents finish. Empty string disables all triggers
+- Replaces hardcoded `subtype === 'Notification'` checks in notification tracking (`last_notification_ts`) and WS broadcast with config-driven Set membership
+
+### Performance — fetch deduping & rendering
+
+- Single `/api/health` fetch shared across all consumers (was N per page)
+- Deduplicated notifications fetch + suppressed HomePage flash on stale-while-revalidate
+- Deduplicated `/api/sessions/:id` fetches into one cache key
+- Dropped `refetchInterval` polling on session/project queries — WS invalidation already covers this
+- Fixed API call regressions: lazy-fetch storm + cache thrash on session switch
+- `React.memo` DotContainer with content-aware equality
+- Split agent lane into absolute siblings + shared tooltip per lane
+- `useAgents` side-effect fetch moved out of `useMemo` (React-correctness fix)
+
+### Server enhancements
+
+- `GET /api/sessions/unassigned` — returns sessions where `project_id IS NULL`. Allows `project_id` to be nullable with migration. New `useUnassignedSessions` hook. Sidebar UI bucket deferred
+- `GET /sessions/:id/events?fields=` allow-list — opt-in bandwidth saver
+- `createdAt` dropped from WS broadcast, marked optional (partial port of `ac24a1a`)
+- Events response typed inline, `??` for `createdAt` fallback
+
+### UX features
+
+- Event runtime display: Stop/SubagentStop events show elapsed time (paired with preceding LLMGeneration/SubagentStart). Runtime pill on row summary, Runtime detail row in detail pane. New `lib/runtime.ts`
+- Shared timestamp tooltip: single Radix Tooltip instance across all event rows with stable callbacks for React.memo compatibility. Uses `timeago.js` for relative time. New `components/event-stream/timestamp-tooltip.tsx`
+- Tab spacing/text size restored to defaults (`h-9`/`text-sm`), with sidebar tabs keeping compact override
+- Transition spinner on rewind-mode range changes
+- Broadcast activity pings for sidebar pulse animation via WS
+- Inline image render for MCP `tool_response` (base64 redaction on oversized images)
+- Keep last-expanded row in view on filter/search change
+- Nested-button warning fixed in sidebar project row
+
+### Bug fixes
+
+- Guard timeline-rewind and parser against poisoned timestamps
+- Tooltips re-opening on tab reactivation
+- Errors + Config static filters (category mapping fix)
+- Session Stats memory leak (events array retained after exit)
+
+### Deliberately skipped
+
+- **Three-layer contract refactor** (Phases 1–8, ~70 commits): fundamentally conflicts with our native OTel integration — `validateEnvelope()` rejects the shape `ClaudeObserveExporter` POSTs, the agent-class registry deletes `chat-feed/` and `compaction-boundary.tsx`, and the `instances` table has no upstream schema migration. Deferred 6–12 months
+- `89fd45a`/`8fa2749` backfill `start_cwd` — no `start_cwd` column in our schema (project resolution uses `projects.cwd`)
+- `133b465` PreCompact/PostCompact pairing — already implemented via `compaction-boundary.tsx`
+- `35f4fb7` UserPromptExpansion rendering — OpenClaude doesn't emit this event
+- `8efa058` shared EventStore context — agent-class registry dependency
+- All `hooks/scripts/lib/` commits — this fork has no hook scripts
+
 ## 20.04.2026
 
 Deep-cleaned the fork of upstream remnants and post-plugin dead code, then systematically merged 19 commits from upstream (`simple10/agents-observe`) that worked without the agent-class registry refactor we chose to skip.

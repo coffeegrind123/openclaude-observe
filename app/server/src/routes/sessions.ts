@@ -23,10 +23,41 @@ const LOG_LEVEL = config.logLevel
 
 const router = new Hono<Env>()
 
+// GET /sessions/unassigned
+router.get('/sessions/unassigned', async (c) => {
+  const store = c.get('store')
+  const limitRaw = c.req.query('limit') ? parseInt(c.req.query('limit')!) : NaN
+  const limit = isNaN(limitRaw) ? undefined : limitRaw
+  const rows = await store.getUnassignedSessions(limit)
+  const sessions = rows.map((r: any) => ({
+    id: r.id,
+    projectId: r.project_id,
+    projectName: r.project_name,
+    projectSlug: r.project_slug,
+    slug: r.slug,
+    transcriptPath: r.transcript_path || null,
+    status: r.status,
+    startedAt: r.started_at,
+    stoppedAt: r.stopped_at,
+    metadata: r.metadata ? JSON.parse(r.metadata) : null,
+    agentCount: r.agent_count,
+    eventCount: r.event_count,
+    lastActivity: r.last_activity,
+    totalInputTokens: r.total_input_tokens || 0,
+    totalOutputTokens: r.total_output_tokens || 0,
+    totalCacheReadTokens: r.total_cache_read_tokens || 0,
+    totalCacheCreationTokens: r.total_cache_creation_tokens || 0,
+    totalDurationMs: r.total_duration_ms || 0,
+    llmCallCount: r.llm_call_count || 0,
+  }))
+  return c.json(sessions)
+})
+
 // GET /sessions/recent
 router.get('/sessions/recent', async (c) => {
   const store = c.get('store')
-  const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : 20
+  const limitRaw = c.req.query('limit') ? parseInt(c.req.query('limit')!) : NaN
+  const limit = isNaN(limitRaw) ? 20 : limitRaw
   const rows = await store.getRecentSessions(limit)
   const sessions = rows.map((r: any) => ({
     id: r.id,
@@ -55,7 +86,12 @@ router.get('/sessions/recent', async (c) => {
 // GET /sessions/:id
 router.get('/sessions/:id', async (c) => {
   const store = c.get('store')
-  const sessionId = decodeURIComponent(c.req.param('id'))
+  let sessionId: string
+  try {
+    sessionId = decodeURIComponent(c.req.param('id'))
+  } catch {
+    return c.json({ error: 'Invalid URL encoding' }, 400)
+  }
   const row = await store.getSessionById(sessionId)
   if (!row) return apiError(c, 404, 'Session not found')
   return c.json({
@@ -84,7 +120,12 @@ router.get('/sessions/:id', async (c) => {
 // GET /sessions/:id/agents
 router.get('/sessions/:id/agents', async (c) => {
   const store = c.get('store')
-  const sessionId = decodeURIComponent(c.req.param('id'))
+  let sessionId: string
+  try {
+    sessionId = decodeURIComponent(c.req.param('id'))
+  } catch {
+    return c.json({ error: 'Invalid URL encoding' }, 400)
+  }
   const rows = await store.getAgentsForSession(sessionId)
   const agents = rows.map((r: any) => ({
     id: r.id,
@@ -106,7 +147,12 @@ const OPT_IN_FIELDS = new Set(['sessionId', 'createdAt'])
 // GET /sessions/:id/events
 router.get('/sessions/:id/events', async (c) => {
   const store = c.get('store')
-  const sessionId = decodeURIComponent(c.req.param('id'))
+  let sessionId: string
+  try {
+    sessionId = decodeURIComponent(c.req.param('id'))
+  } catch {
+    return c.json({ error: 'Invalid URL encoding' }, 400)
+  }
   const sinceParam = c.req.query('since')
   const agentIdParam = c.req.query('agentId')
   const fieldsParam = c.req.query('fields')
@@ -118,15 +164,19 @@ router.get('/sessions/:id/events', async (c) => {
       .filter((f) => OPT_IN_FIELDS.has(f)),
   )
 
-  const rows = sinceParam
-    ? await store.getEventsSince(sessionId, parseInt(sinceParam))
+  const sinceVal = sinceParam ? parseInt(sinceParam) : NaN
+  const limitRaw = c.req.query('limit') ? parseInt(c.req.query('limit')!) : NaN
+  const offsetRaw = c.req.query('offset') ? parseInt(c.req.query('offset')!) : NaN
+
+  const rows = !isNaN(sinceVal)
+    ? await store.getEventsSince(sessionId, sinceVal)
     : await store.getEventsForSession(sessionId, {
         agentIds: agentIdParam ? agentIdParam.split(',') : undefined,
         type: c.req.query('type') || undefined,
         subtype: c.req.query('subtype') || undefined,
         search: c.req.query('search') || undefined,
-        limit: c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined,
-        offset: c.req.query('offset') ? parseInt(c.req.query('offset')!) : undefined,
+        limit: isNaN(limitRaw) ? undefined : limitRaw,
+        offset: isNaN(offsetRaw) ? undefined : offsetRaw,
       })
 
   interface EventRow {
@@ -161,6 +211,16 @@ router.get('/sessions/:id/events', async (c) => {
   })
 
   // Lazy session status correction based on event history.
+  //
+  // This GET handler intentionally mutates session status.  While
+  // status is normally set during POST /api/events, a session can
+  // become stale if the server restarts mid-session or if an event
+  // is lost.  Rather than run a periodic sweep, we correct status
+  // on read — cheap (one extra DB query) and self-healing.
+  //
+  // The guard below only fetches the session row when the event
+  // scan suggests a potential mismatch, so the common case (status
+  // already correct) avoids the extra write entirely.
   if (events.length > 0) {
     let lastSessionEndIdx = -1
     for (let i = events.length - 1; i >= 0; i--) {
@@ -169,22 +229,34 @@ router.get('/sessions/:id/events', async (c) => {
         break
       }
     }
-    const session = await store.getSessionById(sessionId)
-    if (session) {
-      if (
-        lastSessionEndIdx >= 0 &&
-        lastSessionEndIdx === events.length - 1 &&
-        session.status === 'active'
-      ) {
-        await store.updateSessionStatus(sessionId, 'stopped')
-      } else if (
-        lastSessionEndIdx >= 0 &&
-        lastSessionEndIdx < events.length - 1 &&
-        session.status === 'stopped'
-      ) {
-        await store.updateSessionStatus(sessionId, 'active')
-      } else if (lastSessionEndIdx < 0 && session.status === 'stopped') {
-        await store.updateSessionStatus(sessionId, 'active')
+
+    // Only query session when the event scan suggests staleness:
+    // - last event is SessionEnd → session might still be 'active'
+    // - last event is NOT SessionEnd (or prior stop) → session might be 'stopped'
+    // - no SessionEnd anywhere → session might be 'stopped'
+    const mightNeedCorrection =
+      (lastSessionEndIdx >= 0 && lastSessionEndIdx === events.length - 1) ||
+      (lastSessionEndIdx >= 0 && lastSessionEndIdx < events.length - 1) ||
+      lastSessionEndIdx < 0
+
+    if (mightNeedCorrection) {
+      const session = await store.getSessionById(sessionId)
+      if (session) {
+        if (
+          lastSessionEndIdx >= 0 &&
+          lastSessionEndIdx === events.length - 1 &&
+          session.status === 'active'
+        ) {
+          await store.updateSessionStatus(sessionId, 'stopped')
+        } else if (
+          lastSessionEndIdx >= 0 &&
+          lastSessionEndIdx < events.length - 1 &&
+          session.status === 'stopped'
+        ) {
+          await store.updateSessionStatus(sessionId, 'active')
+        } else if (lastSessionEndIdx < 0 && session.status === 'stopped') {
+          await store.updateSessionStatus(sessionId, 'active')
+        }
       }
     }
   }
@@ -195,7 +267,12 @@ router.get('/sessions/:id/events', async (c) => {
 // GET /sessions/:id/usage
 router.get('/sessions/:id/usage', async (c) => {
   const store = c.get('store')
-  const sessionId = decodeURIComponent(c.req.param('id'))
+  let sessionId: string
+  try {
+    sessionId = decodeURIComponent(c.req.param('id'))
+  } catch {
+    return c.json({ error: 'Invalid URL encoding' }, 400)
+  }
   const usage = await store.getSessionUsage(sessionId)
   if (!usage) return apiError(c, 404, 'Session not found')
   return c.json(usage)
@@ -204,21 +281,45 @@ router.get('/sessions/:id/usage', async (c) => {
 // GET /sessions/:id/context — per-turn context attribution breakdown
 router.get('/sessions/:id/context', async (c) => {
   const store = c.get('store')
-  const sessionId = decodeURIComponent(c.req.param('id'))
+  let sessionId: string
+  try {
+    sessionId = decodeURIComponent(c.req.param('id'))
+  } catch {
+    return c.json({ error: 'Invalid URL encoding' }, 400)
+  }
   const session = await store.getSessionById(sessionId)
   if (!session) return apiError(c, 404, 'Session not found')
-  const events = await store.getEventsForSession(sessionId)
+  const MAX_CONTEXT_EVENTS = 10_000
+  const events = await store.getEventsForSession(sessionId, {
+    limit: MAX_CONTEXT_EVENTS,
+  })
+  if (events.length >= MAX_CONTEXT_EVENTS) {
+    return apiError(
+      c,
+      413,
+      `Session has too many events (>= ${MAX_CONTEXT_EVENTS}) for context computation`,
+    )
+  }
   const breakdown = computeSessionContext(events)
   return c.json(breakdown)
 })
 
 // PATCH /sessions/:id — update session table fields (slug, projectId)
 router.patch('/sessions/:id', async (c) => {
+  const contentType = c.req.header('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    return c.json({ error: 'Content-Type must be application/json' }, 415)
+  }
   const store = c.get('store')
   const broadcastToAll = c.get('broadcastToAll')
 
   try {
-    const sessionId = decodeURIComponent(c.req.param('id'))
+    let sessionId: string
+    try {
+      sessionId = decodeURIComponent(c.req.param('id'))
+    } catch {
+      return c.json({ error: 'Invalid URL encoding' }, 400)
+    }
     const data = (await c.req.json()) as Record<string, unknown>
 
     if (typeof data.slug === 'string') {
@@ -230,7 +331,10 @@ router.patch('/sessions/:id', async (c) => {
         console.log(`[METADATA] Session ${sessionId.slice(0, 8)} slug: ${slug}`)
       }
 
-      broadcastToAll({ type: 'session_update', data: { id: sessionId, slug } as any })
+      broadcastToAll({
+        type: 'session_update',
+        data: { id: sessionId, slug } as any,
+      })
     }
 
     if (data.projectId && typeof data.projectId === 'number') {
@@ -249,10 +353,19 @@ router.patch('/sessions/:id', async (c) => {
 
 // PATCH /sessions/:id/metadata — merge keys into session metadata JSON
 router.patch('/sessions/:id/metadata', async (c) => {
+  const contentType = c.req.header('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    return c.json({ error: 'Content-Type must be application/json' }, 415)
+  }
   const store = c.get('store')
 
   try {
-    const sessionId = decodeURIComponent(c.req.param('id'))
+    let sessionId: string
+    try {
+      sessionId = decodeURIComponent(c.req.param('id'))
+    } catch {
+      return c.json({ error: 'Invalid URL encoding' }, 400)
+    }
     const patch = (await c.req.json()) as Record<string, unknown>
 
     if (!patch || typeof patch !== 'object' || Object.keys(patch).length === 0) {
