@@ -1,15 +1,15 @@
 # OpenClaude Observe
 # Usage: just <recipe>
 #
-# AGENTS_OBSERVE_SERVER_PORT & AGENTS_OBSERVE_DEV_CLIENT_PORT are read from .env
+# OPENCLAUDE_OBSERVE_SERVER_PORT & OPENCLAUDE_OBSERVE_DEV_CLIENT_PORT are read from .env
 # to override the defaults (4981 / 5174).
 
 set dotenv-load := true
 set export := true
 set quiet := true
 
-port := env("AGENTS_OBSERVE_SERVER_PORT", "4981")
-dev_client_port := env("AGENTS_OBSERVE_DEV_CLIENT_PORT", "5174")
+port := env("OPENCLAUDE_OBSERVE_SERVER_PORT", "4981")
+dev_client_port := env("OPENCLAUDE_OBSERVE_DEV_CLIENT_PORT", "5174")
 project_root := justfile_directory()
 server := project_root / "app" / "server"
 client := project_root / "app" / "client"
@@ -27,11 +27,11 @@ install:
 
 # Start server + client in dev mode (hot reload)
 dev:
-    AGENTS_OBSERVE_RUNTIME=dev AGENTS_OBSERVE_SHUTDOWN_DELAY_MS=${AGENTS_OBSERVE_SHUTDOWN_DELAY_MS:-0} node {{ project_root }}/start.mjs
+    OPENCLAUDE_OBSERVE_RUNTIME=dev OPENCLAUDE_OBSERVE_SHUTDOWN_DELAY_MS=${OPENCLAUDE_OBSERVE_SHUTDOWN_DELAY_MS:-0} node {{ project_root }}/start.mjs
 
 # Start server locally without Docker (production-style)
 start-local:
-    AGENTS_OBSERVE_RUNTIME=local node {{ project_root }}/start.mjs
+    OPENCLAUDE_OBSERVE_RUNTIME=local node {{ project_root }}/start.mjs
 
 # ─── Docker ─────────────────────────────────────────────
 
