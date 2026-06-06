@@ -60,7 +60,6 @@ which are read by `docker-compose.yml`.
 | `OPENCLAUDE_OBSERVE_SERVER_PORT` | `4981` | Server port (dev + Docker) |
 | `OPENCLAUDE_OBSERVE_DEV_CLIENT_PORT` | `5174` | Vite dev client port |
 | `OPENCLAUDE_OBSERVE_RUNTIME` | `docker` | Runtime mode: `docker`, `local`, or `dev` |
-| `OPENCLAUDE_OBSERVE_SHUTDOWN_DELAY_MS` | `30000` | Auto-shutdown after last consumer disconnects; `0` disables |
 | `OPENCLAUDE_OBSERVE_LOG_LEVEL` | `warn` | `warn`, `debug`, or `trace` |
 | `OPENCLAUDE_OBSERVE_DB_PATH` | `data/observe.db` | SQLite database path |
 | `OPENCLAUDE_OBSERVE_DATA_DIR` | (DB dir) | Persistent state dir outside the DB — currently the models.dev pricing cache. Defaults to the DB's directory; also the host dir bind-mounted to `/data` in compose |
@@ -71,6 +70,35 @@ which are read by `docker-compose.yml`.
 | `OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS` | `1` | `1` enables on-demand transcript token/cost stats; `0` disables |
 | `OPENCLAUDE_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE` | `$HOME/.claude/projects` | _(compose only)_ host transcripts dir, bind-mounted read-only into the container |
 | `OPENCLAUDE_OBSERVE_TRANSCRIPT_CLAUDE_CONTAINER_BASE` | `/host/.claude/projects` | _(compose only)_ in-container mount path the DB's host `transcript_path` is translated to |
+| `OPENCLAUDE_OBSERVE_MEMORY` | `1` | `1` enables the Memory browser/editor; `0` disables it (and the RW mount) |
+| `OPENCLAUDE_OBSERVE_MEMORY_CLAUDE_HOST_BASE` | `$HOME/.claude` | Host Claude config dir bind-mounted **read-write** for the Memory feature. In local mode the server reads/writes this path directly |
+| `OPENCLAUDE_OBSERVE_MEMORY_CLAUDE_CONTAINER_BASE` | `/host-rw/.claude` | _(compose only)_ in-container mount point the Memory feature reads/writes |
+
+## Memory browser
+
+The **Memory** sidebar tab is a full-page browser/editor for OpenClaude's
+file-based memory (the new feature; see `app/server/src/services/memory-store.ts`
+and `app/client/src/components/memory/`). It surfaces three kinds of store under
+`~/.claude`:
+
+- **Project memory** — each `projects/<slug>/memory/` directory (the per-fact
+  `.md` files + the `MEMORY.md` index). Slugs are correlated to observe projects
+  via each project's `transcript_path`.
+- **Global** — the user-level `~/.claude/CLAUDE.md` (+ `CLAUDE.local.md`).
+- **Agent memory** — `~/.claude/agent-memory/<type>/MEMORY.md`.
+
+Files are read/written straight to disk (atomic temp-file-then-rename), with
+every path funnelled through `resolveWithin()` so nothing can escape its store
+directory. Frontmatter is parsed/serialized server-side with `yaml`; the editor
+offers a structured form (schema-adaptive — handles both the `metadata:`-wrapper
+auto-memory schema and the flat memdir schema) plus a raw-markdown toggle and a
+live preview with clickable `[[wikilinks]]`.
+
+Because editing requires write access, the feature uses its **own** read-write
+bind mount of `~/.claude` (`/host-rw/.claude`), separate from the read-only
+transcript mount. Set `OPENCLAUDE_OBSERVE_MEMORY=0` to disable the feature and
+drop that mount. In `just dev` (local runtime) the server reads `~/.claude`
+directly — no mount needed.
 
 ## Worktrees
 

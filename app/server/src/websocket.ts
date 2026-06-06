@@ -2,7 +2,6 @@ import { WebSocketServer, WebSocket } from 'ws'
 import type { Server } from 'http'
 import type { WSClientMessage } from './types'
 import { config } from './config'
-import { checkShutdown, cancelPendingShutdown } from './consumer-tracker'
 
 const LOG_LEVEL = config.logLevel
 
@@ -22,7 +21,6 @@ export function attachWebSocket(server: Server) {
     }
     allClients.add(ws)
     lastPongByClient.set(ws, Date.now())
-    cancelPendingShutdown()
     console.log(`[WS] Client connected (${allClients.size} total)`)
 
     ws.on('pong', () => {
@@ -60,7 +58,6 @@ export function attachWebSocket(server: Server) {
       clientSessions.delete(ws)
       lastPongByClient.delete(ws)
       console.log(`[WS] Client disconnected (${allClients.size} remaining)`)
-      checkShutdown()
     })
 
     ws.on('error', () => {

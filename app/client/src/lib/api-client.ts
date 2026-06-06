@@ -8,6 +8,7 @@ import type {
   NotificationPayload,
   Filter,
 } from '@/types'
+import type { MemoryStore, MemoryFileHeader, MemoryFile, MemorySearchHit } from '@/types/memory'
 
 /**
  * Rich error thrown by all api.* methods on failure. Carries the HTTP status,
@@ -267,7 +268,75 @@ export const api = {
   duplicateFilter: (id: string) =>
     fetchJson<Filter>(`/filters/${encodeURIComponent(id)}/duplicate`, { method: 'POST' }),
   resetDefaultFilters: () => fetchJson<Filter[]>(`/filters/defaults/reset`, { method: 'POST' }),
+
+  // ── Memory browser/editor ──
+  // listStores returns a discriminated union: when the feature is disabled or
+  // unconfigured the server replies 404, which the UI renders as an explainer
+  // rather than a toast-worthy error.
+  memory: {
+    listStores: async (): Promise<MemoryStoresResponse> => {
+      const res = await fetch(`${API_BASE}/memory/stores`)
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        return {
+          ok: false,
+          status: res.status,
+          error: (body.error as MemoryDisabledCode) ?? 'unknown',
+          message: body.message ?? 'Unknown error',
+        }
+      }
+      return { ok: true, stores: (body.stores ?? []) as MemoryStore[] }
+    },
+    listFiles: (storeId: string) =>
+      fetchJson<{ storeId: string; files: MemoryFileHeader[] }>(
+        `/memory/stores/${encodeURIComponent(storeId)}/files`,
+      ),
+    search: (query: string, limit = 100) =>
+      fetchJson<{ hits: MemorySearchHit[] }>(
+        `/memory/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+      ),
+    getFile: (storeId: string, relPath: string) =>
+      fetchJson<MemoryFile>(
+        `/memory/stores/${encodeURIComponent(storeId)}/file?path=${encodeURIComponent(relPath)}`,
+      ),
+    saveFile: (
+      storeId: string,
+      relPath: string,
+      payload: { content: string } | { frontmatter: Record<string, unknown> | null; body: string },
+    ) =>
+      fetchJson<MemoryFile>(
+        `/memory/stores/${encodeURIComponent(storeId)}/file?path=${encodeURIComponent(relPath)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      ),
+    createFile: (
+      storeId: string,
+      payload: { name: string } & (
+        | { content: string }
+        | { frontmatter: Record<string, unknown> | null; body: string }
+      ),
+    ) =>
+      fetchJson<MemoryFile>(`/memory/stores/${encodeURIComponent(storeId)}/file`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+    deleteFile: (storeId: string, relPath: string) =>
+      fetchVoid(
+        `/memory/stores/${encodeURIComponent(storeId)}/file?path=${encodeURIComponent(relPath)}`,
+        { method: 'DELETE' },
+      ),
+  },
 }
+
+export type MemoryDisabledCode = 'disabled' | 'not_configured' | 'unknown'
+
+export type MemoryStoresResponse =
+  | { ok: true; stores: MemoryStore[] }
+  | { ok: false; status: number; error: MemoryDisabledCode; message: string }
 
 // ── Transcript stats types (V2: matches server transcript-parser) ──
 
