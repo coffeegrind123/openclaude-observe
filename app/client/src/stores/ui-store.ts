@@ -179,7 +179,6 @@ interface UIState {
   talkMode: boolean
   setTalkMode: (on: boolean) => void
 
-
   // Icon customization reactivity
   iconCustomizationVersion: number
   bumpIconCustomizationVersion: () => void
@@ -188,7 +187,7 @@ interface UIState {
   // broadcasts an `activity` WS message for a session. In-memory only;
   // no persistence. Sidebar components subscribe to the specific
   // session's count and play a one-shot pulse animation when it
-  // changes. See docs/superpowers/specs/2026-04-24-session-activity-pings-design.md.
+  // changes.
   sessionPulses: Record<string, number>
   pulseSession: (sessionId: string) => void
 
@@ -199,8 +198,8 @@ interface UIState {
   setLatestVersion: (version: string) => void
 }
 
-const PINNED_STORAGE_KEY = 'agents-observe-pinned-sessions'
-const REVERSE_FEED_STORAGE_KEY = 'agents-observe-reverse-feed'
+const PINNED_STORAGE_KEY = 'openclaude-observe-pinned-sessions'
+const REVERSE_FEED_STORAGE_KEY = 'openclaude-observe-reverse-feed'
 
 function loadPinnedSessions(): Set<string> {
   try {
@@ -224,8 +223,8 @@ function loadReverseFeed(): boolean {
   }
 }
 
-const LABELS_STORAGE_KEY = 'agents-observe-labels'
-const LABEL_MEMBERSHIP_STORAGE_KEY = 'agents-observe-label-memberships'
+const LABELS_STORAGE_KEY = 'openclaude-observe-labels'
+const LABEL_MEMBERSHIP_STORAGE_KEY = 'openclaude-observe-label-memberships'
 
 function loadLabels(): Label[] {
   try {
@@ -439,34 +438,34 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ editingSessionId: id, editingSessionTab: tab ?? 'details' }),
 
   sidebarTab:
-    (localStorage.getItem('agents-observe-sidebar-tab') as 'projects' | 'labels') || 'projects',
+    (localStorage.getItem('openclaude-observe-sidebar-tab') as 'projects' | 'labels') || 'projects',
   setSidebarTab: (tab) => {
-    localStorage.setItem('agents-observe-sidebar-tab', tab)
+    localStorage.setItem('openclaude-observe-sidebar-tab', tab)
     set({ sidebarTab: tab })
   },
 
   settingsOpen: false,
   // Remember the last tab the user viewed so the gear icon reopens
   // there. Fall back to 'display' (the leftmost tab) on first use.
-  settingsTab: localStorage.getItem('agents-observe-settings-tab') || 'display',
+  settingsTab: localStorage.getItem('openclaude-observe-settings-tab') || 'display',
   openSettings: (tab) => {
     if (tab) {
-      localStorage.setItem('agents-observe-settings-tab', tab)
+      localStorage.setItem('openclaude-observe-settings-tab', tab)
       set({ settingsOpen: true, settingsTab: tab })
     } else {
       set({ settingsOpen: true })
     }
   },
   setSettingsTab: (tab) => {
-    localStorage.setItem('agents-observe-settings-tab', tab)
+    localStorage.setItem('openclaude-observe-settings-tab', tab)
     set({ settingsTab: tab })
   },
   closeSettings: () => set({ settingsOpen: false }),
 
-  lastFilterId: localStorage.getItem('agents-observe-last-filter-id') || null,
+  lastFilterId: localStorage.getItem('openclaude-observe-last-filter-id') || null,
   setLastFilterId: (id) => {
-    if (id) localStorage.setItem('agents-observe-last-filter-id', id)
-    else localStorage.removeItem('agents-observe-last-filter-id')
+    if (id) localStorage.setItem('openclaude-observe-last-filter-id', id)
+    else localStorage.removeItem('openclaude-observe-last-filter-id')
     set({ lastFilterId: id })
   },
 
@@ -479,9 +478,9 @@ export const useUIStore = create<UIState>((set, get) => ({
       lastExpandedEventId: enabled ? null : s.lastExpandedEventId,
     })),
 
-  notificationsEnabled: localStorage.getItem('agents-observe-notifications') !== 'off',
+  notificationsEnabled: localStorage.getItem('openclaude-observe-notifications') !== 'off',
   setNotificationsEnabled: (enabled) => {
-    localStorage.setItem('agents-observe-notifications', enabled ? 'on' : 'off')
+    localStorage.setItem('openclaude-observe-notifications', enabled ? 'on' : 'off')
     set({ notificationsEnabled: enabled })
   },
 
@@ -577,7 +576,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
   labelsModalScrollToId: null,
   openLabelsModal: (scrollToLabelId) => {
-    localStorage.setItem('agents-observe-settings-tab', 'labels')
+    localStorage.setItem('openclaude-observe-settings-tab', 'labels')
     set({
       settingsOpen: true,
       settingsTab: 'labels',

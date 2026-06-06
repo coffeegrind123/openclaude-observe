@@ -14,7 +14,7 @@ router.get('/sessions/:sessionId/transcript-stats', async (c) => {
       {
         error: 'disabled',
         message:
-          'Transcript parsing is disabled. Unset AGENTS_OBSERVE_TRANSCRIPT_STATS (or remove the =0 override) on the server to re-enable.',
+          'Transcript parsing is disabled. Unset OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS (or remove the =0 override) on the server to re-enable.',
       },
       404,
     )
@@ -27,7 +27,7 @@ router.get('/sessions/:sessionId/transcript-stats', async (c) => {
     return c.json({ error: 'no_transcript', message: 'No transcript path found for session.' }, 404)
   }
 
-  const resolved = resolveTranscriptPath(hostPath, config.transcriptStats.bases)
+  const resolved = resolveTranscriptPath(hostPath, config.transcriptStats.base)
 
   let stat
   try {

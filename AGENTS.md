@@ -46,7 +46,7 @@ For dev mode with hot reload: `just dev` (client at http://localhost:5174, API a
 |---------|-----|
 | Server not running | `just start` |
 | Docker not running | Start Docker Desktop, then `just start` |
-| Port conflict | Set `AGENTS_OBSERVE_SERVER_PORT=<port>` in `.env` |
+| Port conflict | Set `OPENCLAUDE_OBSERVE_SERVER_PORT=<port>` in `.env` |
 | Need diagnostics | `just logs` and `just health` |
 | Database issues | `just db-reset` |
 

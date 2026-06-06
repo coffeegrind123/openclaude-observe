@@ -16,7 +16,7 @@ const sharedTmpDir = vi.hoisted(() => {
 })
 const transcriptConfig = vi.hoisted(() => ({
   enabled: true,
-  bases: [] as Array<{ agentClass: string; host: string; container: string }>,
+  base: null as { host: string; container: string } | null,
   maxFileBytes: 100 * 1024 * 1024,
 }))
 vi.mock('../config', () => ({
@@ -84,7 +84,7 @@ function writeFixture(): string {
 describe('GET /api/sessions/:sessionId/transcript-stats', () => {
   beforeEach(() => {
     transcriptConfig.enabled = true
-    transcriptConfig.bases = []
+    transcriptConfig.base = null
     transcriptConfig.maxFileBytes = 100 * 1024 * 1024
     // Mock models.dev fetch so pricing resolves deterministically.
     vi.stubGlobal(

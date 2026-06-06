@@ -29,9 +29,9 @@ describe('extractProjectDir', () => {
 describe('deriveSlugCandidates', () => {
   test('extracts last two segments from Claude project path', () => {
     const candidates = deriveSlugCandidates(
-      '/Users/joe/.claude/projects/-Users-joe-Development-opik-agent-super-spy-agents-observe',
+      '/Users/joe/.claude/projects/-Users-joe-Development-acme-openclaude-observe',
     )
-    expect(candidates[0]).toBe('agents-observe')
+    expect(candidates[0]).toBe('openclaude-observe')
   })
 
   test('returns progressively longer segments', () => {
@@ -63,30 +63,8 @@ describe('deriveSlugCandidates', () => {
     expect(deriveSlugCandidates('')).toEqual(['unknown'])
   })
 
-  // Codex's transcripts live under /YYYY/MM/DD, so the bare "17"
-  // fallback slug was meaningless — prefer the full date string.
-  test('collapses trailing YYYY/MM/DD into a single YYYY-MM-DD slug', () => {
-    expect(deriveSlugCandidates('/Users/joe/.codex/sessions/2026/04/17/abc-123.jsonl')).toEqual([
-      '2026-04-17',
-    ])
-  })
-
-  test('zero-pads single-digit month/day', () => {
-    expect(deriveSlugCandidates('/Users/joe/.codex/sessions/2026/4/7/session.jsonl')).toEqual([
-      '2026-04-07',
-    ])
-  })
-
-  test('matches directory path without a filename', () => {
-    expect(deriveSlugCandidates('/Users/joe/.codex/sessions/2026/04/17')).toEqual(['2026-04-17'])
-  })
-
-  test('tolerates trailing slash on the directory', () => {
-    expect(deriveSlugCandidates('/Users/joe/.codex/sessions/2026/04/17/')).toEqual(['2026-04-17'])
-  })
-
-  test('does not match when the date is not at the tail', () => {
-    // /projects/2026/04/17/my-app — last segment is "my-app", not a date
+  test('uses the last path segment of a date-style dir', () => {
+    // /projects/2026/04/17/my-app — last segment is "my-app"
     const candidates = deriveSlugCandidates('/Users/joe/projects/2026/04/17/my-app')
     expect(candidates[0]).toBe('my-app')
   })

@@ -121,7 +121,7 @@ router.delete('/projects/:id', async (c) => {
 })
 
 // DELETE /data — delete all data (projects, sessions, agents, events)
-// Controlled by AGENTS_OBSERVE_ALLOW_DB_RESET: allow | deny | backup (default)
+// Controlled by OPENCLAUDE_OBSERVE_ALLOW_DB_RESET: allow | deny | backup (default)
 router.delete('/data', async (c) => {
   const store = c.get('store')
   const policy = config.allowDbReset
@@ -129,7 +129,7 @@ router.delete('/data', async (c) => {
   if (policy !== 'allow' && policy !== 'backup') {
     return apiError(c, 403, 'Database reset is disabled', {
       code: 'DB_RESET_DENIED',
-      details: 'Set AGENTS_OBSERVE_ALLOW_DB_RESET=allow or backup to enable',
+      details: 'Set OPENCLAUDE_OBSERVE_ALLOW_DB_RESET=allow or backup to enable',
     })
   }
 

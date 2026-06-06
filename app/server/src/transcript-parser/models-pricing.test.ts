@@ -38,11 +38,11 @@ beforeEach(async () => {
   vi.resetModules()
   // Isolate the on-disk cache to a fresh tmp dir per test.
   tmpDir = mkdtempSync(join(tmpdir(), 'models-pricing-'))
-  process.env.AGENTS_OBSERVE_DATA_DIR = tmpDir
+  process.env.OPENCLAUDE_OBSERVE_DATA_DIR = tmpDir
 })
 
 afterEach(() => {
-  delete process.env.AGENTS_OBSERVE_DATA_DIR
+  delete process.env.OPENCLAUDE_OBSERVE_DATA_DIR
   try {
     rmSync(tmpDir, { recursive: true, force: true })
   } catch {}
@@ -58,7 +58,8 @@ describe('getModelsPricing', () => {
     const map = await getModelsPricing()
     expect(map['claude-opus-4-7']).toBeDefined()
     expect(map['claude-haiku-4-5']).toBeDefined()
-    // GPT models now appear too — codex sessions use them.
+    // Non-anthropic providers are extracted too — models.dev exposes
+    // every provider and we key purely on the presence of cost data.
     expect(map['gpt-5.4']).toBeDefined()
     expect(map['gpt-4o']).toBeDefined()
   })
@@ -227,25 +228,6 @@ describe('extractAllPricing (pure)', () => {
       cacheReadPerM: 0.1,
       cacheCreate5mPerM: 1.25,
       cacheCreate1hPerM: 1.25,
-    })
-  })
-
-  test('canonical-first ordering: openai wins over resellers for gpt- ids', async () => {
-    const { extractAllPricing } = await import('./models-pricing')
-    const result = extractAllPricing({
-      cheap_reseller: {
-        models: { 'gpt-5.4': { cost: { input: 0.01, output: 0.01 } } },
-      },
-      openai: {
-        models: { 'gpt-5.4': { cost: { input: 2.5, output: 15, cache_read: 0.25 } } },
-      },
-    })
-    expect(result['gpt-5.4']).toEqual({
-      inputPerM: 2.5,
-      outputPerM: 15,
-      cacheReadPerM: 0.25,
-      cacheCreate5mPerM: 0,
-      cacheCreate1hPerM: 0,
     })
   })
 

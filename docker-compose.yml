@@ -9,32 +9,32 @@ services:
       dockerfile: Dockerfile
     container_name: openclaude-observe
     environment:
-      AGENTS_OBSERVE_SERVER_PORT: "${AGENTS_OBSERVE_SERVER_PORT:-4981}"
-      AGENTS_OBSERVE_DB_PATH: /data/observe.db
-      AGENTS_OBSERVE_CLIENT_DIST_PATH: /app/client/dist
-      AGENTS_OBSERVE_LOG_LEVEL: "${AGENTS_OBSERVE_LOG_LEVEL:-debug}"
-      AGENTS_OBSERVE_RUNTIME: docker
+      OPENCLAUDE_OBSERVE_SERVER_PORT: "${OPENCLAUDE_OBSERVE_SERVER_PORT:-4981}"
+      OPENCLAUDE_OBSERVE_DB_PATH: /data/observe.db
+      OPENCLAUDE_OBSERVE_CLIENT_DIST_PATH: /app/client/dist
+      OPENCLAUDE_OBSERVE_LOG_LEVEL: "${OPENCLAUDE_OBSERVE_LOG_LEVEL:-debug}"
+      OPENCLAUDE_OBSERVE_RUNTIME: docker
       # Bind to all interfaces inside the container so Docker's published
       # port can reach the server. The container network namespace is the
       # boundary here; the default 'localhost' bind is only listenable from
       # inside the container and yields ERR_EMPTY_RESPONSE on the host.
-      AGENTS_OBSERVE_SERVER_HOST: "${AGENTS_OBSERVE_SERVER_HOST:-0.0.0.0}"
+      OPENCLAUDE_OBSERVE_SERVER_HOST: "${OPENCLAUDE_OBSERVE_SERVER_HOST:-0.0.0.0}"
       # Idle auto-shutdown after the last dashboard/OpenClaude consumer
       # disconnects. Default 30s; set to 0 (or below) to keep the server
       # running indefinitely — handy while iterating on the dashboard.
-      AGENTS_OBSERVE_SHUTDOWN_DELAY_MS: "${AGENTS_OBSERVE_SHUTDOWN_DELAY_MS:-30000}"
+      OPENCLAUDE_OBSERVE_SHUTDOWN_DELAY_MS: "${OPENCLAUDE_OBSERVE_SHUTDOWN_DELAY_MS:-30000}"
       # Transcript token stats. On-demand parse of ~/.claude/projects JSONL
       # transcripts for per-prompt / per-model token + cost breakdowns.
-      # Set AGENTS_OBSERVE_TRANSCRIPT_STATS=0 to disable. The host base is
+      # Set OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS=0 to disable. The host base is
       # translated to the in-container mount path below; transcript_path
       # values stored in the DB are always host paths.
-      AGENTS_OBSERVE_TRANSCRIPT_STATS: "${AGENTS_OBSERVE_TRANSCRIPT_STATS:-1}"
-      AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE: "${AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE:-${HOME}/.claude/projects}"
-      AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_CONTAINER_BASE: /host/.claude/projects
+      OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS: "${OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS:-1}"
+      OPENCLAUDE_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE: "${OPENCLAUDE_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE:-${HOME}/.claude/projects}"
+      OPENCLAUDE_OBSERVE_TRANSCRIPT_CLAUDE_CONTAINER_BASE: /host/.claude/projects
     ports:
-      - "${AGENTS_OBSERVE_SERVER_PORT:-4981}:${AGENTS_OBSERVE_SERVER_PORT:-4981}"
+      - "${OPENCLAUDE_OBSERVE_SERVER_PORT:-4981}:${OPENCLAUDE_OBSERVE_SERVER_PORT:-4981}"
     volumes:
-      - ${AGENTS_OBSERVE_DATA_DIR:-./data}:/data
+      - ${OPENCLAUDE_OBSERVE_DATA_DIR:-./data}:/data
       # Read-only mount of the host's Claude transcripts so the server can
       # parse them for the Token Usage stats panel.
-      - ${AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE:-${HOME}/.claude/projects}:/host/.claude/projects:ro
+      - ${OPENCLAUDE_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE:-${HOME}/.claude/projects}:/host/.claude/projects:ro

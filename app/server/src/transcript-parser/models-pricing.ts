@@ -103,8 +103,8 @@ async function writeDiskCache(body: unknown): Promise<void> {
 /**
  * Walk every top-level provider in the api.json response and extract
  * pricing for any model that has a `cost` block. Claude allows
- * third-party model providers, and codex uses openai — so we don't
- * filter by provider name, just by presence of cost data.
+ * third-party model providers, so we don't filter by provider name —
+ * just by presence of cost data.
  *
  * The api.json shape: `{ <providerSlug>: { models: { <modelId>: { cost: { input, output, cache_read?, cache_write? } } } } }`.
  *
@@ -112,13 +112,12 @@ async function writeDiskCache(body: unknown): Promise<void> {
  * under many providers (anthropic, plus resellers like helicone /
  * 302ai / qihang-ai / etc.). Reseller prices vary wildly. To avoid
  * an arbitrary reseller's price clobbering the canonical one, we
- * iterate `anthropic` and `openai` first and use first-write-wins;
- * other providers fill in models the canonicals don't list.
+ * iterate `anthropic` first and use first-write-wins; other providers
+ * fill in models anthropic doesn't list.
  *
  * Cache write / 5m / 1h: models.dev currently exposes one rate
  * (`cache_write` or `cache_creation`); we copy it into both 5m and 1h
- * fields. Providers without a cache_write rate get 0. OpenAI never
- * bills cache_write.
+ * fields. Providers without a cache_write rate get 0.
  */
 export function extractAllPricing(body: unknown): Record<string, ModelPricing> {
   const out: Record<string, ModelPricing> = {}
@@ -126,12 +125,11 @@ export function extractAllPricing(body: unknown): Record<string, ModelPricing> {
 
   const root = body as Record<string, unknown>
   const allProviders = Object.keys(root)
-  // Canonical-first ordering: anthropic + openai (the providers we
-  // ship support for) win when the same model id appears in multiple
-  // sections. Everything else fills in remaining ids.
+  // Canonical-first ordering: anthropic wins when the same model id
+  // appears in multiple sections. Everything else fills in remaining ids.
   const ordered = [
-    ...['anthropic', 'openai'].filter((p) => p in root),
-    ...allProviders.filter((p) => p !== 'anthropic' && p !== 'openai'),
+    ...['anthropic'].filter((p) => p in root),
+    ...allProviders.filter((p) => p !== 'anthropic'),
   ]
 
   for (const providerKey of ordered) {

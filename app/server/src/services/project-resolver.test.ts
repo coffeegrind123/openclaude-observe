@@ -113,7 +113,7 @@ describe('resolveProject', () => {
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: null,
-      transcriptPath: '/Users/joe/.codex/sessions/2026/04/17/xxx.jsonl',
+      transcriptPath: '/Users/joe/.claude/projects/-Users-joe-other/xxx.jsonl',
       cwd: '/Users/joe/Development/my-app',
     })
     expect(result.projectId).toBe(existingId)
@@ -125,7 +125,7 @@ describe('resolveProject', () => {
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: null,
-      transcriptPath: '/Users/joe/.codex/sessions/2026/04/17/xxx.jsonl',
+      transcriptPath: '/Users/joe/.claude/projects/-Users-joe-other/xxx.jsonl',
       cwd: '/Users/joe/Development/my-app',
     })
     expect(result.projectSlug).toBe('my-app')
@@ -162,13 +162,13 @@ describe('resolveProject', () => {
     await store.createProject(
       'path-match',
       'path-match',
-      '/Users/joe/.codex/sessions/2026/04/17',
+      '/Users/joe/.claude/projects/-Users-joe-other',
       null,
     )
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: null,
-      transcriptPath: '/Users/joe/.codex/sessions/2026/04/17/xxx.jsonl',
+      transcriptPath: '/Users/joe/.claude/projects/-Users-joe-other/xxx.jsonl',
       cwd: '/Users/joe/Development/my-app',
     })
     expect(result.projectId).toBe(cwdProject)

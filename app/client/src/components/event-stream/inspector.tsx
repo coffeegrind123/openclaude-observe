@@ -5,11 +5,7 @@ import { useEffectiveEvents } from '@/hooks/use-effective-events'
 import { useAgents } from '@/hooks/use-agents'
 import { useDedupedEvents } from '@/hooks/use-deduped-events'
 import { computeRuntimeMs } from '@/lib/runtime'
-import {
-  buildAgentColorMap,
-  getAgentStreamColorById,
-  getAgentDisplayName,
-} from '@/lib/agent-utils'
+import { buildAgentColorMap, getAgentStreamColorById, getAgentDisplayName } from '@/lib/agent-utils'
 import { EventDetail } from './event-detail'
 import type { Agent } from '@/types'
 

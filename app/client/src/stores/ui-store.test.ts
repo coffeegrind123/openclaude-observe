@@ -364,7 +364,7 @@ describe('ui-store', () => {
 
   describe('sidebar Projects/Labels tab', () => {
     beforeEach(() => {
-      localStorage.removeItem('agents-observe-sidebar-tab')
+      localStorage.removeItem('openclaude-observe-sidebar-tab')
       useUIStore.setState({ sidebarTab: 'projects' })
     })
 
@@ -381,9 +381,9 @@ describe('ui-store', () => {
 
     it('setSidebarTab persists to localStorage', () => {
       useUIStore.getState().setSidebarTab('labels')
-      expect(localStorage.getItem('agents-observe-sidebar-tab')).toBe('labels')
+      expect(localStorage.getItem('openclaude-observe-sidebar-tab')).toBe('labels')
       useUIStore.getState().setSidebarTab('projects')
-      expect(localStorage.getItem('agents-observe-sidebar-tab')).toBe('projects')
+      expect(localStorage.getItem('openclaude-observe-sidebar-tab')).toBe('projects')
     })
   })
 
@@ -485,8 +485,8 @@ describe('ui-store', () => {
 
   describe('labels', () => {
     beforeEach(() => {
-      localStorage.removeItem('agents-observe-labels')
-      localStorage.removeItem('agents-observe-label-memberships')
+      localStorage.removeItem('openclaude-observe-labels')
+      localStorage.removeItem('openclaude-observe-label-memberships')
       useUIStore.setState({
         labels: [],
         labelMemberships: new Map(),
@@ -516,7 +516,7 @@ describe('ui-store', () => {
 
     it('persists labels to localStorage', () => {
       useUIStore.getState().createLabel('auth')
-      const raw = localStorage.getItem('agents-observe-labels')
+      const raw = localStorage.getItem('openclaude-observe-labels')
       expect(raw).toBeTruthy()
       const parsed = JSON.parse(raw!) as { name: string }[]
       expect(parsed[0].name).toBe('auth')
@@ -530,7 +530,7 @@ describe('ui-store', () => {
       expect(useUIStore.getState().getLabelsForSession('sess-1')).toHaveLength(0)
 
       useUIStore.getState().toggleSessionLabel(label.id, 'sess-2')
-      const raw = localStorage.getItem('agents-observe-label-memberships')
+      const raw = localStorage.getItem('openclaude-observe-label-memberships')
       expect(raw).toBeTruthy()
       const parsed = JSON.parse(raw!) as Record<string, string[]>
       expect(parsed[label.id]).toEqual(['sess-2'])

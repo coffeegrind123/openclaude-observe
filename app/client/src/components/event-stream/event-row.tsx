@@ -170,7 +170,8 @@ export const EventRow = memo(function EventRow({
   if (chatMsg) {
     if (chatMsg.kind === 'user') proseText = chatMsg.text
     else if (chatMsg.kind === 'assistant' && isLLM) proseText = chatMsg.text || null
-    else if (chatMsg.kind === 'subagent-start') proseText = chatMsg.prompt || chatMsg.description || null
+    else if (chatMsg.kind === 'subagent-start')
+      proseText = chatMsg.prompt || chatMsg.description || null
     else if (chatMsg.kind === 'subagent-stop') proseText = chatMsg.text || null
     else if (chatMsg.kind === 'task') proseText = chatMsg.description || null
     else if (chatMsg.kind === 'status') proseText = chatMsg.reason || null
@@ -251,10 +252,7 @@ export const EventRow = memo(function EventRow({
             />
           )}
           <span
-            className={cn(
-              'block shadow-bead',
-              isLLM ? 'rotate-45 rounded-[2px]' : 'rounded-full',
-            )}
+            className={cn('block shadow-bead', isLLM ? 'rotate-45 rounded-[2px]' : 'rounded-full')}
             style={
               hollow
                 ? {

@@ -21,8 +21,8 @@ import { cn } from '@/lib/utils'
 // their IDs would just accumulate forever).
 // ---------------------------------------------------------------------------
 
-const DISMISSED_KEY = 'agents-observe-notifications-dismissed'
-const LAST_SEEN_KEY = 'agents-observe-notifications-last-seen-ts'
+const DISMISSED_KEY = 'openclaude-observe-notifications-dismissed'
+const LAST_SEEN_KEY = 'openclaude-observe-notifications-last-seen-ts'
 
 function readDismissedIds(): Set<string> {
   try {

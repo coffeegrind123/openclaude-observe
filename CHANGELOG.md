@@ -1,5 +1,25 @@
 # Changelog
 
+## 06.06.2026
+
+De-branded the fork into a tool built purely for OpenClaude: renamed the entire environment-variable namespace, removed the last of the inherited multi-agent (codex) support, and swept the repo of stale artifacts. **This release is breaking** — update any `.env`, `docker-compose` override, or shell export that sets an `AGENTS_OBSERVE_*` variable.
+
+### Breaking: environment namespace
+
+- Every `AGENTS_OBSERVE_*` variable is now `OPENCLAUDE_OBSERVE_*` (33 in all), still centralized in `app/server/src/config.ts`. The producer-side `CLAUDE_OBSERVE_URL` that OpenClaude reads is unchanged.
+- The browser localStorage keys moved from `agents-observe-*` to `openclaude-observe-*`; pinned sessions and labels reset once on first load after upgrading.
+
+### Codex removal
+
+- Dropped the `~/.codex` date-based (`YYYY/MM/DD`) slug collapsing in `utils/slug.ts`.
+- Collapsed the multi-base transcript-path resolver to a single Claude base — `transcriptStats.bases[]` → `transcriptStats.base`, and `resolveTranscriptPath(path, base | null)`.
+- Removed the openai-canonical branch from models.dev pricing (anthropic-first; other providers still resolve generically), and deleted every codex fixture and comment from the source and tests.
+
+### Repo cleanup
+
+- Deleted superseded redesign mockups (`design/`), the upstream port-plan docs (`context/upstream-port-plan/`), the archived plugin / namespace-refactor / fresh-install-test-harness plans, all `docs/plans/` implementation specs, the shipped pulse design doc (`docs/superpowers/`), and the pre-redesign screenshots.
+- Rewrote `README.md` around the Stream UI with a fresh dashboard screenshot, and aligned `package.json`'s version with the `VERSION` file.
+
 ## 04.06.2026
 
 Complete visual redesign of the dashboard — the **"Stream" UI**. A session now reads as a single flowing river of agent activity instead of a boxy two-pane feed: a continuous time-spine with a bead per event, a two-voice type system (monospace telemetry / sans-serif prose), and a restrained palette built on the OpenClaude blue-starburst brand. Both light and dark themes are first-class. Also fixes a Docker port-binding bug that left the published server unreachable.

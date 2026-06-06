@@ -147,7 +147,7 @@ router.post('/events', rateLimit, async (c) => {
         console.log(
           `[event] Session ${parsed.sessionId} references missing project ${effectiveProjectId}; re-resolving`,
         )
-        const projectSlugOverride = meta.env?.AGENTS_OBSERVE_PROJECT_SLUG || null
+        const projectSlugOverride = meta.env?.OPENCLAUDE_OBSERVE_PROJECT_SLUG || null
         const resolved = await resolveProject(store, {
           sessionId: parsed.sessionId,
           slug: projectSlugOverride,
@@ -158,12 +158,11 @@ router.post('/events', rateLimit, async (c) => {
         await store.updateSessionProject(parsed.sessionId, effectiveProjectId)
       } else if (parsed.subtype === 'SessionStart' && eventCwd && !projectStillExists.cwd) {
         // Lazy re-resolve: the session was assigned before we had a cwd,
-        // so the project may have been derived from transcript_path alone
-        // (e.g. Codex's date-based session dir, producing slugs like "17").
+        // so the project may have been derived from transcript_path alone.
         // Now that SessionStart has given us a cwd, try to land on the
         // right project — either an existing cwd-keyed one, or create a
         // new one with a cwd-derived slug.
-        const projectSlugOverride = meta.env?.AGENTS_OBSERVE_PROJECT_SLUG || null
+        const projectSlugOverride = meta.env?.OPENCLAUDE_OBSERVE_PROJECT_SLUG || null
         const resolved = await resolveProject(store, {
           sessionId: parsed.sessionId,
           slug: projectSlugOverride,
@@ -179,7 +178,7 @@ router.post('/events', rateLimit, async (c) => {
         }
       }
     } else {
-      const projectSlugOverride = meta.env?.AGENTS_OBSERVE_PROJECT_SLUG || null
+      const projectSlugOverride = meta.env?.OPENCLAUDE_OBSERVE_PROJECT_SLUG || null
       const resolved = await resolveProject(store, {
         sessionId: parsed.sessionId,
         slug: projectSlugOverride,

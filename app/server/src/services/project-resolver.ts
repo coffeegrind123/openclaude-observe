@@ -116,8 +116,8 @@ export async function resolveProject(
       }
     }
     // Fall through to creation; prefer cwd-derived slug candidates so
-    // the slug reflects the project directory rather than a transcript
-    // storage quirk (e.g. Codex's date-based session dirs).
+    // the slug reflects the project directory rather than the transcript
+    // storage layout.
     const projectDir = transcriptPath ? extractProjectDir(transcriptPath) : null
     const finalSlug = await pickAvailableSlug(store, deriveSlugCandidatesFromCwd(cwd))
     const id = await store.createProject(finalSlug, finalSlug, projectDir, cwd)

@@ -523,7 +523,8 @@ export function EventStream() {
           <>
             <div className="flex items-center gap-2 px-4 py-1.5 shrink-0 font-mono">
               <span className="text-[11px] text-ink-3">
-                <span className="text-foreground font-semibold">{filteredEvents.length}</span> events
+                <span className="text-foreground font-semibold">{filteredEvents.length}</span>{' '}
+                events
                 {showRawCount && (
                   <button
                     type="button"

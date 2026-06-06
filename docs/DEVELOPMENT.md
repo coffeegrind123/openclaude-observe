@@ -39,10 +39,10 @@ In dev mode, client and server run as separate processes on separate ports. In p
 ## Project Structure
 
 ```
-app/server/        # Hono server, SQLite, WebSocket, parser for 22+ event types
+app/server/        # Hono server, SQLite, WebSocket, parser for 28 event types
 app/client/        # React 19 + shadcn dashboard
 scripts/           # Release tooling and changelog generator
-docs/              # This file, plans, and demo assets
+docs/              # This file and demo assets
 Dockerfile         # Production container image
 docker-compose.yml # Primary run path — `docker compose up openclaude-observe`
 justfile           # Task runner commands
@@ -57,20 +57,20 @@ which are read by `docker-compose.yml`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENTS_OBSERVE_SERVER_PORT` | `4981` | Server port (dev + Docker) |
-| `AGENTS_OBSERVE_DEV_CLIENT_PORT` | `5174` | Vite dev client port |
-| `AGENTS_OBSERVE_RUNTIME` | `docker` | Runtime mode: `docker`, `local`, or `dev` |
-| `AGENTS_OBSERVE_SHUTDOWN_DELAY_MS` | `30000` | Auto-shutdown after last consumer disconnects; `0` disables |
-| `AGENTS_OBSERVE_LOG_LEVEL` | `warn` | `warn`, `debug`, or `trace` |
-| `AGENTS_OBSERVE_DB_PATH` | `data/observe.db` | SQLite database path |
-| `AGENTS_OBSERVE_DATA_DIR` | (DB dir) | Persistent state dir outside the DB — currently the models.dev pricing cache. Defaults to the DB's directory; also the host dir bind-mounted to `/data` in compose |
-| `AGENTS_OBSERVE_ALLOW_DB_RESET` | `backup` | DB reset policy: `allow`, `backup`, or `deny` |
-| `AGENTS_OBSERVE_CLIENT_DIST_PATH` | (auto) | Override the client dist directory |
-| `AGENTS_OBSERVE_STORAGE_ADAPTER` | `sqlite` | Storage backend |
-| `AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS` | `Notification` | Comma-separated event subtypes that raise a sidebar/desktop notification (e.g. `Notification,Stop,SubagentStop`) |
-| `AGENTS_OBSERVE_TRANSCRIPT_STATS` | `1` | `1` enables on-demand transcript token/cost stats; `0` disables |
-| `AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE` | `$HOME/.claude/projects` | _(compose only)_ host transcripts dir, bind-mounted read-only into the container |
-| `AGENTS_OBSERVE_TRANSCRIPT_CLAUDE_CONTAINER_BASE` | `/host/.claude/projects` | _(compose only)_ in-container mount path the DB's host `transcript_path` is translated to |
+| `OPENCLAUDE_OBSERVE_SERVER_PORT` | `4981` | Server port (dev + Docker) |
+| `OPENCLAUDE_OBSERVE_DEV_CLIENT_PORT` | `5174` | Vite dev client port |
+| `OPENCLAUDE_OBSERVE_RUNTIME` | `docker` | Runtime mode: `docker`, `local`, or `dev` |
+| `OPENCLAUDE_OBSERVE_SHUTDOWN_DELAY_MS` | `30000` | Auto-shutdown after last consumer disconnects; `0` disables |
+| `OPENCLAUDE_OBSERVE_LOG_LEVEL` | `warn` | `warn`, `debug`, or `trace` |
+| `OPENCLAUDE_OBSERVE_DB_PATH` | `data/observe.db` | SQLite database path |
+| `OPENCLAUDE_OBSERVE_DATA_DIR` | (DB dir) | Persistent state dir outside the DB — currently the models.dev pricing cache. Defaults to the DB's directory; also the host dir bind-mounted to `/data` in compose |
+| `OPENCLAUDE_OBSERVE_ALLOW_DB_RESET` | `backup` | DB reset policy: `allow`, `backup`, or `deny` |
+| `OPENCLAUDE_OBSERVE_CLIENT_DIST_PATH` | (auto) | Override the client dist directory |
+| `OPENCLAUDE_OBSERVE_STORAGE_ADAPTER` | `sqlite` | Storage backend |
+| `OPENCLAUDE_OBSERVE_NOTIFICATION_ON_EVENTS` | `Notification` | Comma-separated event subtypes that raise a sidebar/desktop notification (e.g. `Notification,Stop,SubagentStop`) |
+| `OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS` | `1` | `1` enables on-demand transcript token/cost stats; `0` disables |
+| `OPENCLAUDE_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE` | `$HOME/.claude/projects` | _(compose only)_ host transcripts dir, bind-mounted read-only into the container |
+| `OPENCLAUDE_OBSERVE_TRANSCRIPT_CLAUDE_CONTAINER_BASE` | `/host/.claude/projects` | _(compose only)_ in-container mount path the DB's host `transcript_path` is translated to |
 
 ## Worktrees
 
@@ -79,8 +79,8 @@ When using git worktrees for parallel development, each worktree needs its own p
 Create a `.env` in the worktree root:
 
 ```bash
-AGENTS_OBSERVE_SERVER_PORT=4982
-AGENTS_OBSERVE_DEV_CLIENT_PORT=5179
+OPENCLAUDE_OBSERVE_SERVER_PORT=4982
+OPENCLAUDE_OBSERVE_DEV_CLIENT_PORT=5179
 ```
 
 Pick any unused ports — don't collide with the main checkout (4981/5174) or other worktrees. The `.env` is gitignored. The justfile loads it automatically.

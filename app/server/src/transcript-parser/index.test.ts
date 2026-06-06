@@ -181,9 +181,8 @@ describe('parseSessionTranscripts', () => {
     const store = makeStore({ agents: [{ id: 'sess1', agent_class: 'claude-code' }] })
     const stats = await parseSessionTranscripts('sess1', store, path)
 
-    // promptId in the API response is now the canonical user-prompt
-    // line's uuid (claude-code) — stable across resumes. For codex it's
-    // still the turn_id. See claude.ts walk → node.uuid.
+    // promptId in the API response is the canonical user-prompt line's
+    // uuid — stable across resumes. See claude.ts walk → node.uuid.
     const p1 = stats.prompts.find((p) => p.promptId === 'u1')!
     const p2 = stats.prompts.find((p) => p.promptId === 'u2')!
     expect(p1.durationMs).toBe(10_000) // +10s from prompt to last activity

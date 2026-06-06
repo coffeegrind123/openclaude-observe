@@ -94,7 +94,7 @@ export function broadcastToSession(sessionId: string, message: object): void {
 // doesn't flood the wire with hundreds of pings/second × all clients.
 // The map is process-global (not per-connection): slightly less
 // responsive on cold-start but trivially small memory and simple to
-// reason about. See docs/superpowers/specs/2026-04-24-session-activity-pings-design.md.
+// reason about.
 export const ACTIVITY_PING_THROTTLE_MS = 5_000
 const lastActivityBroadcast = new Map<string, number>()
 

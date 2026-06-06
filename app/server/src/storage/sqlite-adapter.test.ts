@@ -271,7 +271,7 @@ describe('SqliteAdapter — sessions', () => {
     await store.upsertSession('sess1', projId, null, null, 100)
     await store.upsertAgent('sess1', 'sess1', null, null, null)
 
-    // Configurable notifications (AGENTS_OBSERVE_NOTIFICATION_ON_EVENTS) let the
+    // Configurable notifications (OPENCLAUDE_OBSERVE_NOTIFICATION_ON_EVENTS) let the
     // route mark e.g. a Stop event as notifying. The adapter honors the flag
     // regardless of subtype.
     await store.insertEvent({
