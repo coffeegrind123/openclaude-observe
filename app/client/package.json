@@ -33,6 +33,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.0.0",
     "timeago.js": "^4.0.2",
+    "yaml": "^2.9.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

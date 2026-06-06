@@ -6,21 +6,46 @@ import { getServerHealth } from '@/lib/server-health'
 // Session IDs are UUIDs (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function parseHash(): { projectSlug: string | null; sessionId: string | null } {
+interface Route {
+  view: 'observe' | 'memory'
+  projectSlug: string | null
+  sessionId: string | null
+  memoryStoreId: string | null
+  memoryFile: string | null
+}
+
+const EMPTY_ROUTE: Route = {
+  view: 'observe',
+  projectSlug: null,
+  sessionId: null,
+  memoryStoreId: null,
+  memoryFile: null,
+}
+
+function parseHash(): Route {
   const hash = window.location.hash.slice(1)
-  if (!hash || hash === '/') return { projectSlug: null, sessionId: null }
+  if (!hash || hash === '/') return EMPTY_ROUTE
   const parts = hash.split('/').filter(Boolean)
+  // Memory view: #/memory, #/memory/<storeId>, #/memory/<storeId>/<relPath>
+  if (parts[0] === 'memory') {
+    return {
+      ...EMPTY_ROUTE,
+      view: 'memory',
+      memoryStoreId: parts[1] ? decodeURIComponent(parts[1]) : null,
+      memoryFile: parts[2] ? decodeURIComponent(parts[2]) : null,
+    }
+  }
   if (parts.length === 1) {
     // Distinguish between session ID (UUID) and project slug
     if (UUID_RE.test(parts[0])) {
-      return { projectSlug: null, sessionId: parts[0] }
+      return { ...EMPTY_ROUTE, sessionId: parts[0] }
     }
-    return { projectSlug: parts[0], sessionId: null }
+    return { ...EMPTY_ROUTE, projectSlug: parts[0] }
   }
   if (parts.length >= 2) {
-    return { projectSlug: parts[0], sessionId: parts[1] }
+    return { ...EMPTY_ROUTE, projectSlug: parts[0], sessionId: parts[1] }
   }
-  return { projectSlug: null, sessionId: null }
+  return EMPTY_ROUTE
 }
 
 // When true, skip pushState (the URL is already correct from browser navigation)
@@ -38,6 +63,23 @@ function updateHash(projectSlug: string | null, sessionId: string | null) {
   }
   window.history.pushState(null, '', `#${hash}`)
 }
+
+function updateMemoryHash(storeId: string | null, file: string | null) {
+  if (suppressHashPush) return
+  let hash = '/memory'
+  if (storeId) hash += `/${encodeURIComponent(storeId)}`
+  if (storeId && file) hash += `/${encodeURIComponent(file)}`
+  window.history.pushState(null, '', `#${hash}`)
+}
+
+const SIDEBAR_TAB_KEY = 'openclaude-observe-sidebar-tab'
+function persistSidebarTab(tab: SidebarTab) {
+  try {
+    localStorage.setItem(SIDEBAR_TAB_KEY, tab)
+  } catch {}
+}
+
+type SidebarTab = 'projects' | 'labels' | 'memory'
 
 interface SessionFilterState {
   activePrimaryFilters: string[]
@@ -57,6 +99,11 @@ interface UIState {
   setSidebarCollapsed: (collapsed: boolean) => void
   setSidebarWidth: (width: number) => void
 
+  // Top-level view. 'observe' = the session/event dashboard; 'memory' = the
+  // OpenClaude memory browser/editor. Reflected in the URL hash (#/memory).
+  view: 'observe' | 'memory'
+  setView: (view: 'observe' | 'memory') => void
+
   selectedProjectId: number | null
   selectedProjectSlug: string | null
   selectedSessionId: string | null
@@ -67,6 +114,13 @@ interface UIState {
   setSelectedAgentIds: (ids: string[]) => void
   toggleAgentId: (id: string) => void
   removeAgentId: (id: string) => void
+
+  // Memory browser selection — which store (project memory dir / global /
+  // agent) and which file within it are open.
+  memorySelectedStoreId: string | null
+  memorySelectedFile: string | null
+  setMemoryStore: (id: string | null) => void
+  setMemoryFile: (relPath: string | null) => void
 
   activePrimaryFilters: string[] // labels from primary filters
   activeSecondaryFilters: string[] // tool names from secondary filters
@@ -127,10 +181,11 @@ interface UIState {
   closeLabelsModal: () => void
   clearLabelsModalScrollTarget: () => void
 
-  // Sidebar Projects/Labels tab selector — persisted so the sidebar
-  // re-opens on whichever view the user was last using.
-  sidebarTab: 'projects' | 'labels'
-  setSidebarTab: (tab: 'projects' | 'labels') => void
+  // Sidebar Projects/Labels/Memory tab selector — persisted so the sidebar
+  // re-opens on whichever view the user was last using. The Memory tab also
+  // drives the top-level `view`.
+  sidebarTab: SidebarTab
+  setSidebarTab: (tab: SidebarTab) => void
 
   // Settings modal
   settingsOpen: boolean
@@ -278,13 +333,55 @@ function genLabelId(): string {
   return `label-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-const { projectSlug: initialProjectSlug, sessionId: initialSessionId } = parseHash()
+const initialRoute = parseHash()
+const {
+  projectSlug: initialProjectSlug,
+  sessionId: initialSessionId,
+  view: initialView,
+  memoryStoreId: initialMemoryStoreId,
+  memoryFile: initialMemoryFile,
+} = initialRoute
+
+const initialSidebarTab: SidebarTab =
+  initialView === 'memory'
+    ? 'memory'
+    : ((localStorage.getItem(SIDEBAR_TAB_KEY) as SidebarTab) ?? 'projects')
 
 export const useUIStore = create<UIState>((set, get) => ({
   sidebarCollapsed: false,
   sidebarWidth: 260,
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
   setSidebarWidth: (width) => set({ sidebarWidth: width }),
+
+  view: initialView,
+  setView: (view) => {
+    set({ view })
+    if (view === 'memory') {
+      const s = get()
+      updateMemoryHash(s.memorySelectedStoreId, s.memorySelectedFile)
+    } else {
+      const s = get()
+      updateHash(s.selectedProjectSlug, s.selectedSessionId)
+    }
+  },
+
+  memorySelectedStoreId: initialMemoryStoreId,
+  memorySelectedFile: initialMemoryFile,
+  setMemoryStore: (id) => {
+    set({
+      view: 'memory',
+      sidebarTab: 'memory',
+      memorySelectedStoreId: id,
+      memorySelectedFile: null,
+    })
+    persistSidebarTab('memory')
+    updateMemoryHash(id, null)
+  },
+  setMemoryFile: (relPath) => {
+    const storeId = get().memorySelectedStoreId
+    set({ view: 'memory', memorySelectedFile: relPath })
+    updateMemoryHash(storeId, relPath)
+  },
 
   selectedProjectId: null,
   selectedProjectSlug: initialProjectSlug,
@@ -304,7 +401,13 @@ export const useUIStore = create<UIState>((set, get) => ({
     }
 
     const newSlug = slug ?? null
+    // Selecting observe content leaves the memory view. If the sidebar was on
+    // the Memory tab, drop back to Projects so the chrome stays coherent.
+    const nextTab: SidebarTab = state.sidebarTab === 'memory' ? 'projects' : state.sidebarTab
+    if (nextTab !== state.sidebarTab) persistSidebarTab(nextTab)
     set({
+      view: 'observe',
+      sidebarTab: nextTab,
       selectedProjectId: id,
       selectedProjectSlug: newSlug,
       selectedSessionId: null,
@@ -339,7 +442,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     // Auto-exit rewind mode if switching to a different session — frozen events
     // from the old session would be stale.
     const exitingRewind = state.rewindMode && state.selectedSessionId !== id
+    const nextTab: SidebarTab = state.sidebarTab === 'memory' ? 'projects' : state.sidebarTab
+    if (nextTab !== state.sidebarTab) persistSidebarTab(nextTab)
     set({
+      view: 'observe',
+      sidebarTab: nextTab,
       selectedSessionId: id,
       selectedAgentIds: [],
       expandedEventIds: new Set(),
@@ -437,11 +544,18 @@ export const useUIStore = create<UIState>((set, get) => ({
   setEditingSessionId: (id, tab) =>
     set({ editingSessionId: id, editingSessionTab: tab ?? 'details' }),
 
-  sidebarTab:
-    (localStorage.getItem('openclaude-observe-sidebar-tab') as 'projects' | 'labels') || 'projects',
+  sidebarTab: initialSidebarTab,
   setSidebarTab: (tab) => {
-    localStorage.setItem('openclaude-observe-sidebar-tab', tab)
-    set({ sidebarTab: tab })
+    persistSidebarTab(tab)
+    if (tab === 'memory') {
+      const s = get()
+      set({ sidebarTab: tab, view: 'memory' })
+      updateMemoryHash(s.memorySelectedStoreId, s.memorySelectedFile)
+    } else {
+      const s = get()
+      set({ sidebarTab: tab, view: 'observe' })
+      updateHash(s.selectedProjectSlug, s.selectedSessionId)
+    }
   },
 
   settingsOpen: false,
@@ -609,7 +723,20 @@ if (typeof window !== 'undefined') {
   // Seed history for direct URL loads so the back button has somewhere to go.
   // If loading #/project/session, push #/project first (project view),
   // then replace with the full URL. Back then goes to project view.
-  if (initialProjectSlug && initialSessionId) {
+  if (initialView === 'memory') {
+    // Seed history so back from a memory file lands on the memory home.
+    window.history.replaceState(null, '', `#/memory`)
+    if (initialMemoryStoreId) {
+      window.history.pushState(null, '', `#/memory/${encodeURIComponent(initialMemoryStoreId)}`)
+      if (initialMemoryFile) {
+        window.history.pushState(
+          null,
+          '',
+          `#/memory/${encodeURIComponent(initialMemoryStoreId)}/${encodeURIComponent(initialMemoryFile)}`,
+        )
+      }
+    }
+  } else if (initialProjectSlug && initialSessionId) {
     window.history.replaceState(null, '', `#/${initialProjectSlug}`)
     window.history.pushState(null, '', `#/${initialProjectSlug}/${initialSessionId}`)
   } else if (initialProjectSlug) {
@@ -618,17 +745,33 @@ if (typeof window !== 'undefined') {
   }
 
   window.addEventListener('hashchange', () => {
-    const { projectSlug, sessionId } = parseHash()
+    const route = parseHash()
     const state = useUIStore.getState()
     // Suppress pushState during browser-initiated navigation (back/forward)
     // — the URL is already correct, pushing would wipe the forward stack
     suppressHashPush = true
     try {
-      if (projectSlug !== state.selectedProjectSlug) {
-        useUIStore.setState({ selectedProjectSlug: projectSlug })
-      }
-      if (sessionId !== state.selectedSessionId) {
-        state.setSelectedSessionId(sessionId)
+      if (route.view === 'memory') {
+        useUIStore.setState({
+          view: 'memory',
+          sidebarTab: 'memory',
+          memorySelectedStoreId: route.memoryStoreId,
+          memorySelectedFile: route.memoryFile,
+        })
+        persistSidebarTab('memory')
+      } else {
+        const leftMemory = state.view === 'memory'
+        useUIStore.setState({
+          view: 'observe',
+          ...(state.sidebarTab === 'memory' ? { sidebarTab: 'projects' as SidebarTab } : {}),
+        })
+        if (leftMemory && state.sidebarTab === 'memory') persistSidebarTab('projects')
+        if (route.projectSlug !== state.selectedProjectSlug) {
+          useUIStore.setState({ selectedProjectSlug: route.projectSlug })
+        }
+        if (route.sessionId !== state.selectedSessionId) {
+          state.setSelectedSessionId(route.sessionId)
+        }
       }
     } finally {
       suppressHashPush = false

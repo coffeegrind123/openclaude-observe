@@ -94,12 +94,10 @@ export const config = {
       .filter(Boolean),
   ),
 
-  // Auto-shutdown: <= 0 disables, > 0 is delay in ms after last consumer disconnects
-  shutdownDelayMs: parseInt(process.env.OPENCLAUDE_OBSERVE_SHUTDOWN_DELAY_MS || '30000', 10),
-  // Consumer tracker tuning
+  // Consumer tracker tuning. The server never auto-shuts-down; these only
+  // govern how stale consumer heartbeats are reaped for the /health count.
   consumerTtlMs: 30_000,
   sweepIntervalMs: 10_000,
-  startupGraceMs: 60_000,
 
   transcriptStats: {
     enabled: process.env.OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS !== '0',
@@ -115,5 +113,33 @@ export const config = {
     },
     // 100 MB safety cap — defensive, not an expected operating point.
     maxFileBytes: 100 * 1024 * 1024,
+  },
+
+  // Interactive memory browser/editor. Reads and WRITES OpenClaude's
+  // file-based memory under the Claude config dir (~/.claude): per-project
+  // auto-memory (projects/<slug>/memory/*.md + MEMORY.md), the global
+  // instruction file (CLAUDE.md), and global agent memory
+  // (agent-memory/<type>/MEMORY.md). Unlike transcriptStats this surface is
+  // read-write, so in docker it gets its OWN bind mount (read-only transcript
+  // mount stays untouched). Set OPENCLAUDE_OBSERVE_MEMORY=0 to disable.
+  memory: {
+    enabled: process.env.OPENCLAUDE_OBSERVE_MEMORY !== '0',
+    // Bind-mount base for translating the host-side Claude config dir into the
+    // path the server reads/writes inside its runtime. `host` is the real
+    // ~/.claude on the host; `container` is where it's mounted in docker. In
+    // local mode `container` is empty and the server uses `host` directly.
+    base: {
+      host: (
+        process.env.OPENCLAUDE_OBSERVE_MEMORY_CLAUDE_HOST_BASE ||
+        (process.env.HOME ? `${process.env.HOME}/.claude` : '')
+      ).replace(/\/$/, ''),
+      container: (process.env.OPENCLAUDE_OBSERVE_MEMORY_CLAUDE_CONTAINER_BASE || '').replace(
+        /\/$/,
+        '',
+      ),
+    },
+    // 2 MB per-file cap — memory facts are small prose files; this guards
+    // against accidentally loading/saving something pathological.
+    maxFileBytes: 2 * 1024 * 1024,
   },
 }

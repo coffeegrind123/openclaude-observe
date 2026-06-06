@@ -1,5 +1,33 @@
 # Changelog
 
+## 06.06.2026 — Interactive memory browser
+
+A new **Memory** tab turns the dashboard into a full browser and editor for OpenClaude's file-based memory — the per-fact markdown files under `~/.claude/projects/<project>/memory/`, the global `~/.claude/CLAUDE.md`, and per-agent memory. Files are read and **written straight to disk**; OpenClaude picks the edits up on its next turn. Because editing needs write access, the feature adds its own read-write bind mount of `~/.claude` (separate from the read-only transcript mount); set `OPENCLAUDE_OBSERVE_MEMORY=0` to disable it and drop the mount. In local `just dev` the server reads `~/.claude` directly.
+
+### Browsing & editing
+
+- **Memory sidebar tab** lists every store grouped as Projects / Global / Agents, correlated to observe projects by slug. A full-page browser drills from store → file list → editor, with hash routing (`#/memory/<store>/<file>`).
+- **Structured + raw editor**: a typed frontmatter form (type / status / provenance dropdowns, evidence / triggers / supersedes list editors, inline custom-field add) with a raw-markdown toggle and a live preview that renders clickable `[[wikilinks]]`. The reader is schema-adaptive — it handles both the flat top-level schema and the `metadata:`-wrapper schema OpenClaude writes; new files are created in the canonical flat shape.
+- **Safe writes**: atomic temp-file + rename, guarded by an advisory `.locks/` lock compatible with OpenClaude's own locking, with path-traversal protection on every operation.
+
+### Navigation & discovery
+
+- **⌘K command palette** with fuzzy cross-store file search, store jumping, and quick actions, backed by a new `/api/memory/search` endpoint.
+- **Keyboard navigation** (`j`/`k`/arrows/enter) through the file list.
+- **`[[ ]]` autocomplete** in the body and raw editors.
+- Outgoing-links, backlinks, and a **supersedes chain** (forward + computed "superseded by") panel, each navigable.
+
+### Lifecycle & health
+
+- Filter and sort by **status** (seedling → current → superseded → outdated); superseded/outdated are hidden by default behind a toggle and de-emphasized, with a banner on the file itself.
+- **Stale** (90-day) badges, status icons, and type icons.
+- A **MEMORY.md lint** panel flags orphaned index entries, unindexed files, broken wikilinks, and the 200-line / 25 KB load-cap.
+- **Session cross-link**: a memory's originating session id links straight to that session in the dashboard — the one thing only an observability-embedded editor can do.
+
+### Server lifecycle
+
+- Removed the idle auto-shutdown entirely. The server no longer self-exits when the last consumer disconnects; it runs until explicitly stopped. The `OPENCLAUDE_OBSERVE_SHUTDOWN_DELAY_MS` variable and the startup grace period are gone.
+
 ## 06.06.2026
 
 De-branded the fork into a tool built purely for OpenClaude: renamed the entire environment-variable namespace, removed the last of the inherited multi-agent (codex) support, and swept the repo of stale artifacts. **This release is breaking** — update any `.env`, `docker-compose` override, or shell export that sets an `AGENTS_OBSERVE_*` variable.

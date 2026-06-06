@@ -8,10 +8,12 @@ import { EventStream } from '@/components/event-stream/event-stream'
 import { Inspector } from '@/components/event-stream/inspector'
 import { HomePage } from './home-page'
 import { ProjectPage } from './project-page'
+import { MemoryBrowser } from '@/components/memory/memory-browser'
 
 export function MainPanel() {
   const { selectedProjectId, selectedProjectSlug, selectedSessionId, selectedEventId } =
     useUIStore()
+  const view = useUIStore((s) => s.view)
 
   useRegionShortcuts({
     regions: [
@@ -27,6 +29,12 @@ export function MainPanel() {
   // /api/sessions/:id) has returned. Don't flash HomePage in that
   // window — it triggers /api/sessions/recent and other home-page
   // queries that get torn down a tick later.
+  // Memory view is a distinct top-level surface, independent of the
+  // project/session selection state used by the observe dashboard.
+  if (view === 'memory') {
+    return <MemoryBrowser />
+  }
+
   const isResolvingRoute = !selectedProjectId && (!!selectedProjectSlug || !!selectedSessionId)
   if (isResolvingRoute) {
     return <div className="flex-1" />
