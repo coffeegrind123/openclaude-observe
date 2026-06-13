@@ -1,5 +1,17 @@
 # Changelog
 
+## 13.06.2026 — Memory knowledge graph
+
+A new **Graph** view in the Memory browser renders any store as an interactive, force-directed knowledge map — one glowing node per memory file, edges drawn from resolved `[[wikilinks]]`, laid out with live physics. Toggle between the file **List** and the **Graph** from the browser header; clicking a node opens that file in the docked editor. Inspired by the [brain-map](https://github.com/vladignatyev/brain-map-skill) skill, but reads our own memory model directly — no export step, no new endpoints.
+
+### The graph
+
+- **Force-directed layout** ([react-force-graph-2d](https://github.com/vasturiano/react-force-graph) + `d3-force`) with a collision force so nodes never overlap, smooth canvas pan/zoom, and node dragging.
+- **Visual encoding**: colour = memory type (user / feedback / project / reference / structured-claim), node size scales with link degree, each node carries a soft glow. Archived (superseded / outdated) memories render dashed and dimmed.
+- **Curved links** coloured by source; hovering a node lights its neighbourhood, dims everything else, and sends **directional particles flowing along its connections**.
+- **Readable labels at any zoom**: a level-of-detail pass shows only the top hubs when zoomed out and fades the rest in as you zoom, hover, select, or search — and a collision pass draws labels in priority order, skipping any that would overlap, so they never blend into each other even on dense, panned-out stores.
+- **Type-filter chips** with a colour legend, a **highlight search** that rings matching nodes, a white ring on the selected file, and re-centre-on-select when you navigate in from the editor.
+
 ## 06.06.2026 — Interactive memory browser
 
 A new **Memory** tab turns the dashboard into a full browser and editor for OpenClaude's file-based memory — the per-fact markdown files under `~/.claude/projects/<project>/memory/`, the global `~/.claude/CLAUDE.md`, and per-agent memory. Files are read and **written straight to disk**; OpenClaude picks the edits up on its next turn. Because editing needs write access, the feature adds its own read-write bind mount of `~/.claude` (separate from the read-only transcript mount); set `OPENCLAUDE_OBSERVE_MEMORY=0` to disable it and drop the mount. In local `just dev` the server reads `~/.claude` directly.

@@ -1,5 +1,14 @@
 import * as React from 'react'
-import { Brain, ChevronRight, RefreshCw, FileText, AlertCircle, Search } from 'lucide-react'
+import {
+  Brain,
+  ChevronRight,
+  RefreshCw,
+  FileText,
+  AlertCircle,
+  Search,
+  List,
+  Network,
+} from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -7,6 +16,7 @@ import { useUIStore } from '@/stores/ui-store'
 import { useMemoryStores, useMemoryFiles, useMemoryFile } from '@/hooks/use-memory'
 import { MemoryOverview } from './memory-overview'
 import { MemoryFileList } from './memory-file-list'
+import { MemoryGraph } from './memory-graph'
 import { MemoryFileEditor } from './memory-file-editor'
 import { NewFileDialog } from './memory-new-file-dialog'
 import { MemoryStoreLint } from './memory-store-lint'
@@ -21,6 +31,7 @@ export function MemoryBrowser() {
   const qc = useQueryClient()
   const [newOpen, setNewOpen] = React.useState(false)
   const [paletteOpen, setPaletteOpen] = React.useState(false)
+  const [memoryView, setMemoryView] = React.useState<'list' | 'graph'>('list')
   const [visibleFiles, setVisibleFiles] = React.useState<MemoryFileHeader[]>([])
   const [highlight, setHighlight] = React.useState(-1)
 
@@ -123,6 +134,34 @@ export function MemoryBrowser() {
           </>
         )}
         <div className="flex-1" />
+        {storeId && (
+          <div className="flex items-center rounded-md border border-border p-0.5">
+            <button
+              onClick={() => setMemoryView('list')}
+              className={cn(
+                'flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors',
+                memoryView === 'list'
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+              title="List view"
+            >
+              <List className="h-3.5 w-3.5" /> List
+            </button>
+            <button
+              onClick={() => setMemoryView('graph')}
+              className={cn(
+                'flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors',
+                memoryView === 'graph'
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+              title="Graph view"
+            >
+              <Network className="h-3.5 w-3.5" /> Graph
+            </button>
+          </div>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -142,18 +181,9 @@ export function MemoryBrowser() {
       {!storeId ? (
         <MemoryOverview stores={stores} onSelect={setMemoryStore} />
       ) : (
-        <div className="flex-1 flex overflow-hidden min-h-0">
-          <MemoryFileList
-            files={files}
-            selectedRelPath={selectedFile}
-            onSelect={(rel) => setMemoryFile(rel)}
-            onNew={() => setNewOpen(true)}
-            canCreate={canCreate}
-            highlightIndex={highlight}
-            onVisibleChange={setVisibleFiles}
-          />
-          <div className="flex-1 min-w-0 overflow-hidden">
-            {selectedFile ? (
+        (() => {
+          const editorEl =
+            selectedFile && storeId ? (
               fileQ.isLoading ? (
                 <div className="p-6 text-sm text-muted-foreground">Loading…</div>
               ) : fileQ.isError ? (
@@ -169,29 +199,64 @@ export function MemoryBrowser() {
                   onNavigate={(rel) => setMemoryFile(rel || null)}
                 />
               ) : null
-            ) : (
-              <div className="h-full overflow-y-auto p-5">
-                <div className="max-w-2xl mx-auto space-y-5">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-muted-foreground" />
-                    <h2 className="text-base font-semibold">{activeStore?.label}</h2>
-                    <span className="text-xs text-muted-foreground">
-                      {files.length} file{files.length === 1 ? '' : 's'}
-                    </span>
+            ) : null
+
+          if (memoryView === 'graph') {
+            return (
+              <div className="flex-1 flex overflow-hidden min-h-0">
+                <MemoryGraph
+                  files={files}
+                  selectedRelPath={selectedFile}
+                  onSelect={(rel) => setMemoryFile(rel)}
+                />
+                {selectedFile && (
+                  <div className="w-[440px] shrink-0 min-w-0 overflow-hidden border-l border-border">
+                    {editorEl}
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {files.length === 0
-                      ? 'This store has no memory files yet.'
-                      : 'Select a memory file from the list to view or edit it.'}
-                  </p>
-                  {storeId && files.length > 0 && (
-                    <MemoryStoreLint storeId={storeId} files={files} onOpen={setMemoryFile} />
-                  )}
-                </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+            )
+          }
+
+          return (
+            <div className="flex-1 flex overflow-hidden min-h-0">
+              <MemoryFileList
+                files={files}
+                selectedRelPath={selectedFile}
+                onSelect={(rel) => setMemoryFile(rel)}
+                onNew={() => setNewOpen(true)}
+                canCreate={canCreate}
+                highlightIndex={highlight}
+                onVisibleChange={setVisibleFiles}
+              />
+              <div className="flex-1 min-w-0 overflow-hidden">
+                {selectedFile ? (
+                  editorEl
+                ) : (
+                  <div className="h-full overflow-y-auto p-5">
+                    <div className="max-w-2xl mx-auto space-y-5">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                        <h2 className="text-base font-semibold">{activeStore?.label}</h2>
+                        <span className="text-xs text-muted-foreground">
+                          {files.length} file{files.length === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {files.length === 0
+                          ? 'This store has no memory files yet.'
+                          : 'Select a memory file from the list to view or edit it.'}
+                      </p>
+                      {storeId && files.length > 0 && (
+                        <MemoryStoreLint storeId={storeId} files={files} onOpen={setMemoryFile} />
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })()
       )}
 
       {storeId && activeStore && (

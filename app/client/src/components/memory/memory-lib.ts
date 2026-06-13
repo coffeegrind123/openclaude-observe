@@ -95,6 +95,28 @@ export function typeBadgeClass(type?: string): string {
   }
 }
 
+/**
+ * Raw hex color for a memory `type`, mirroring `typeBadgeClass`'s palette
+ * (Tailwind *-500). Used where a literal color is needed instead of a class —
+ * notably the Cytoscape graph, which can't consume Tailwind utilities.
+ */
+export function typeColorHex(type?: string): string {
+  switch (type) {
+    case 'user':
+      return '#3b82f6' // blue-500
+    case 'feedback':
+      return '#f59e0b' // amber-500
+    case 'project':
+      return '#10b981' // emerald-500
+    case 'reference':
+      return '#8b5cf6' // violet-500
+    case 'structured-claim':
+      return '#f43f5e' // rose-500
+    default:
+      return '#94a3b8' // slate-400
+  }
+}
+
 /** Tailwind classes for a memory `status` badge. */
 export function statusBadgeClass(status?: string): string {
   switch (status) {
