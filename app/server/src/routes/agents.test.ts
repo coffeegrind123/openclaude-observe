@@ -12,8 +12,7 @@ describe('agent routes', () => {
   let app: Hono<Env>
   const mockStore = {
     getAgentById: vi.fn(),
-    updateAgentName: vi.fn(),
-    updateAgentType: vi.fn(),
+    getEventsForAgent: vi.fn(),
   }
 
   beforeEach(async () => {
@@ -33,43 +32,56 @@ describe('agent routes', () => {
     app.route('/api', agentsRouter)
   })
 
-  describe('PATCH /api/agents/:id', () => {
-    test('updates agent name', async () => {
-      mockStore.getAgentById.mockResolvedValue({ id: 'agent-1', name: 'old' })
-      mockStore.updateAgentName.mockResolvedValue(undefined)
+  describe('GET /api/agents/:id', () => {
+    test('returns the agent in the client-facing shape', async () => {
+      mockStore.getAgentById.mockResolvedValue({
+        id: 'agent-1',
+        session_id: 'sess-1',
+        parent_agent_id: 'root',
+        name: 'explorer#abcdef12',
+        description: 'dig',
+        agent_type: 'explorer',
+        agent_class: 'pi',
+      })
+      const res = await app.request('/api/agents/agent-1')
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({
+        id: 'agent-1',
+        sessionId: 'sess-1',
+        parentAgentId: 'root',
+        name: 'explorer#abcdef12',
+        description: 'dig',
+        agentType: 'explorer',
+        agentClass: 'pi',
+      })
+    })
 
+    test('returns 404 for an unknown agent', async () => {
+      mockStore.getAgentById.mockResolvedValue(null)
+      const res = await app.request('/api/agents/unknown')
+      expect(res.status).toBe(404)
+    })
+  })
+
+  // Agents are named by the pi extension's events; nothing in the dashboard
+  // renames them or reads a per-agent event list, so these unauthenticated
+  // endpoints are not served.
+  describe('retired endpoints', () => {
+    test('PATCH /api/agents/:id is not routed', async () => {
+      mockStore.getAgentById.mockResolvedValue({ id: 'agent-1', name: 'old' })
       const res = await app.request('/api/agents/agent-1', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'new-name' }),
       })
-      expect(res.status).toBe(200)
-      expect(mockStore.updateAgentName).toHaveBeenCalledWith('agent-1', 'new-name')
-    })
-
-    test('updates agent type', async () => {
-      mockStore.getAgentById.mockResolvedValue({ id: 'agent-1' })
-      mockStore.updateAgentType.mockResolvedValue(undefined)
-
-      const res = await app.request('/api/agents/agent-1', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentType: 'researcher' }),
-      })
-      expect(res.status).toBe(200)
-      expect(mockStore.updateAgentType).toHaveBeenCalledWith('agent-1', 'researcher')
-    })
-
-    test('returns 404 for unknown agent', async () => {
-      mockStore.getAgentById.mockResolvedValue(null)
-
-      const res = await app.request('/api/agents/unknown', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'test' }),
-      })
       expect(res.status).toBe(404)
-      expect(mockStore.updateAgentName).not.toHaveBeenCalled()
+    })
+
+    test('GET /api/agents/:id/events is not routed', async () => {
+      mockStore.getEventsForAgent.mockResolvedValue([])
+      const res = await app.request('/api/agents/agent-1/events')
+      expect(res.status).toBe(404)
+      expect(mockStore.getEventsForAgent).not.toHaveBeenCalled()
     })
   })
 })

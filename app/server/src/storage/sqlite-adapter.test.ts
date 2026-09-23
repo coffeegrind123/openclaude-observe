@@ -444,6 +444,40 @@ describe('SqliteAdapter — sessions', () => {
     expect((await insertTool('sess1', 2500)).notificationTransition).toBe('none')
   })
 
+  test('drops the columns nothing reads, keeping the rows', async () => {
+    const cols = (db: any, table: string) =>
+      db.prepare(`PRAGMA table_info('${table}')`).all().map((c: { name: string }) => c.name)
+    const fresh = (store as any).db
+    expect(cols(fresh, 'projects')).not.toContain('metadata')
+    expect(cols(fresh, 'agents')).not.toContain('metadata')
+    expect(cols(fresh, 'agents')).not.toContain('transcript_path')
+
+    const dir = mkdtempSync(join(tmpdir(), 'observe-cols-'))
+    const dbPath = join(dir, 'observe.db')
+    try {
+      const first = new SqliteAdapter(dbPath)
+      const projId = await first.createProject('p', 'P', null)
+      await first.upsertSession('s', projId, null, null, 1)
+      await first.upsertAgent('s', 's', null, 'root', null)
+      const raw = (first as any).db
+      raw.exec('ALTER TABLE projects ADD COLUMN metadata TEXT')
+      raw.exec('ALTER TABLE agents ADD COLUMN metadata TEXT')
+      raw.exec('ALTER TABLE agents ADD COLUMN transcript_path TEXT')
+      raw.close()
+
+      const upgraded = new SqliteAdapter(dbPath)
+      const db = (upgraded as any).db
+      expect(cols(db, 'projects')).not.toContain('metadata')
+      expect(cols(db, 'agents')).not.toContain('metadata')
+      expect(cols(db, 'agents')).not.toContain('transcript_path')
+      expect((await upgraded.getAgentById('s'))?.name).toBe('root')
+      expect(await upgraded.getProjectById(projId)).toBeTruthy()
+      db.close()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test('migrates the legacy last_notification_ts column to pending state', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'observe-notify-'))
     const dbPath = join(dir, 'observe.db')
@@ -572,26 +606,6 @@ describe('SqliteAdapter — agents', () => {
     expect(agent.session_id).toBe('sess1')
     expect(agent.name).toBe('my-agent')
     expect(agent.description).toBe('my-description')
-  })
-
-  test('updateAgentName', async () => {
-    const projId = await store.createProject('proj1', 'Project 1', null)
-    await store.upsertSession('sess1', projId, null, null, 1000)
-    await store.upsertAgent('a1', 'sess1', null, 'old-name', null)
-
-    await store.updateAgentName('a1', 'new-name')
-    const agent = await store.getAgentById('a1')
-    expect(agent.name).toBe('new-name')
-  })
-
-  test('updateAgentType', async () => {
-    const projId = await store.createProject('proj1', 'Project 1', null)
-    await store.upsertSession('sess1', projId, null, null, 1000)
-    await store.upsertAgent('a1', 'sess1', null, null, null)
-
-    await store.updateAgentType('a1', 'debugger')
-    const agent = await store.getAgentById('a1')
-    expect(agent.agent_type).toBe('debugger')
   })
 
   test('getAgentsForSession returns agents', async () => {

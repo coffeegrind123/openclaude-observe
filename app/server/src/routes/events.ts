@@ -47,7 +47,7 @@ async function ensureRootAgent(
   let rootId = sessionRootAgents.get(sessionId)
   if (!rootId) {
     rootId = sessionId
-    await store.upsertAgent(rootId, sessionId, null, null, null, null, null, agentClass)
+    await store.upsertAgent(rootId, sessionId, null, null, null, null, agentClass)
     sessionRootAgents.set(sessionId, rootId)
   }
   return rootId
@@ -215,7 +215,6 @@ router.post('/events', rateLimit, async (c) => {
         parsed.ownerAgentName,
         parsed.ownerAgentDescription,
         parsed.ownerAgentType,
-        null,
         parsed.agentClass,
       )
       agentId = parsed.ownerAgentId

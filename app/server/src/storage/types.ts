@@ -91,15 +91,12 @@ export interface EventStore {
     name: string | null,
     description: string | null,
     agentType?: string | null,
-    transcriptPath?: string | null,
     agentClass?: string | null,
   ): Promise<void>
-  updateAgentType(id: string, agentType: string): Promise<void>
   updateSessionStatus(id: string, status: string): Promise<void>
   patchSessionMetadata(sessionId: string, patch: Record<string, unknown>): Promise<void>
   updateSessionSlug(sessionId: string, slug: string): Promise<void>
   updateSessionProject(sessionId: string, projectId: number): Promise<void>
-  updateAgentName(agentId: string, name: string): Promise<void>
   insertEvent(params: InsertEventParams): Promise<InsertEventResult>
   findEventBySignatureHash(hash: string): Promise<{ id: number } | null>
   getProjects(): Promise<any[]>

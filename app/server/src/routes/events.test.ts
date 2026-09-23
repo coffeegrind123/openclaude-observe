@@ -83,7 +83,6 @@ function createStore(overrides = {}) {
     updateSessionStatus: vi.fn(),
     updateSessionProject: vi.fn(),
     getThreadForEvent: vi.fn(),
-    updateAgentType: vi.fn(),
     findEventBySignatureHash: vi.fn(),
     ...overrides,
   }

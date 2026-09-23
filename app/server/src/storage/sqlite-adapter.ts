@@ -43,16 +43,15 @@ export class SqliteAdapter implements EventStore {
         name TEXT NOT NULL,
         transcript_path TEXT,
         cwd TEXT,
-        metadata TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
     `)
 
-    // Migration: add metadata to projects if missing
     const projectCols = this.db.prepare("PRAGMA table_info('projects')").all() as { name: string }[]
-    if (!projectCols.some((c) => c.name === 'metadata')) {
-      this.db.exec('ALTER TABLE projects ADD COLUMN metadata TEXT')
+    // Written by nothing and read by nothing since the pi conversion.
+    if (projectCols.some((c) => c.name === 'metadata')) {
+      this.db.exec('ALTER TABLE projects DROP COLUMN metadata')
     }
     if (!projectCols.some((c) => c.name === 'cwd')) {
       this.db.exec('ALTER TABLE projects ADD COLUMN cwd TEXT')
@@ -192,8 +191,6 @@ export class SqliteAdapter implements EventStore {
         description TEXT,
         agent_type TEXT,
         agent_class TEXT DEFAULT 'pi',
-        transcript_path TEXT,
-        metadata TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         FOREIGN KEY (session_id) REFERENCES sessions(id),
@@ -203,11 +200,12 @@ export class SqliteAdapter implements EventStore {
 
     // Migrations for agents
     const agentCols = this.db.prepare("PRAGMA table_info('agents')").all() as { name: string }[]
-    if (!agentCols.some((c) => c.name === 'metadata')) {
-      this.db.exec('ALTER TABLE agents ADD COLUMN metadata TEXT')
-    }
-    if (!agentCols.some((c) => c.name === 'transcript_path')) {
-      this.db.exec('ALTER TABLE agents ADD COLUMN transcript_path TEXT')
+    // pi subagents run in-process and have no transcript of their own, and
+    // agent metadata was only ever set by the retired PATCH /agents/:id.
+    for (const col of ['metadata', 'transcript_path']) {
+      if (agentCols.some((c) => c.name === col)) {
+        this.db.exec(`ALTER TABLE agents DROP COLUMN ${col}`)
+      }
     }
 
     this.db.exec(`
@@ -474,7 +472,6 @@ export class SqliteAdapter implements EventStore {
     name: string | null,
     description: string | null,
     agentType?: string | null,
-    transcriptPath?: string | null,
     agentClass?: string | null,
   ): Promise<void> {
     const now = Date.now()
@@ -482,13 +479,12 @@ export class SqliteAdapter implements EventStore {
     this.db
       .prepare(
         `
-      INSERT INTO agents (id, session_id, parent_agent_id, name, description, agent_type, transcript_path, agent_class, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, 'pi'), ?, ?)
+      INSERT INTO agents (id, session_id, parent_agent_id, name, description, agent_type, agent_class, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, 'pi'), ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = COALESCE(excluded.name, agents.name),
         description = COALESCE(excluded.description, agents.description),
         agent_type = COALESCE(excluded.agent_type, agents.agent_type),
-        transcript_path = COALESCE(excluded.transcript_path, agents.transcript_path),
         agent_class = COALESCE(?, agents.agent_class),
         updated_at = ?
     `,
@@ -500,7 +496,6 @@ export class SqliteAdapter implements EventStore {
         name,
         description,
         agentType ?? null,
-        transcriptPath ?? null,
         agentClass ?? null,
         now,
         now,
@@ -513,12 +508,6 @@ export class SqliteAdapter implements EventStore {
         .prepare('UPDATE sessions SET agent_count = agent_count + 1 WHERE id = ?')
         .run(sessionId)
     }
-  }
-
-  async updateAgentType(id: string, agentType: string): Promise<void> {
-    this.db
-      .prepare('UPDATE agents SET agent_type = ?, updated_at = ? WHERE id = ?')
-      .run(agentType, Date.now(), id)
   }
 
   async updateSessionStatus(id: string, status: string): Promise<void> {
@@ -553,12 +542,6 @@ export class SqliteAdapter implements EventStore {
     `,
       )
       .run(slug, sessionId)
-  }
-
-  async updateAgentName(agentId: string, name: string): Promise<void> {
-    this.db
-      .prepare('UPDATE agents SET name = ?, updated_at = ? WHERE id = ?')
-      .run(name, Date.now(), agentId)
   }
 
   async insertEvent(params: InsertEventParams): Promise<InsertEventResult> {
