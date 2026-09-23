@@ -446,7 +446,10 @@ describe('SqliteAdapter — sessions', () => {
 
   test('drops the columns nothing reads, keeping the rows', async () => {
     const cols = (db: any, table: string) =>
-      db.prepare(`PRAGMA table_info('${table}')`).all().map((c: { name: string }) => c.name)
+      db
+        .prepare(`PRAGMA table_info('${table}')`)
+        .all()
+        .map((c: { name: string }) => c.name)
     const fresh = (store as any).db
     expect(cols(fresh, 'projects')).not.toContain('metadata')
     expect(cols(fresh, 'agents')).not.toContain('metadata')
