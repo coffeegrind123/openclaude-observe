@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest'
 import { SqliteAdapter } from './sqlite-adapter'
+import { SEED_FILTERS } from './seed-filters'
 
 let store: SqliteAdapter
 
@@ -1824,6 +1825,39 @@ describe('filters', () => {
     expect(all?.combinator).toBe('and')
     expect(all?.patterns).toEqual([{ target: 'hook', regex: '^SystemPrompt$', negate: true }])
     expect(all?.config).toEqual({ role: 'all-exclusions' })
+  })
+
+  test('init upgrades an unedited default to its current seed patterns', async () => {
+    const adapter = new SqliteAdapter(':memory:')
+    await adapter.seedDefaultFilters()
+    const oldErrors = [
+      { target: 'hook', regex: '^(PostToolUseFailure|CompactionFailed)$' },
+      { target: 'payload', regex: '"stop_reason":\\s*"error"' },
+      { target: 'payload', regex: '"error_message":\\s*"[^"]+' },
+    ]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;((adapter as any).db as { prepare: (s: string) => { run: (...a: unknown[]) => void } })
+      .prepare("UPDATE filters SET patterns = ? WHERE id = 'default-errors'")
+      .run(JSON.stringify(oldErrors))
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(adapter as any).upgradeUneditedSeedDefaults()
+
+    const errors = await adapter.getFilterById('default-errors')
+    const seed = SEED_FILTERS.find((s) => s.id === 'default-errors')!
+    expect(errors?.patterns).toEqual(seed.patterns)
+  })
+
+  test('init leaves a user-edited default alone when its seed changes', async () => {
+    const adapter = new SqliteAdapter(':memory:')
+    await adapter.seedDefaultFilters()
+    const mine = [{ target: 'payload' as const, regex: 'my own pattern' }]
+    await adapter.updateFilter('default-errors', { patterns: mine })
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(adapter as any).upgradeUneditedSeedDefaults()
+
+    expect((await adapter.getFilterById('default-errors'))?.patterns).toEqual(mine)
   })
 
   test('init backfills missing seed defaults on upgrade without touching existing rows', async () => {

@@ -12,7 +12,8 @@ import type {
 import { DuplicateEventSignatureError } from './types'
 import type { Filter, FilterRow, FilterPattern } from '../types'
 import { randomUUID } from 'node:crypto'
-import { SEED_FILTERS, OBSOLETE_DEFAULT_FILTER_IDS } from './seed-filters'
+import { canonicalJson } from '../utils/event-signature'
+import { SEED_FILTERS, OBSOLETE_DEFAULT_FILTER_IDS, SUPERSEDED_SEED_PATTERNS } from './seed-filters'
 
 function escapeLike(str: string): string {
   return str.replace(/[%_]/g, '\\$&')
@@ -304,6 +305,7 @@ export class SqliteAdapter implements EventStore {
       // never updating an existing row, so user customizations to defaults
       // are preserved — and remove the defaults that were retired.
       this.installMissingSeedDefaults()
+      this.upgradeUneditedSeedDefaults()
       const drop = this.db.prepare("DELETE FROM filters WHERE id = ? AND kind = 'default'")
       for (const id of OBSOLETE_DEFAULT_FILTER_IDS) {
         drop.run(id)
@@ -875,6 +877,33 @@ export class SqliteAdapter implements EventStore {
       }
     })
     tx()
+  }
+
+  // Replace the patterns of default rows still holding a superseded seed
+  // version with the current seed's. Compared structurally, so key order
+  // in the stored JSON doesn't matter; any other value is a user edit.
+  private upgradeUneditedSeedDefaults(): void {
+    const read = this.db.prepare("SELECT patterns FROM filters WHERE id = ? AND kind = 'default'")
+    const write = this.db.prepare('UPDATE filters SET patterns = ?, updated_at = ? WHERE id = ?')
+    const now = Date.now()
+    for (const [id, versions] of Object.entries(SUPERSEDED_SEED_PATTERNS)) {
+      const seed = SEED_FILTERS.find((s) => s.id === id)
+      const row = read.get(id) as { patterns: string } | undefined
+      if (!seed || !row) {
+        continue
+      }
+      let stored: unknown
+      try {
+        stored = JSON.parse(row.patterns)
+      } catch {
+        continue
+      }
+      const current = canonicalJson(stored)
+      if (!versions.some((v) => canonicalJson(v) === current)) {
+        continue
+      }
+      write.run(JSON.stringify(seed.patterns), now, id)
+    }
   }
 
   async resetDefaultFilters(): Promise<Filter[]> {

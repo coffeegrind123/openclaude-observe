@@ -1,8 +1,9 @@
 // Seed definitions for default filters. The `id` field is the stable
 // primary key — never change an existing one or you'll create an
 // orphan row. To rename or restructure a default filter, edit the
-// fields in place and bump it via the next server start; the seed
-// sync will UPDATE the row by id and preserve the user's enabled state.
+// fields in place and record the previous patterns in
+// SUPERSEDED_SEED_PATTERNS: existing installs whose row still holds an old
+// version are upgraded on the next start; edited rows are left alone.
 
 import type { FilterPattern, FilterDisplay, FilterCombinator } from '../types'
 
@@ -26,6 +27,19 @@ export const OBSOLETE_DEFAULT_FILTER_IDS = [
   'default-permissions',
   'default-config',
 ]
+
+// Earlier pattern sets of a default filter, keyed by id. A row whose
+// patterns still equal one of these was never edited, so startup replaces
+// them with the current seed's.
+export const SUPERSEDED_SEED_PATTERNS: Record<string, FilterPattern[][]> = {
+  'default-errors': [
+    [
+      { target: 'hook', regex: '^(PostToolUseFailure|CompactionFailed)$' },
+      { target: 'payload', regex: '"stop_reason":\\s*"error"' },
+      { target: 'payload', regex: '"error_message":\\s*"[^"]+' },
+    ],
+  ],
+}
 
 // pi's tool names (docs/pi-protocol.md): built-ins are lowercase (read, bash,
 // edit, write, grep, find, ls); delegation is Agent (top level) and SubAgent
@@ -169,6 +183,9 @@ export const SEED_FILTERS: SeedFilter[] = [
     combinator: 'or',
     patterns: [
       { target: 'hook', regex: '^(PostToolUseFailure|CompactionFailed)$' },
+      // A merged tool row keeps its PreToolUse hook name and takes the
+      // failure's payload, so the hook pattern alone misses it.
+      { target: 'payload', regex: '"is_error":\\s*true' },
       { target: 'payload', regex: '"stop_reason":\\s*"error"' },
       { target: 'payload', regex: '"error_message":\\s*"[^"]+' },
     ],
