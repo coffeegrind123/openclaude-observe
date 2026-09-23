@@ -9,7 +9,13 @@ import { cn } from '@/lib/utils'
 export function BrandMark({ className }: { className?: string }) {
   const id = useId()
   return (
-    <svg viewBox="0 0 100 100" fill="none" className={cn('shrink-0', className)} aria-label="instantcoffee" role="img">
+    <svg
+      viewBox="0 0 100 100"
+      fill="none"
+      className={cn('shrink-0', className)}
+      aria-label="instantcoffee"
+      role="img"
+    >
       <defs>
         <linearGradient id={id} x1="18" y1="10" x2="82" y2="92" gradientUnits="userSpaceOnUse">
           <stop offset="0" stopColor="#f0b27a" />

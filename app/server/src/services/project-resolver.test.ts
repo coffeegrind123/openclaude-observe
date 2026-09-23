@@ -50,7 +50,8 @@ describe('resolveProject', () => {
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: null,
-      transcriptPath: '/Users/joe/.pi/agent/sessions/--Users-joe-Development-my-app--/session.jsonl',
+      transcriptPath:
+        '/Users/joe/.pi/agent/sessions/--Users-joe-Development-my-app--/session.jsonl',
     })
     expect(result.projectId).toBeGreaterThan(0)
     expect(result.projectSlug).toBe('my-app')
@@ -62,7 +63,8 @@ describe('resolveProject', () => {
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: null,
-      transcriptPath: '/Users/joe/.pi/agent/sessions/--Users-joe-Development-my-app--/session.jsonl',
+      transcriptPath:
+        '/Users/joe/.pi/agent/sessions/--Users-joe-Development-my-app--/session.jsonl',
     })
     expect(result.projectId).toBeGreaterThan(0)
     expect(result.projectSlug).toBe('development-my-app')

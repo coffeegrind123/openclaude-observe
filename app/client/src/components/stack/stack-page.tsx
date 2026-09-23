@@ -49,7 +49,9 @@ function StatusLine({ status }: { status: StackStatus }) {
   return (
     <span className="inline-flex items-center gap-1 text-[11px] text-ink-2">
       <CircleDashed className="h-3.5 w-3.5 text-ink-3" aria-hidden />
-      {status.state === 'disabled' ? 'Polling is disabled (INSTANTCOFFEE_OBSERVE_STACK_POLL_MS=0)' : 'Connecting…'}
+      {status.state === 'disabled'
+        ? 'Polling is disabled (INSTANTCOFFEE_OBSERVE_STACK_POLL_MS=0)'
+        : 'Connecting…'}
     </span>
   )
 }
@@ -75,13 +77,21 @@ function SampleTable({ samples }: { samples: StackSample[] }) {
       <table className="w-full text-[11px] tabular-nums">
         <thead className="bg-paper-2 text-ink-2">
           <tr>
-            {['Time', 'Decode', 'Prefill', 'Generated', 'Prefilled', 'Cached', 'Acceptance', 'Tok/draft', 'Context'].map(
-              (h) => (
-                <th key={h} scope="col" className="px-2 py-1 text-left font-medium">
-                  {h}
-                </th>
-              ),
-            )}
+            {[
+              'Time',
+              'Decode',
+              'Prefill',
+              'Generated',
+              'Prefilled',
+              'Cached',
+              'Acceptance',
+              'Tok/draft',
+              'Context',
+            ].map((h) => (
+              <th key={h} scope="col" className="px-2 py-1 text-left font-medium">
+                {h}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -94,7 +104,9 @@ function SampleTable({ samples }: { samples: StackSample[] }) {
               <td className="px-2 py-1">{s.prefillTokens.toLocaleString()}</td>
               <td className="px-2 py-1">{s.cachedTokens.toLocaleString()}</td>
               <td className="px-2 py-1">{formatRatio(s.acceptance)}</td>
-              <td className="px-2 py-1">{s.acceptedPerDraft === null ? '—' : s.acceptedPerDraft.toFixed(2)}</td>
+              <td className="px-2 py-1">
+                {s.acceptedPerDraft === null ? '—' : s.acceptedPerDraft.toFixed(2)}
+              </td>
               <td className="px-2 py-1">{s.context ? `${Math.round(s.context.percent)}%` : '—'}</td>
             </tr>
           ))}
@@ -137,7 +149,11 @@ export function StackPage() {
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-rule px-2.5 py-1 text-[12px] text-ink-2 hover:bg-accent"
             aria-pressed={tableView}
           >
-            {tableView ? <LineChart className="h-3.5 w-3.5" aria-hidden /> : <Table2 className="h-3.5 w-3.5" aria-hidden />}
+            {tableView ? (
+              <LineChart className="h-3.5 w-3.5" aria-hidden />
+            ) : (
+              <Table2 className="h-3.5 w-3.5" aria-hidden />
+            )}
             {tableView ? 'Charts' : 'Table'}
           </button>
         </header>
@@ -148,16 +164,28 @@ export function StackPage() {
             value={formatTps(weightedDecodeTps(recent))}
             note={`lifetime ${formatTps(totals?.decodeTps)}`}
           />
-          <Tile label="Prefill speed" value={formatTps(recent.at(-1)?.prefillTps ?? totals?.prefillTps)} note={`lifetime ${formatTps(totals?.prefillTps)}`} />
+          <Tile
+            label="Prefill speed"
+            value={formatTps(recent.at(-1)?.prefillTps ?? totals?.prefillTps)}
+            note={`lifetime ${formatTps(totals?.prefillTps)}`}
+          />
           <Tile
             label="Draft acceptance"
             value={formatRatio(weightedAcceptance(recent) ?? totals?.acceptance)}
-            note={totals?.acceptedPerDraft ? `${totals.acceptedPerDraft.toFixed(2)} tokens per draft` : undefined}
+            note={
+              totals?.acceptedPerDraft
+                ? `${totals.acceptedPerDraft.toFixed(2)} tokens per draft`
+                : undefined
+            }
           />
           <Tile
             label="Prompt cache reuse"
             value={formatRatio(totals?.cacheReuse)}
-            note={totals ? `${compactTokens(totals.cachedTokens)} of ${compactTokens(totals.cachedTokens + totals.prefillTokens)} tokens` : undefined}
+            note={
+              totals
+                ? `${compactTokens(totals.cachedTokens)} of ${compactTokens(totals.cachedTokens + totals.prefillTokens)} tokens`
+                : undefined
+            }
           />
           <ContextMeter context={context} />
         </section>

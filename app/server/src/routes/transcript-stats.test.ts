@@ -52,7 +52,13 @@ const SESSIONS_DIR = join(piHome, '.pi', 'agent', 'sessions', '--work-proj--')
 
 // pi session format v3, one prompt and one request.
 const MINIMAL_FIXTURE = [
-  { type: 'session', version: 3, id: 'sess1', timestamp: '2026-05-22T00:00:00.000Z', cwd: '/work/proj' },
+  {
+    type: 'session',
+    version: 3,
+    id: 'sess1',
+    timestamp: '2026-05-22T00:00:00.000Z',
+    cwd: '/work/proj',
+  },
   {
     type: 'message',
     id: 'u1',

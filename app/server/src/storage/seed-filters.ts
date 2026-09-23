@@ -21,7 +21,11 @@ export interface SeedFilter {
 // pi: they key on hooks and tools pi never emits (TaskCreate, PermissionRequest,
 // InstructionsLoaded, ...). Existing installs delete these rows on startup;
 // user-created filters are never touched.
-export const OBSOLETE_DEFAULT_FILTER_IDS = ['default-tasks', 'default-permissions', 'default-config']
+export const OBSOLETE_DEFAULT_FILTER_IDS = [
+  'default-tasks',
+  'default-permissions',
+  'default-config',
+]
 
 // pi's tool names (docs/pi-protocol.md): built-ins are lowercase (read, bash,
 // edit, write, grep, find, ls); delegation is Agent (top level) and SubAgent
@@ -80,7 +84,11 @@ export const SEED_FILTERS: SeedFilter[] = [
     patterns: [
       { target: 'hook', regex: TOOL_HOOKS },
       { target: 'tool', regex: '^.+' },
-      { target: 'tool', regex: '^(Agent|SubAgent|StopAgent|AgentStatus|mcp|browser_.*)$', negate: true },
+      {
+        target: 'tool',
+        regex: '^(Agent|SubAgent|StopAgent|AgentStatus|mcp|browser_.*)$',
+        negate: true,
+      },
     ],
     config: { color: '#2563eb' }, // blue
   },
@@ -117,7 +125,8 @@ export const SEED_FILTERS: SeedFilter[] = [
     patterns: [
       {
         target: 'hook',
-        regex: '^(SessionStart|SessionEnd|SessionRename|SessionTree|SystemPrompt|ModelChange|ThinkingLevelChange)$',
+        regex:
+          '^(SessionStart|SessionEnd|SessionRename|SessionTree|SystemPrompt|ModelChange|ThinkingLevelChange)$',
       },
     ],
     config: { color: '#6b7280' }, // gray

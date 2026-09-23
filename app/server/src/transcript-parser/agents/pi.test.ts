@@ -71,12 +71,42 @@ describe('parsePiSession — edge cases', () => {
   test('attributes entries on a branch to the prompt they descend from', async () => {
     const path = tempJsonl([
       { type: 'session', version: 3, id: 's', timestamp: '2026-01-01T00:00:00Z', cwd: '/w' },
-      { type: 'message', id: 'u1', parentId: null, timestamp: '2026-01-01T00:00:01Z', message: { role: 'user', content: 'first' } },
-      { type: 'message', id: 'a1', parentId: 'u1', timestamp: '2026-01-01T00:00:02Z', message: { role: 'assistant', model: 'm', usage: { input: 1, output: 1 }, content: [] } },
+      {
+        type: 'message',
+        id: 'u1',
+        parentId: null,
+        timestamp: '2026-01-01T00:00:01Z',
+        message: { role: 'user', content: 'first' },
+      },
+      {
+        type: 'message',
+        id: 'a1',
+        parentId: 'u1',
+        timestamp: '2026-01-01T00:00:02Z',
+        message: { role: 'assistant', model: 'm', usage: { input: 1, output: 1 }, content: [] },
+      },
       // /tree back to u1 and a second answer on a new branch
-      { type: 'message', id: 'a2', parentId: 'u1', timestamp: '2026-01-01T00:00:05Z', message: { role: 'assistant', model: 'm', usage: { input: 2, output: 2 }, content: [] } },
-      { type: 'message', id: 'u2', parentId: 'a2', timestamp: '2026-01-01T00:00:06Z', message: { role: 'user', content: [{ type: 'text', text: 'second' }] } },
-      { type: 'message', id: 'a3', parentId: 'u2', timestamp: '2026-01-01T00:00:07Z', message: { role: 'assistant', model: 'm', usage: { input: 3, output: 3 }, content: [] } },
+      {
+        type: 'message',
+        id: 'a2',
+        parentId: 'u1',
+        timestamp: '2026-01-01T00:00:05Z',
+        message: { role: 'assistant', model: 'm', usage: { input: 2, output: 2 }, content: [] },
+      },
+      {
+        type: 'message',
+        id: 'u2',
+        parentId: 'a2',
+        timestamp: '2026-01-01T00:00:06Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'second' }] },
+      },
+      {
+        type: 'message',
+        id: 'a3',
+        parentId: 'u2',
+        timestamp: '2026-01-01T00:00:07Z',
+        message: { role: 'assistant', model: 'm', usage: { input: 3, output: 3 }, content: [] },
+      },
     ])
     const r = await parsePiSession(path)
 
@@ -87,14 +117,35 @@ describe('parsePiSession — edge cases', () => {
 
   test('skips assistant messages that never reached the provider', async () => {
     const path = tempJsonl([
-      { type: 'message', id: 'u', parentId: null, timestamp: 1, message: { role: 'user', content: 'x' } },
-      { type: 'message', id: 'a', parentId: 'u', timestamp: 2, message: { role: 'assistant', stopReason: 'aborted', content: [] } },
+      {
+        type: 'message',
+        id: 'u',
+        parentId: null,
+        timestamp: 1,
+        message: { role: 'user', content: 'x' },
+      },
+      {
+        type: 'message',
+        id: 'a',
+        parentId: 'u',
+        timestamp: 2,
+        message: { role: 'assistant', stopReason: 'aborted', content: [] },
+      },
     ])
     expect((await parsePiSession(path)).calls).toHaveLength(0)
   })
 
   test('reports unparseable lines instead of failing', async () => {
-    const path = tempJsonl(['{not json', { type: 'message', id: 'u', parentId: null, timestamp: 1, message: { role: 'user', content: 'x' } }])
+    const path = tempJsonl([
+      '{not json',
+      {
+        type: 'message',
+        id: 'u',
+        parentId: null,
+        timestamp: 1,
+        message: { role: 'user', content: 'x' },
+      },
+    ])
     const r = await parsePiSession(path)
 
     expect(r.userPrompts).toBe(1)
@@ -113,7 +164,12 @@ describe('parsePiSession — edge cases', () => {
           role: 'assistant',
           usage: { input: 1 },
           content: [
-            { type: 'toolCall', id: 't1', name: 'bash', arguments: { command: 'git -C repo commit -m x' } },
+            {
+              type: 'toolCall',
+              id: 't1',
+              name: 'bash',
+              arguments: { command: 'git -C repo commit -m x' },
+            },
             { type: 'toolCall', id: 't2', name: 'edit', arguments: { path: 'a.ts' } },
             { type: 'toolCall', id: 't3', name: 'write', arguments: { path: 'a.ts' } },
           ],
@@ -141,7 +197,11 @@ describe('parsePiSession — edge cases', () => {
           id: 'a',
           parentId: null,
           timestamp: 1,
-          message: { role: 'assistant', usage: {}, content: [{ type: 'toolCall', id: 't', name: 'bash', arguments: { command } }] },
+          message: {
+            role: 'assistant',
+            usage: {},
+            content: [{ type: 'toolCall', id: 't', name: 'bash', arguments: { command } }],
+          },
         },
       ])
       expect((await parsePiSession(path)).gitCommits, command).toBe(expected)

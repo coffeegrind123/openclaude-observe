@@ -4,7 +4,7 @@
 // use. The default therefore reflects only loopback origins — this blocks an
 // arbitrary website the user visits from reading the unauthenticated API via
 // the browser, while still allowing same-machine dashboards on any port.
-// 
+//
 
 import type { Context } from 'hono'
 
@@ -47,10 +47,7 @@ export function isOriginAllowed(origin: string, allowedOrigins: string[]): boole
  * Browsers always send Origin, so the drive-by vector (a malicious page
  * opening ws://localhost) is still blocked.
  */
-export function isWsOriginAllowed(
-  origin: string | undefined,
-  allowedOrigins: string[],
-): boolean {
+export function isWsOriginAllowed(origin: string | undefined, allowedOrigins: string[]): boolean {
   if (!origin) return true
   return isOriginAllowed(origin, allowedOrigins)
 }

@@ -214,7 +214,10 @@ export function totalsOf(s: LlamaSnapshot): StackTotals {
     acceptance: ratio(accepted, counter(s, 'spec_decode_num_draft_tokens_total')),
     acceptedPerDraft: ratio(accepted, counter(s, 'spec_decode_num_drafts_total')),
     cacheReuse: ratio(cached, cached + prefill),
-    decodeTps: ratio(counter(s, 'tokens_predicted_total'), counter(s, 'tokens_predicted_seconds_total')),
+    decodeTps: ratio(
+      counter(s, 'tokens_predicted_total'),
+      counter(s, 'tokens_predicted_seconds_total'),
+    ),
     prefillTps: ratio(prefill, counter(s, 'prompt_seconds_total')),
     acceptedPerPos: s.acceptedPerPos,
   }

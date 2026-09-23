@@ -63,7 +63,14 @@ function clock(at: number): string {
  * One series over time. Single-series by design: every stack measure has its
  * own scale, and two scales on one chart is the dual-axis mistake.
  */
-export function TimeSeriesChart({ title, subtitle, points, format, yMax, height = 120 }: TimeSeriesChartProps) {
+export function TimeSeriesChart({
+  title,
+  subtitle,
+  points,
+  format,
+  yMax,
+  height = 120,
+}: TimeSeriesChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(480)
   const [hover, setHover] = useState<number | null>(null)
@@ -152,7 +159,9 @@ export function TimeSeriesChart({ title, subtitle, points, format, yMax, height 
             aria-label={`${title}${lastPoint?.value != null ? `, latest ${format(lastPoint.value)}` : ''}`}
             tabIndex={0}
             className="block outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-            onPointerMove={(e) => setHover(nearest(e.clientX, e.currentTarget.getBoundingClientRect()))}
+            onPointerMove={(e) =>
+              setHover(nearest(e.clientX, e.currentTarget.getBoundingClientRect()))
+            }
             onPointerLeave={() => setHover(null)}
             onKeyDown={onKey}
             onBlur={() => setHover(null)}
@@ -166,7 +175,14 @@ export function TimeSeriesChart({ title, subtitle, points, format, yMax, height 
 
             {ticks.map((t) => (
               <g key={t}>
-                <line x1={PAD.left} x2={width - PAD.right} y1={geom.y(t)} y2={geom.y(t)} stroke="var(--rule)" strokeWidth={1} />
+                <line
+                  x1={PAD.left}
+                  x2={width - PAD.right}
+                  y1={geom.y(t)}
+                  y2={geom.y(t)}
+                  stroke="var(--rule)"
+                  strokeWidth={1}
+                />
                 <text
                   x={PAD.left - 6}
                   y={geom.y(t)}
@@ -181,12 +197,19 @@ export function TimeSeriesChart({ title, subtitle, points, format, yMax, height 
             <text x={PAD.left} y={height - 4} className="fill-ink-3 text-[10px] tabular-nums">
               {clock(geom.first)}
             </text>
-            <text x={width - PAD.right} y={height - 4} textAnchor="end" className="fill-ink-3 text-[10px] tabular-nums">
+            <text
+              x={width - PAD.right}
+              y={height - 4}
+              textAnchor="end"
+              className="fill-ink-3 text-[10px] tabular-nums"
+            >
               {clock(geom.last)}
             </text>
 
             {runs.map((run, i) => {
-              const line = run.map((p, j) => `${j ? 'L' : 'M'}${geom.x(p.at)},${geom.y(p.value!)}`).join('')
+              const line = run
+                .map((p, j) => `${j ? 'L' : 'M'}${geom.x(p.at)},${geom.y(p.value!)}`)
+                .join('')
               const base = geom.y(0)
               const area =
                 run.length > 1
@@ -196,9 +219,21 @@ export function TimeSeriesChart({ title, subtitle, points, format, yMax, height 
                 <g key={i}>
                   {area && <path d={area} fill={`url(#${areaId})`} />}
                   {run.length > 1 ? (
-                    <path d={line} fill="none" stroke="var(--brand)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+                    <path
+                      d={line}
+                      fill="none"
+                      stroke="var(--brand)"
+                      strokeWidth={2}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
                   ) : (
-                    <circle cx={geom.x(run[0].at)} cy={geom.y(run[0].value!)} r={2} fill="var(--brand)" />
+                    <circle
+                      cx={geom.x(run[0].at)}
+                      cy={geom.y(run[0].value!)}
+                      r={2}
+                      fill="var(--brand)"
+                    />
                   )}
                 </g>
               )

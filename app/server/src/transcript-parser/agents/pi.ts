@@ -102,7 +102,10 @@ function usageOf(u: any): TranscriptUsage {
 async function readEntries(path: string): Promise<{ entries: Entry[]; badLines: number }> {
   const entries: Entry[] = []
   let badLines = 0
-  const rl = createInterface({ input: createReadStream(path, { encoding: 'utf8' }), crlfDelay: Infinity })
+  const rl = createInterface({
+    input: createReadStream(path, { encoding: 'utf8' }),
+    crlfDelay: Infinity,
+  })
   for await (const line of rl) {
     if (!line.trim()) {
       continue
@@ -179,8 +182,16 @@ export async function parsePiSession(mainJsonlPath: string): Promise<AgentParseR
   const prompts: AgentParseResult['prompts'] = {}
   const lastTimestampByPromptId: Record<string, number> = {}
   const toolUses = new Map<string, ToolUse>()
-  const toolResults = new Map<string, { timestamp: number; isError: boolean; details: any; name: string }>()
-  const briefs: Array<{ agentId: string; agentType: string | null; description: string | null; parentId: string | null }> = []
+  const toolResults = new Map<
+    string,
+    { timestamp: number; isError: boolean; details: any; name: string }
+  >()
+  const briefs: Array<{
+    agentId: string
+    agentType: string | null
+    description: string | null
+    parentId: string | null
+  }> = []
   let firstTs = Infinity
   let lastTs = 0
   let userPrompts = 0
@@ -196,10 +207,17 @@ export async function parsePiSession(mainJsonlPath: string): Promise<AgentParseR
 
     const promptId = resolvePrompt(e)
     if (promptId && e.timestamp > 0) {
-      lastTimestampByPromptId[promptId] = Math.max(lastTimestampByPromptId[promptId] ?? 0, e.timestamp)
+      lastTimestampByPromptId[promptId] = Math.max(
+        lastTimestampByPromptId[promptId] ?? 0,
+        e.timestamp,
+      )
     }
 
-    if (e.type === 'custom' && e.raw.customType === 'subagent-turn' && e.raw.data?.phase === 'brief') {
+    if (
+      e.type === 'custom' &&
+      e.raw.customType === 'subagent-turn' &&
+      e.raw.data?.phase === 'brief'
+    ) {
       const d = e.raw.data
       briefs.push({
         agentId: String(d.agentId ?? d.shortId ?? ''),
@@ -300,7 +318,10 @@ function aggregateTools(
   const filesRead = new Set<string>()
   const filesEdited = new Set<string>()
   let gitCommits = 0
-  const perTool = new Map<string, { count: number; durations: number[]; longestMs: number; longestId: string | null }>()
+  const perTool = new Map<
+    string,
+    { count: number; durations: number[]; longestMs: number; longestId: string | null }
+  >()
 
   for (const use of uses.values()) {
     const path = typeof use.args.path === 'string' ? use.args.path : null
@@ -339,7 +360,12 @@ function aggregateTools(
         name,
         count: acc.count,
         minMs: d.length ? d[0] : null,
-        medianMs: d.length === 0 ? null : d.length % 2 === 0 ? Math.round((d[mid - 1] + d[mid]) / 2) : d[mid],
+        medianMs:
+          d.length === 0
+            ? null
+            : d.length % 2 === 0
+              ? Math.round((d[mid - 1] + d[mid]) / 2)
+              : d[mid],
         maxMs: d.length ? d[d.length - 1] : null,
         longestToolUseId: acc.longestId,
       }
@@ -357,7 +383,12 @@ function aggregateTools(
 function buildSubagents(
   uses: Map<string, ToolUse>,
   results: Map<string, { timestamp: number; details: any }>,
-  briefs: Array<{ agentId: string; agentType: string | null; description: string | null; parentId: string | null }>,
+  briefs: Array<{
+    agentId: string
+    agentType: string | null
+    description: string | null
+    parentId: string | null
+  }>,
 ): TranscriptSubagent[] {
   const unclaimed = [...briefs]
   const rows: TranscriptSubagent[] = []
@@ -372,14 +403,19 @@ function buildSubagents(
     // The brief hangs off the assistant message that made the call; with
     // several calls in one message, the description tells them apart.
     const idx = unclaimed.findIndex(
-      (b) => b.parentId === use.assistantEntryId && (!description || !b.description || b.description === description),
+      (b) =>
+        b.parentId === use.assistantEntryId &&
+        (!description || !b.description || b.description === description),
     )
     const brief = idx >= 0 ? unclaimed.splice(idx, 1)[0] : undefined
 
     const costUsd = typeof details.cost === 'number' ? details.cost : null
     rows.push({
       agentId: brief?.agentId || use.id,
-      agentType: details.type ?? brief?.agentType ?? (typeof use.args.agent === 'string' ? use.args.agent : null),
+      agentType:
+        details.type ??
+        brief?.agentType ??
+        (typeof use.args.agent === 'string' ? use.args.agent : null),
       description: details.description ?? description,
       toolUseId: use.id,
       originPromptId: null,

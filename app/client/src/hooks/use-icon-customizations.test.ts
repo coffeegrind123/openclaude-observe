@@ -5,7 +5,11 @@ const icon = (iconName: string) => ({ iconName })
 
 describe('migrateIconCustomizations', () => {
   it('moves Claude Code tool keys onto the pi tool names', () => {
-    const out = migrateIconCustomizations({ Bash: icon('terminal'), Glob: icon('search'), _MCP: icon('plug') })
+    const out = migrateIconCustomizations({
+      Bash: icon('terminal'),
+      Glob: icon('search'),
+      _MCP: icon('plug'),
+    })
     expect(out).toEqual({ bash: icon('terminal'), find: icon('search'), mcp: icon('plug') })
   })
 

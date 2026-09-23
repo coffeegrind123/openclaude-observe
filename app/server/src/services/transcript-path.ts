@@ -34,8 +34,15 @@ async function realOrSelf(p: string): Promise<string> {
  * The readable path for a pi session transcript, or null when the path is not
  * one the server may read.
  */
-export async function resolvePiTranscript(transcriptPath: string, homes: string[]): Promise<string | null> {
-  if (!path.isAbsolute(transcriptPath) || !transcriptPath.endsWith('.jsonl') || transcriptPath.includes('\0')) {
+export async function resolvePiTranscript(
+  transcriptPath: string,
+  homes: string[],
+): Promise<string | null> {
+  if (
+    !path.isAbsolute(transcriptPath) ||
+    !transcriptPath.endsWith('.jsonl') ||
+    transcriptPath.includes('\0')
+  ) {
     return null
   }
   const requested = path.resolve(transcriptPath)

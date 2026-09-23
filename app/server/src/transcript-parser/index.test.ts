@@ -51,11 +51,23 @@ beforeEach(() => {
 type Line = Record<string, unknown>
 
 function header(): Line {
-  return { type: 'session', version: 3, id: 'sess1', timestamp: '2026-05-22T00:00:00.000Z', cwd: '/w' }
+  return {
+    type: 'session',
+    version: 3,
+    id: 'sess1',
+    timestamp: '2026-05-22T00:00:00.000Z',
+    cwd: '/w',
+  }
 }
 
 function user(id: string, parentId: string | null, at: string, text: string): Line {
-  return { type: 'message', id, parentId, timestamp: at, message: { role: 'user', content: [{ type: 'text', text }] } }
+  return {
+    type: 'message',
+    id,
+    parentId,
+    timestamp: at,
+    message: { role: 'user', content: [{ type: 'text', text }] },
+  }
 }
 
 function assistant(
@@ -66,7 +78,12 @@ function assistant(
   usage: { input: number; output: number; cacheRead?: number; costTotal?: number },
   content: unknown[] = [{ type: 'text', text: 'ok' }],
 ): Line {
-  const u: Record<string, unknown> = { input: usage.input, output: usage.output, cacheRead: usage.cacheRead ?? 0, cacheWrite: 0 }
+  const u: Record<string, unknown> = {
+    input: usage.input,
+    output: usage.output,
+    cacheRead: usage.cacheRead ?? 0,
+    cacheWrite: 0,
+  }
   if (usage.costTotal !== undefined) {
     u.cost = { total: usage.costTotal }
   }
@@ -75,7 +92,15 @@ function assistant(
     id,
     parentId,
     timestamp: at,
-    message: { role: 'assistant', model, provider: 'p', stopReason: 'stop', responseId: `r-${id}`, usage: u, content },
+    message: {
+      role: 'assistant',
+      model,
+      provider: 'p',
+      stopReason: 'stop',
+      responseId: `r-${id}`,
+      usage: u,
+      content,
+    },
   }
 }
 
@@ -101,7 +126,11 @@ describe('parseSessionTranscripts', () => {
     const path = writeSession([
       header(),
       user('u1', null, '2026-05-22T00:00:00.000Z', 'hi'),
-      assistant('a1', 'u1', '2026-05-22T00:00:01.000Z', 'qwen3.8-27b', { input: 1000, output: 500, costTotal: 0 }),
+      assistant('a1', 'u1', '2026-05-22T00:00:01.000Z', 'qwen3.8-27b', {
+        input: 1000,
+        output: 500,
+        costTotal: 0,
+      }),
     ])
     const stats = await parseSessionTranscripts('sess1', makeStore({ agents: PI }), path)
 
@@ -115,7 +144,11 @@ describe('parseSessionTranscripts', () => {
     const path = writeSession([
       header(),
       user('u1', null, '2026-05-22T00:00:00.000Z', 'hi'),
-      assistant('a1', 'u1', '2026-05-22T00:00:01.000Z', 'deepseek-flash', { input: 1000, output: 500, costTotal: 0.02 }),
+      assistant('a1', 'u1', '2026-05-22T00:00:01.000Z', 'deepseek-flash', {
+        input: 1000,
+        output: 500,
+        costTotal: 0.02,
+      }),
     ])
     const stats = await parseSessionTranscripts('sess1', makeStore({ agents: PI }), path)
     expect(stats.byModel[0].costCents).toBeCloseTo(2)
@@ -125,7 +158,10 @@ describe('parseSessionTranscripts', () => {
     const path = writeSession([
       header(),
       user('u1', null, '2026-05-22T00:00:00.000Z', 'hi'),
-      assistant('a1', 'u1', '2026-05-22T00:00:01.000Z', 'deepseek-flash', { input: 1000, output: 500 }),
+      assistant('a1', 'u1', '2026-05-22T00:00:01.000Z', 'deepseek-flash', {
+        input: 1000,
+        output: 500,
+      }),
     ])
     const stats = await parseSessionTranscripts('sess1', makeStore({ agents: PI }), path)
     // 1000 input * $15/M + 500 output * $75/M = $0.0525 → 5 cents
@@ -148,9 +184,17 @@ describe('parseSessionTranscripts', () => {
     const path = writeSession([
       header(),
       user('u1', null, '2026-06-01T00:00:00.000Z', 'first'),
-      assistant('a1', 'u1', '2026-06-01T00:00:10.000Z', 'qwen3.8-27b', { input: 1, output: 1, costTotal: 0 }),
+      assistant('a1', 'u1', '2026-06-01T00:00:10.000Z', 'qwen3.8-27b', {
+        input: 1,
+        output: 1,
+        costTotal: 0,
+      }),
       user('u2', 'a1', '2026-06-01T00:10:10.000Z', 'second'),
-      assistant('a2', 'u2', '2026-06-01T00:10:13.000Z', 'qwen3.8-27b', { input: 1, output: 1, costTotal: 0 }),
+      assistant('a2', 'u2', '2026-06-01T00:10:13.000Z', 'qwen3.8-27b', {
+        input: 1,
+        output: 1,
+        costTotal: 0,
+      }),
     ])
     const stats = await parseSessionTranscripts('sess1', makeStore({ agents: PI }), path)
 
@@ -164,9 +208,21 @@ describe('parseSessionTranscripts', () => {
     const path = writeSession([
       header(),
       user('u1', null, '2026-06-01T00:00:00.000Z', 'delegate'),
-      assistant('a1', 'u1', '2026-06-01T00:00:01.000Z', 'qwen3.8-27b', { input: 100, output: 10, costTotal: 0 }, [
-        { type: 'toolCall', id: 'call_1', name: 'Agent', arguments: { prompt: 'x', description: 'look' } },
-      ]),
+      assistant(
+        'a1',
+        'u1',
+        '2026-06-01T00:00:01.000Z',
+        'qwen3.8-27b',
+        { input: 100, output: 10, costTotal: 0 },
+        [
+          {
+            type: 'toolCall',
+            id: 'call_1',
+            name: 'Agent',
+            arguments: { prompt: 'x', description: 'look' },
+          },
+        ],
+      ),
       {
         type: 'message',
         id: 'r1',
@@ -178,14 +234,28 @@ describe('parseSessionTranscripts', () => {
           toolName: 'Agent',
           isError: false,
           content: [{ type: 'text', text: '2' }],
-          details: { type: 'explorer', turnCount: 3, toolUses: 2, input: 3000, output: 200, durationMs: 8000, modelId: 'deepseek-flash', cost: 0.03 },
+          details: {
+            type: 'explorer',
+            turnCount: 3,
+            toolUses: 2,
+            input: 3000,
+            output: 200,
+            durationMs: 8000,
+            modelId: 'deepseek-flash',
+            cost: 0.03,
+          },
         },
       },
     ])
     const stats = await parseSessionTranscripts('sess1', makeStore({ agents: PI }), path)
 
     expect(stats.subagents).toHaveLength(1)
-    expect(stats.subagents[0]).toMatchObject({ agentType: 'explorer', toolUseId: 'call_1', requests: 3, costCents: 3 })
+    expect(stats.subagents[0]).toMatchObject({
+      agentType: 'explorer',
+      toolUseId: 'call_1',
+      requests: 3,
+      costCents: 3,
+    })
     const prompt = stats.prompts.find((p) => p.promptId === 'u1')!
     expect(prompt.inputTokens).toBe(3100)
     expect(prompt.costCents).toBeCloseTo(3)
@@ -212,7 +282,11 @@ describe('parseSessionTranscripts', () => {
       path,
     )
     expect(stats.errors).toContainEqual(
-      expect.objectContaining({ scope: 'main', code: 'parse_error', message: expect.stringContaining('some-future-runtime') }),
+      expect.objectContaining({
+        scope: 'main',
+        code: 'parse_error',
+        message: expect.stringContaining('some-future-runtime'),
+      }),
     )
     expect(stats.byModel).toHaveLength(0)
   })

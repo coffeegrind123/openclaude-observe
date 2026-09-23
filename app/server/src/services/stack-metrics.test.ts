@@ -18,7 +18,11 @@ const FIXTURE = readFileSync(
   'utf8',
 )
 
-function snap(counters: Record<string, number>, at = 0, restartToken: string | null = 't1'): LlamaSnapshot {
+function snap(
+  counters: Record<string, number>,
+  at = 0,
+  restartToken: string | null = 't1',
+): LlamaSnapshot {
   return { at, restartToken, counters, acceptedPerPos: [] }
 }
 
@@ -127,7 +131,10 @@ describe('isReset', () => {
 
   test('detects a counter going backwards even without a token', () => {
     expect(
-      isReset(snap({ tokens_predicted_total: 50 }, 0, null), snap({ tokens_predicted_total: 3 }, 1, null)),
+      isReset(
+        snap({ tokens_predicted_total: 50 }, 0, null),
+        snap({ tokens_predicted_total: 3 }, 1, null),
+      ),
     ).toBe(true)
   })
 
@@ -175,7 +182,9 @@ describe('StackPoller', () => {
     let i = 0
     return vi.fn(async (url: string) => {
       if (String(url).endsWith('/forge/usage')) {
-        return new Response(JSON.stringify({ current_usage_tokens: 10, context_window_tokens: 100 }))
+        return new Response(
+          JSON.stringify({ current_usage_tokens: 10, context_window_tokens: 100 }),
+        )
       }
       const r = responses[Math.min(i++, responses.length - 1)]
       if (r instanceof Error) {
@@ -240,10 +249,7 @@ describe('StackPoller', () => {
 
   test('unreachable llama is reported, then recovers', async () => {
     const { p, onStatus } = poller(
-      makeFetch([
-        new Error('fetch failed'),
-        { body: metricsBody(0, 0), token: 'a' },
-      ]),
+      makeFetch([new Error('fetch failed'), { body: metricsBody(0, 0), token: 'a' }]),
     )
 
     await p.tick()

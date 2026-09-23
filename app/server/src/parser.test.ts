@@ -16,7 +16,12 @@ const BASE = {
 
 describe('parseRawEvent — pi envelope', () => {
   test('SessionStart', () => {
-    const r = parseRawEvent({ ...BASE, hook_event_name: 'SessionStart', source: 'startup', thinking_level: 'off' })
+    const r = parseRawEvent({
+      ...BASE,
+      hook_event_name: 'SessionStart',
+      source: 'startup',
+      thinking_level: 'off',
+    })
 
     expect(r.type).toBe('session')
     expect(r.subtype).toBe('SessionStart')
@@ -24,7 +29,12 @@ describe('parseRawEvent — pi envelope', () => {
     expect(r.transcriptPath).toBe(BASE.transcript_path)
     expect(r.agentClass).toBe('pi')
     expect(r.ownerAgentId).toBeNull()
-    expect(r.metadata).toMatchObject({ cwd: '/work/proj', model: 'qwen3.8-27b', provider: 'forge', thinking_level: 'off' })
+    expect(r.metadata).toMatchObject({
+      cwd: '/work/proj',
+      model: 'qwen3.8-27b',
+      provider: 'forge',
+      thinking_level: 'off',
+    })
   })
 
   test.each([
@@ -60,7 +70,9 @@ describe('parseRawEvent — pi envelope', () => {
   })
 
   test('tool_name on a non-tool event is not treated as a tool', () => {
-    expect(parseRawEvent({ ...BASE, hook_event_name: 'Stop', tool_name: 'bash' }).toolName).toBeNull()
+    expect(
+      parseRawEvent({ ...BASE, hook_event_name: 'Stop', tool_name: 'bash' }).toolName,
+    ).toBeNull()
   })
 
   test('subagent events name their agent and its spawner explicitly', () => {
@@ -93,7 +105,12 @@ describe('parseRawEvent — pi envelope', () => {
   })
 
   test('ids are length-capped and non-strings ignored', () => {
-    const r = parseRawEvent({ ...BASE, hook_event_name: 'Stop', session_id: 'x'.repeat(1000), agent_id: 42 })
+    const r = parseRawEvent({
+      ...BASE,
+      hook_event_name: 'Stop',
+      session_id: 'x'.repeat(1000),
+      agent_id: 42,
+    })
     expect(r.sessionId).toHaveLength(256)
     expect(r.ownerAgentId).toBeNull()
   })

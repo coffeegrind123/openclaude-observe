@@ -124,7 +124,11 @@ export function shouldBroadcastActivity(
 
 /** Broadcast an activity ping for a session if we haven't sent one for
  *  this session within the throttle window. Safe to call on every event. */
-export function broadcastActivity(sessionId: string, eventId: number, projectId: number | null): void {
+export function broadcastActivity(
+  sessionId: string,
+  eventId: number,
+  projectId: number | null,
+): void {
   const now = Date.now()
   if (!shouldBroadcastActivity(lastActivityBroadcast, sessionId, now)) return
   lastActivityBroadcast.set(sessionId, now)

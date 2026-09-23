@@ -138,24 +138,32 @@ function toolResponseText(toolResponse: unknown): string {
 }
 
 function toolDescription(toolName: string, input: Record<string, any>): string {
-  const target = input.path ?? input.file_path ?? input.command ?? input.pattern ?? input.description
+  const target =
+    input.path ?? input.file_path ?? input.command ?? input.pattern ?? input.description
   return typeof target === 'string' ? `${toolName}: ${truncate(target, 60)}` : toolName
 }
 
 type Running = Record<ContextCategory, { tokens: number; added: ContextSource[] }>
 
 function emptyRunning(): Running {
-  return Object.fromEntries(CONTEXT_CATEGORIES.map((c) => [c, { tokens: 0, added: [] }])) as unknown as Running
+  return Object.fromEntries(
+    CONTEXT_CATEGORIES.map((c) => [c, { tokens: 0, added: [] }]),
+  ) as unknown as Running
 }
 
 /**
  * Attribution for one agent's window. `agentId` defaults to the session's
  * top-level agent, whose id is the session id.
  */
-export function computeSessionContext(events: StoredEvent[], agentId?: string): SessionContextBreakdown {
+export function computeSessionContext(
+  events: StoredEvent[],
+  agentId?: string,
+): SessionContextBreakdown {
   const sessionId = events[0]?.session_id ?? ''
   const owner = agentId ?? sessionId
-  const sorted = events.filter((e) => e.agent_id === owner).sort((a, b) => a.timestamp - b.timestamp || a.id - b.id)
+  const sorted = events
+    .filter((e) => e.agent_id === owner)
+    .sort((a, b) => a.timestamp - b.timestamp || a.id - b.id)
 
   const aggregates = Object.fromEntries(
     CONTEXT_CATEGORIES.map((c) => [c, { tokens: 0, count: 0 }]),
@@ -180,10 +188,17 @@ export function computeSessionContext(events: StoredEvent[], agentId?: string): 
     switch (ev.subtype) {
       case 'SystemPrompt': {
         // Replaces, never accumulates: the window holds one system prompt.
-        const chars = typeof p.system_prompt_chars === 'number' ? p.system_prompt_chars : String(p.system_prompt ?? '').length
+        const chars =
+          typeof p.system_prompt_chars === 'number'
+            ? p.system_prompt_chars
+            : String(p.system_prompt ?? '').length
         const tokens = Math.ceil(chars / 4)
         running['system-prompt'].tokens = 0
-        add('system-prompt', { eventId: ev.id, description: `system prompt (${chars.toLocaleString()} chars)`, tokens })
+        add('system-prompt', {
+          eventId: ev.id,
+          description: `system prompt (${chars.toLocaleString()} chars)`,
+          tokens,
+        })
         break
       }
       case 'PostCompact': {
@@ -220,7 +235,11 @@ export function computeSessionContext(events: StoredEvent[], agentId?: string): 
       }
       case 'UserBash': {
         if (p.exclude_from_context !== true) {
-          add('user-message', { eventId: ev.id, description: `!${truncate(String(p.command ?? ''), 60)}`, tokens: estimateTokens(String(p.command ?? '')) })
+          add('user-message', {
+            eventId: ev.id,
+            description: `!${truncate(String(p.command ?? ''), 60)}`,
+            tokens: estimateTokens(String(p.command ?? '')),
+          })
         }
         break
       }

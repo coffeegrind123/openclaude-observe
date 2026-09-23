@@ -6,7 +6,13 @@ const FILL = { ok: 'bg-run', warn: 'bg-warn', critical: 'bg-fail' } as const
 const LABEL = { ok: '', warn: 'Compaction getting close', critical: 'Compaction imminent' } as const
 
 /** Context fill as a meter; the fill color escalates with severity, never alone. */
-export function ContextMeter({ context, compact = false }: { context: ForgeUsage | null; compact?: boolean }) {
+export function ContextMeter({
+  context,
+  compact = false,
+}: {
+  context: ForgeUsage | null
+  compact?: boolean
+}) {
   if (!context) {
     return (
       <div className="min-w-0 rounded-md border border-rule bg-card px-3 py-2">
@@ -35,7 +41,9 @@ export function ContextMeter({ context, compact = false }: { context: ForgeUsage
       </div>
       <div className="mt-1 flex items-center gap-1 truncate text-[10px] text-ink-3">
         {level !== 'ok' && <AlertTriangle className="h-3 w-3 shrink-0 text-warn" aria-hidden />}
-        {level !== 'ok' ? LABEL[level] : `${compactTokens(context.currentTokens)} of ${compactTokens(context.contextWindow)}`}
+        {level !== 'ok'
+          ? LABEL[level]
+          : `${compactTokens(context.currentTokens)} of ${compactTokens(context.contextWindow)}`}
       </div>
     </div>
   )

@@ -3,7 +3,11 @@ import { computeSessionContext, estimateTokens } from './context'
 import type { StoredEvent } from './storage/types'
 
 let nextId = 1
-function ev(subtype: string, payload: Record<string, unknown>, opts: { agent?: string; tool?: string; t?: number } = {}): StoredEvent {
+function ev(
+  subtype: string,
+  payload: Record<string, unknown>,
+  opts: { agent?: string; tool?: string; t?: number } = {},
+): StoredEvent {
   const id = nextId++
   return {
     id,
@@ -29,7 +33,15 @@ describe('computeSessionContext', () => {
       ev('SystemPrompt', { system_prompt: 'x'.repeat(400), system_prompt_chars: 4000 }),
       ev('UserPromptSubmit', { prompt: 'y'.repeat(40) }),
       ev('LLMGeneration', { input_tokens: 1100, output_tokens: 50 }),
-      ev('PostToolUse', { tool_name: 'read', tool_input: { path: 'a.ts' }, tool_response: { content: 'z'.repeat(800) } }, { tool: 'read' }),
+      ev(
+        'PostToolUse',
+        {
+          tool_name: 'read',
+          tool_input: { path: 'a.ts' },
+          tool_response: { content: 'z'.repeat(800) },
+        },
+        { tool: 'read' },
+      ),
       ev('LLMGeneration', { input_tokens: 60, cache_read_tokens: 1150, output_tokens: 10 }),
     ]
     const r = computeSessionContext(events)
@@ -45,7 +57,9 @@ describe('computeSessionContext', () => {
     expect(t2.estimatedTokens).toBe(1000 + 10 + 200 + 50)
     // sources are only what the turn added
     expect(t2.buckets.find((b) => b.category === 'user-message')!.sources).toHaveLength(0)
-    expect(t2.buckets.find((b) => b.category === 'tool-output')!.sources[0].description).toBe('read: a.ts')
+    expect(t2.buckets.find((b) => b.category === 'tool-output')!.sources[0].description).toBe(
+      'read: a.ts',
+    )
     // aggregates count each source once
     expect(r.aggregates['user-message']).toEqual({ tokens: 10, count: 1 })
     expect(r.peakInputTokens).toBe(1210)
@@ -77,7 +91,15 @@ describe('computeSessionContext', () => {
 
   test('delegation and injected messages have their own categories', () => {
     const r = computeSessionContext([
-      ev('PostToolUse', { tool_name: 'Agent', tool_input: { description: 'count' }, tool_response: { content: 'd'.repeat(40) } }, { tool: 'Agent' }),
+      ev(
+        'PostToolUse',
+        {
+          tool_name: 'Agent',
+          tool_input: { description: 'count' },
+          tool_response: { content: 'd'.repeat(40) },
+        },
+        { tool: 'Agent' },
+      ),
       ev('CustomMessage', { custom_type: 'subagent-result', text: 'r'.repeat(40) }),
       ev('CustomMessage', { custom_type: 'persona-note', text: 'n'.repeat(40) }),
       ev('LLMGeneration', { input_tokens: 1 }),
@@ -89,7 +111,11 @@ describe('computeSessionContext', () => {
   test("a subagent's events never count against its parent's window", () => {
     const events = [
       ev('UserPromptSubmit', { prompt: 'q'.repeat(40) }),
-      ev('PostToolUse', { tool_name: 'bash', tool_response: { content: 'c'.repeat(4000) } }, { agent: 'child', tool: 'bash' }),
+      ev(
+        'PostToolUse',
+        { tool_name: 'bash', tool_response: { content: 'c'.repeat(4000) } },
+        { agent: 'child', tool: 'bash' },
+      ),
       ev('LLMGeneration', { input_tokens: 5 }, { agent: 'child' }),
       ev('LLMGeneration', { input_tokens: 10 }),
     ]

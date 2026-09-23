@@ -39,7 +39,12 @@ function sample(at: number): StackSample {
 
 describe('stack-store', () => {
   beforeEach(() => {
-    useStackStore.setState({ status: { state: 'starting' }, samples: [], totals: null, hydrated: false })
+    useStackStore.setState({
+      status: { state: 'starting' },
+      samples: [],
+      totals: null,
+      hydrated: false,
+    })
   })
 
   it('keeps a live sample that arrived before the initial snapshot', () => {

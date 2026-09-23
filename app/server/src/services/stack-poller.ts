@@ -15,7 +15,8 @@ export function startStackPoller(): StackPoller {
   }
   poller = new StackPoller({
     ...config.stack,
-    onSample: (sample, totals) => broadcastToAll({ type: 'stack_metrics', data: { sample, totals } }),
+    onSample: (sample, totals) =>
+      broadcastToAll({ type: 'stack_metrics', data: { sample, totals } }),
     onStatus: (status) => {
       broadcastToAll({ type: 'stack_status', data: status })
       if ((status.state === 'unreachable' || status.state === 'stalled') && config.verbose) {

@@ -44,7 +44,12 @@ describe('resolvePiTranscript', () => {
   })
 
   test('rejects non-.jsonl files, relative paths and unknown homes', async () => {
-    expect(await resolvePiTranscript(join(home, '.pi', 'agent', 'sessions', '--work-proj--', 'notes.txt'), [home])).toBeNull()
+    expect(
+      await resolvePiTranscript(
+        join(home, '.pi', 'agent', 'sessions', '--work-proj--', 'notes.txt'),
+        [home],
+      ),
+    ).toBeNull()
     expect(await resolvePiTranscript('.pi/agent/sessions/x.jsonl', [home])).toBeNull()
     expect(await resolvePiTranscript(sessionFile, ['/somewhere/else'])).toBeNull()
   })

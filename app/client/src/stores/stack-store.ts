@@ -42,7 +42,11 @@ export const useStackStore = create<StackStore>((set) => ({
       }
       const samples = s.samples.length >= MAX_STACK_SAMPLES ? s.samples.slice(1) : s.samples.slice()
       samples.push(sample)
-      return { samples, totals, status: s.status.state === 'ok' ? s.status : { ...s.status, state: 'ok' } }
+      return {
+        samples,
+        totals,
+        status: s.status.state === 'ok' ? s.status : { ...s.status, state: 'ok' },
+      }
     }),
 
   setStatus: (status) => set({ status }),
