@@ -177,12 +177,6 @@ export const api = {
     fetchVoid(`/sessions/${encodeURIComponent(sessionId)}/events`, { method: 'DELETE' }),
   deleteProject: (projectId: number) => fetchVoid(`/projects/${projectId}`, { method: 'DELETE' }),
   deleteAllData: () => fetchVoid(`/data`, { method: 'DELETE' }),
-  updateAgentMetadata: (agentId: string, data: { agentType?: string; name?: string }) =>
-    fetchVoid(`/agents/${encodeURIComponent(agentId)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }),
   updateSessionSlug: (sessionId: string, slug: string) =>
     fetchVoid(`/sessions/${encodeURIComponent(sessionId)}`, {
       method: 'PATCH',

@@ -653,44 +653,6 @@ describe('api.deleteAllData', () => {
 })
 
 // ---------------------------------------------------------------------------
-// api.updateAgentMetadata (PATCH with JSON body)
-// ---------------------------------------------------------------------------
-
-describe('api.updateAgentMetadata', () => {
-  it('should send PATCH with JSON body to agent endpoint', async () => {
-    vi.mocked(fetch).mockResolvedValue({ ok: true } as Response)
-
-    await api.updateAgentMetadata('agent-1', { agentType: 'bash', name: 'Shell Agent' })
-    expect(fetch).toHaveBeenCalledWith(`${API_BASE}/agents/agent-1`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentType: 'bash', name: 'Shell Agent' }),
-    })
-  })
-
-  it('should handle partial update (agentType only)', async () => {
-    vi.mocked(fetch).mockResolvedValue({ ok: true } as Response)
-
-    await api.updateAgentMetadata('agent-1', { agentType: 'code' })
-    const call = vi.mocked(fetch).mock.calls[0][1] as RequestInit
-    expect(JSON.parse(call.body as string)).toEqual({ agentType: 'code' })
-  })
-
-  it('should handle partial update (name only)', async () => {
-    vi.mocked(fetch).mockResolvedValue({ ok: true } as Response)
-
-    await api.updateAgentMetadata('agent-1', { name: 'Renamed' })
-    const call = vi.mocked(fetch).mock.calls[0][1] as RequestInit
-    expect(JSON.parse(call.body as string)).toEqual({ name: 'Renamed' })
-  })
-
-  it('should throw ApiError on failure', async () => {
-    vi.mocked(fetch).mockRejectedValue(new Error('fail'))
-    await expect(api.updateAgentMetadata('a', {})).rejects.toThrow(ApiError)
-  })
-})
-
-// ---------------------------------------------------------------------------
 // api.updateSessionSlug (PATCH)
 // ---------------------------------------------------------------------------
 
