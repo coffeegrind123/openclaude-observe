@@ -34,6 +34,8 @@ import {
   Hash,
   Terminal,
   ExternalLink,
+  GitBranch,
+  GitFork,
 } from 'lucide-react'
 import { MoveSessionModal } from './project-modal'
 import { CollapsibleSection } from './sections/collapsible-section'
@@ -105,6 +107,12 @@ export function SessionEditModal() {
 
   const label = session?.slug || session?.id.slice(0, 8) || ''
   const cwd = typeof session?.metadata?.cwd === 'string' ? session.metadata.cwd : null
+  const gitBranch =
+    typeof session?.metadata?.git_branch === 'string' ? session.metadata.git_branch : null
+  const gitRepo =
+    typeof session?.metadata?.git_repository_url === 'string'
+      ? session.metadata.git_repository_url
+      : null
   const jsonlPath = session?.transcriptPath || null
   // pi resolves a session by file path or (partial) id: `--session` resumes
   // it, `--fork` copies it into a new session.
@@ -323,6 +331,24 @@ export function SessionEditModal() {
                   display={shortenCwd(cwd)}
                   copied={copiedField === 'cwd'}
                   onCopy={() => copyToClipboard('cwd', cwd)}
+                />
+              )}
+              {gitBranch && (
+                <CopyRow
+                  icon={<GitBranch className="h-3.5 w-3.5" />}
+                  label="Branch"
+                  value={gitBranch}
+                  copied={copiedField === 'branch'}
+                  onCopy={() => copyToClipboard('branch', gitBranch)}
+                />
+              )}
+              {gitRepo && (
+                <CopyRow
+                  icon={<GitFork className="h-3.5 w-3.5" />}
+                  label="Repository"
+                  value={gitRepo}
+                  copied={copiedField === 'repo'}
+                  onCopy={() => copyToClipboard('repo', gitRepo)}
                 />
               )}
               <CopyRow

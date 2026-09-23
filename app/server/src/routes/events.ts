@@ -241,6 +241,19 @@ router.post('/events', rateLimit, async (c) => {
       }
     }
 
+    // An unnamed session is labelled `<branch>:<id8>` from its git checkout,
+    // once. A pi session name — on the envelope, or a later SessionRename —
+    // takes precedence, and a branch switch mid-session doesn't rename it.
+    const gitBranch = parsed.metadata.git_branch
+    if (typeof gitBranch === 'string' && !parsed.ownerAgentId && !parsed.slug) {
+      const current = await store.getSessionById(parsed.sessionId)
+      if (current && !current.slug) {
+        const slug = `${gitBranch}:${parsed.sessionId.split('-')[0]}`
+        await store.updateSessionSlug(parsed.sessionId, slug)
+        broadcastToAll({ type: 'session_update', data: { id: parsed.sessionId, slug } })
+      }
+    }
+
     // Session lifecycle: SessionEnd stops the session, any other event reactivates a stopped session.
     if (parsed.subtype === 'SessionEnd') {
       await store.updateSessionStatus(parsed.sessionId, 'stopped')

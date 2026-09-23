@@ -166,6 +166,39 @@ describe('parseRawEvent — common behavior', () => {
     expect(parsed.projectName).toBeNull()
   })
 
+  test('git context from the top-level session goes into metadata, credentials stripped', () => {
+    const r = parseRawEvent({
+      ...BASE,
+      hook_event_name: 'SessionStart',
+      git_branch: 'feat/x',
+      git_repository_url: 'https://tok@github.com/me/repo.git',
+    })
+    expect(r.metadata.git_branch).toBe('feat/x')
+    expect(r.metadata.git_repository_url).toBe('https://github.com/me/repo.git')
+  })
+
+  test('null git fields are kept so they clear stale values', () => {
+    const r = parseRawEvent({
+      ...BASE,
+      hook_event_name: 'Stop',
+      git_branch: null,
+      git_repository_url: null,
+    })
+    expect(r.metadata).toMatchObject({ git_branch: null, git_repository_url: null })
+  })
+
+  test("a subagent's git fields are ignored", () => {
+    const r = parseRawEvent({
+      ...BASE,
+      hook_event_name: 'SubagentStart',
+      agent_id: 'child',
+      git_branch: 'elsewhere',
+      git_repository_url: 'https://github.com/x/y',
+    })
+    expect(r.metadata).not.toHaveProperty('git_branch')
+    expect(r.metadata).not.toHaveProperty('git_repository_url')
+  })
+
   test('defaults sessionId to "unknown" when session_id is absent', () => {
     const raw = { project_name: 'p', type: 'user', timestamp: 1711411200000 }
     const result = parseRawEvent(raw)

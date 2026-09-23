@@ -147,6 +147,45 @@ describe('POST /events — pi sessions', () => {
     expect(await store.getSessionById(ROOT_ID)).toBeFalsy()
   })
 
+  test('git branch and origin land in session metadata and name an unnamed session', async () => {
+    const start = ENVELOPES[0]
+    await post(app, {
+      ...start,
+      git_branch: 'feat/observe',
+      git_repository_url: 'https://user:ghp_secret@github.com/me/repo.git',
+    })
+
+    const session = await store.getSessionById(ROOT_ID)
+    const metadata = JSON.parse(session.metadata)
+    expect(metadata.git_branch).toBe('feat/observe')
+    // Credentials never reach storage, whatever the producer sent.
+    expect(metadata.git_repository_url).toBe('https://github.com/me/repo.git')
+    expect(session.slug).toBe(`feat/observe:${ROOT_ID.split('-')[0]}`)
+    expect(broadcasts).toContainEqual({
+      type: 'session_update',
+      data: { id: ROOT_ID, slug: `feat/observe:${ROOT_ID.split('-')[0]}` },
+    })
+
+    // A later Stop on another branch updates the metadata, not the name.
+    const stop = ENVELOPES.find((e) => e.hook_event_name === 'Stop')!
+    await post(app, { ...stop, git_branch: 'main', git_repository_url: null })
+    const after = await store.getSessionById(ROOT_ID)
+    expect(JSON.parse(after.metadata).git_branch).toBe('main')
+    expect(after.slug).toBe(`feat/observe:${ROOT_ID.split('-')[0]}`)
+  })
+
+  test('a named pi session keeps its name when git metadata arrives', async () => {
+    await post(app, { ...ENVELOPES[0], slug: 'my session', git_branch: 'feat/observe' })
+    expect((await store.getSessionById(ROOT_ID)).slug).toBe('my session')
+  })
+
+  test("a subagent's git fields don't rename the session", async () => {
+    await post(app, ENVELOPES[0])
+    const child = ENVELOPES.find((e) => e.hook_event_name === 'SubagentStart')!
+    await post(app, { ...child, git_branch: 'elsewhere' })
+    expect((await store.getSessionById(ROOT_ID)).slug).toBeNull()
+  })
+
   test('a grandchild spawned through SubAgent hangs under the child that spawned it', async () => {
     await ingestAll()
     const child = ENVELOPES.find((e) => e.hook_event_name === 'SubagentStart')!

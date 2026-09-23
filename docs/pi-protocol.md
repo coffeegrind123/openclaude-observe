@@ -56,11 +56,25 @@ matched to pending spawn calls first-in-first-out within an agent type. A
 background call's `Agent ID: …` result corrects the match exactly. See
 `src/linker.ts` for the full reasoning.
 
+## Git context
+
+`SessionStart` and `Stop` carry the top-level session's checkout, read from
+`.git` in `cwd` (linked worktrees included):
+
+| Field | Meaning |
+|---|---|
+| `git_branch` | Checked-out branch; `null` when HEAD is detached or `cwd` is not in a repository |
+| `git_repository_url` | `origin`'s URL, else the first remote's; `null` without one. Credentials are stripped by the extension and again by the server |
+
+The server merges both into the session's metadata (`null` removes a stale
+value) and names a session that has no pi name `<branch>:<first id segment>`,
+once. Git fields on subagent events are ignored.
+
 ## Events
 
 | `hook_event_name` | pi source | Extra fields |
 |---|---|---|
-| `SessionStart` | `session_start` (top-level) | `source` (`startup`\|`reload`\|`new`\|`resume`\|`fork`), `previous_session_file`, `thinking_level`, `context_window`, `pi_mode` |
+| `SessionStart` | `session_start` (top-level) | `source` (`startup`\|`reload`\|`new`\|`resume`\|`fork`), `previous_session_file`, `thinking_level`, `context_window`, `pi_mode`, `git_branch`, `git_repository_url` |
 | `SessionEnd` | `session_shutdown` | `reason` (`quit`\|`reload`\|`new`\|`resume`\|`fork`), `target_session_file` |
 | `SessionRename` | `session_info_changed` (top-level) | `name` |
 | `SystemPrompt` | `before_agent_start`, only when the prompt's length changed | `system_prompt`, `system_prompt_chars` |
@@ -68,7 +82,7 @@ background call's `Agent ID: …` result corrects the match exactly. See
 | `PreToolUse` | `tool_call` (input after other extensions' mutations) | `tool_name`, `tool_use_id`, `tool_input` |
 | `PostToolUse` / `PostToolUseFailure` | `tool_execution_end` (`isError`) | `tool_name`, `tool_use_id`, `tool_input`, `tool_response: {content, details}`, `is_error`, `duration_ms`, `error` (failures only), `spawned_agent_id` (background `Agent` only) |
 | `LLMGeneration` | `message_end` with role `assistant` | See below |
-| `Stop` | `agent_settled` (top-level) | `context` (`{tokens, contextWindow, percent}`) |
+| `Stop` | `agent_settled` (top-level) | `context` (`{tokens, contextWindow, percent}`), `git_branch`, `git_repository_url` |
 | `SubagentStart` | the child's `session_start` | `background` |
 | `SubagentStop` | the child's `agent_settled` | `turn_count`, `tool_uses`, `input_tokens`, `output_tokens`, `duration_ms` |
 | `PreCompact` | `session_before_compact` | `trigger` (`manual`\|`threshold`\|`overflow`), `will_retry`, `custom_instructions`, `context` |

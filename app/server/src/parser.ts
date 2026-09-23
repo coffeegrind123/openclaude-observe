@@ -2,6 +2,8 @@
 // Extracts structural fields from raw JSONL events.
 // NO formatting, NO truncation, NO summary generation — that's the client's job.
 
+import { stripRepoUrlCredentials } from './utils/repo-url'
+
 export interface ParsedRawEvent {
   projectName: string | null
   sessionId: string
@@ -76,6 +78,8 @@ const METADATA_KEYS = [
 ]
 
 const MAX_ID = 256
+const MAX_GIT_BRANCH = 256
+const MAX_REPO_URL = 2048
 
 function str(v: unknown, max = MAX_ID): string | null {
   return typeof v === 'string' && v !== '' ? v.slice(0, max) : null
@@ -130,6 +134,20 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
     }
     const value = raw[key]
     metadata[key] = key === 'cwd' && typeof value === 'string' ? value.slice(0, 1024) : value
+  }
+
+  // Git context describes the top-level session's checkout. A subagent's is
+  // ignored so a child working elsewhere can't overwrite it. null is kept:
+  // it clears a stale value when the session leaves a repository.
+  if (!raw.agent_id) {
+    if (raw.git_branch !== undefined) {
+      metadata.git_branch = str(raw.git_branch, MAX_GIT_BRANCH)
+    }
+    if (raw.git_repository_url !== undefined) {
+      metadata.git_repository_url = stripRepoUrlCredentials(
+        str(raw.git_repository_url, MAX_REPO_URL),
+      )
+    }
   }
 
   return {
