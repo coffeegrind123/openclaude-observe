@@ -545,7 +545,7 @@ describe('events routes — POST /events error handling', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        hook_payload: { session_id: 'bad' },
+        hook_payload: { hook_event_name: 'PreToolUse', session_id: 'bad' },
         meta: {},
       }),
     })

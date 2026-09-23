@@ -130,6 +130,23 @@ describe('POST /events — pi sessions', () => {
     expect(await store.getSessionsWithPendingNotifications(0)).toHaveLength(0)
   })
 
+  test('an envelope without session_id or hook_event_name is rejected, not filed under "unknown"', async () => {
+    const { session_id: _sid, ...noSession } = ENVELOPES[0]
+    const { hook_event_name: _hook, ...noHook } = ENVELOPES[0]
+
+    for (const [payload, missing] of [
+      [noSession, 'session_id'],
+      [noHook, 'hook_event_name'],
+      [{ ...ENVELOPES[0], session_id: '' }, 'session_id'],
+    ] as const) {
+      const res = await post(app, payload)
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.message).toContain(missing)
+    }
+    expect(await store.getSessionById('unknown')).toBeFalsy()
+    expect(await store.getSessionById(ROOT_ID)).toBeFalsy()
+  })
+
   test('a grandchild spawned through SubAgent hangs under the child that spawned it', async () => {
     await ingestAll()
     const child = ENVELOPES.find((e) => e.hook_event_name === 'SubagentStart')!

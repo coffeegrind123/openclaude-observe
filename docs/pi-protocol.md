@@ -20,7 +20,7 @@ Content-Type: application/json
 
 - **Delivery.** Events arrive in order from one sequential sender per pi process.
 - **Server errors and outages.** A 5xx or transport failure makes the sender drop that event and back off for 10 s. Events emitted during the backoff are discarded, not queued.
-- **4xx.** A 4xx drops that event only.
+- **4xx.** A 4xx drops that event only. The server answers 400 when `hook_payload` lacks a non-empty `hook_event_name` or `session_id`.
 - **Queue.** The queue is bounded at 2000.
 - **Field size.** Free-text fields are clipped to `OBSERVE_MAX_FIELD_CHARS` (default 64 000). A clipped field ends in `…[truncated N of M chars]`.
 

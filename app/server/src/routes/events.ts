@@ -53,6 +53,8 @@ async function ensureRootAgent(
   return rootId
 }
 
+const REQUIRED_ENVELOPE_FIELDS = ['hook_event_name', 'session_id'] as const
+
 // POST /events
 router.post('/events', rateLimit, async (c) => {
   const store = c.get('store')
@@ -72,6 +74,16 @@ router.post('/events', rateLimit, async (c) => {
     }
 
     const hookPayload = body.hook_payload as Record<string, unknown>
+
+    // Every envelope the pi extension sends names its event and session
+    // (docs/pi-protocol.md). Without them the event would be filed under a
+    // shared "unknown" session, so reject it and say what's missing.
+    const missing = REQUIRED_ENVELOPE_FIELDS.filter(
+      (f) => typeof hookPayload[f] !== 'string' || (hookPayload[f] as string).trim() === '',
+    )
+    if (missing.length > 0) {
+      return apiError(c, 400, `hook_payload is missing ${missing.join(', ')}`)
+    }
     const meta: { env?: Record<string, string> } =
       (body.meta as { env?: Record<string, string> }) || {}
 
