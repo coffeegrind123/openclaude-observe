@@ -281,6 +281,14 @@ function lineRange(offset: number | undefined, limit: number | undefined): strin
   return ''
 }
 
+/** The binary a bash call runs, shown as a tag ahead of its summary; null otherwise. */
+export function toolCallTag(toolName: string | null, input: Payload | undefined): string | null {
+  if (piToolKind(toolName) !== 'bash') {
+    return null
+  }
+  return extractBashBinary(str(input?.command) ?? '')
+}
+
 /** One-line description of a pi tool call from its input. */
 export function toolCallSummary(
   toolName: string | null,
@@ -296,12 +304,8 @@ export function toolCallSummary(
       const path = relPath(str(input.path), cwd)
       return range ? `${path} · ${range}` : path
     }
-    case 'bash': {
-      const cmd = str(input.command) ?? ''
-      const bin = extractBashBinary(cmd)
-      const flat = cmd.replace(/\s*\n\s*/g, ' \\n ').trim()
-      return bin ? `[${bin}] ${flat}` : flat
-    }
+    case 'bash':
+      return (str(input.command) ?? '').replace(/\s*\n\s*/g, ' \\n ').trim()
     case 'edit': {
       const n = editsOf(input).length
       const path = relPath(str(input.path), cwd)

@@ -58,6 +58,7 @@ export const defaultClass: AgentClass = {
   label: (event) => (isToolSubtype(event.subtype) ? 'Tool' : (event.subtype ?? event.type)),
   toolLabel: (event) => (isToolSubtype(event.subtype) ? event.toolName : null),
   summary,
+  summaryTag: () => null,
   prose: () => null,
   iconId,
   isFailure: (event) => event.subtype === 'PostToolUseFailure' || event.status === 'failed',

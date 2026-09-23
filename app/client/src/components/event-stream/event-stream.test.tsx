@@ -267,8 +267,11 @@ describe('EventStream', () => {
     // Should show 1 merged event (not 2)
     expect(screen.getByText('1')).toBeInTheDocument()
     // The merged row keeps subtype PreToolUse so summary uses tool_input from PostToolUseFailure payload.
-    // Summary is '[bin] cmd' since extractBashBinary identifies the first token as the binary.
-    expect(screen.getByText('[bad-cmd] bad-cmd')).toBeInTheDocument()
+    // The binary extractBashBinary finds is a separate, muted tag ahead of the command.
+    expect(screen.getByText('bad-cmd', { selector: '[data-summary-tag]' })).toBeInTheDocument()
+    expect(
+      screen.getByText('bad-cmd', { selector: ':not([data-summary-tag])' }),
+    ).toBeInTheDocument()
     // The failure's status line reads under the row.
     expect(screen.getByText(/Command exited with code 127/)).toBeInTheDocument()
   })
@@ -388,7 +391,8 @@ describe('EventStream', () => {
     renderStream()
 
     // Bash event should be visible
-    expect(screen.getByText('[ls] ls -la')).toBeInTheDocument()
+    expect(screen.getByText('ls -la')).toBeInTheDocument()
+    expect(screen.getByText('ls', { selector: '[data-summary-tag]' })).toBeInTheDocument()
     // Read event should be filtered out
     expect(screen.queryByText('/tmp/file.txt')).not.toBeInTheDocument()
   })
@@ -496,8 +500,8 @@ describe('EventStream', () => {
       setMockAgents(piFixtureAgents())
       renderStream()
 
-      expect(screen.getByText('[echo] echo hi')).toBeInTheDocument()
-      expect(screen.getByText('[cat] cat missing-file.txt')).toBeInTheDocument()
+      expect(screen.getByText('echo hi')).toBeInTheDocument()
+      expect(screen.getByText('cat missing-file.txt')).toBeInTheDocument()
       expect(
         screen.getByText(/Command exited with code 1 — cat: missing-file.txt: No such file/),
       ).toBeInTheDocument()
@@ -513,7 +517,7 @@ describe('EventStream', () => {
       // The subagent's own rows carry its label; its prompt reads as its task.
       expect(screen.getAllByText('general-purpose#f322fa95').length).toBeGreaterThan(1)
       expect(screen.getAllByText('task').length).toBe(1)
-      expect(screen.getByText('[wc] wc -l notes.txt')).toBeInTheDocument()
+      expect(screen.getByText('wc -l notes.txt')).toBeInTheDocument()
     })
 
     it('shows LLM generations with tokens and timing', () => {
@@ -536,7 +540,7 @@ describe('EventStream', () => {
       // 8 subagent events − 1 merged tool result + the spawning Agent row.
       expect(screen.getByText('8')).toBeInTheDocument()
       expect(screen.getByTestId('spawned-agent')).toBeInTheDocument()
-      expect(screen.queryByText('[echo] echo hi')).not.toBeInTheDocument()
+      expect(screen.queryByText('echo hi')).not.toBeInTheDocument()
     })
 
     it('talk lens keeps only the conversation', () => {
@@ -546,7 +550,7 @@ describe('EventStream', () => {
       renderStream()
 
       expect(screen.getByText('9')).toBeInTheDocument()
-      expect(screen.queryByText('[echo] echo hi')).not.toBeInTheDocument()
+      expect(screen.queryByText('echo hi')).not.toBeInTheDocument()
       useUIStore.setState({ talkMode: false })
     })
 

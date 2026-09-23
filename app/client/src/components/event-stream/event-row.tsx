@@ -96,6 +96,7 @@ export const EventRow = memo(function EventRow({
   const displayLabel =
     !mergeToolEvents && isTool && event.subtype ? event.subtype : cls.label(event)
   const displaySummary = cls.summary(event)
+  const summaryTag = cls.summaryTag(event)
   const proseText = cls.prose(event)
   const badges = cls.badges(event)
 
@@ -266,6 +267,12 @@ export const EventRow = memo(function EventRow({
               >
                 <CornerDownRight className="h-3 w-3" />
                 {spawnedName}
+              </span>
+            )}
+
+            {!isPrompt && summaryTag && (
+              <span data-summary-tag className="shrink-0 text-[10px] text-ink-3">
+                {summaryTag}
               </span>
             )}
 

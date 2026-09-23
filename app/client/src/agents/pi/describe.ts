@@ -17,7 +17,14 @@ import {
   estimateTokens,
   type Payload,
 } from '../payload'
-import { parseBashOutput, piToolIconId, piToolKind, toolCallSummary, toolResult } from './tools'
+import {
+  parseBashOutput,
+  piToolIconId,
+  piToolKind,
+  toolCallSummary,
+  toolCallTag,
+  toolResult,
+} from './tools'
 
 function payloadOf(event: ParsedEvent): Payload {
   return event.payload as Payload
@@ -247,6 +254,14 @@ function toolSummary(event: ParsedEvent, p: Payload): string {
   // A PostToolUse whose Pre never arrived carries no input — fall back to the result.
   const result = toolResult(p)
   return result ? oneLine(result.content) : ''
+}
+
+export function piSummaryTag(event: ParsedEvent): string | null {
+  if (!isToolSubtype(event.subtype)) {
+    return null
+  }
+  const p = payloadOf(event)
+  return toolCallTag(event.toolName ?? str(p.tool_name) ?? null, toolInputOf(p))
 }
 
 export function piSummary(event: ParsedEvent): string {

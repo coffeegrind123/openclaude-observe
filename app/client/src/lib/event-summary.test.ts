@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getEventSummary, extractBashBinary } from './event-summary'
+import { getEventSummary, getEventSummaryTag, extractBashBinary } from './event-summary'
 import { piFixtureEvents } from '@/test/pi-fixture'
 import type { ParsedEvent } from '@/types'
 
@@ -50,8 +50,8 @@ describe('getEventSummary — real pi capture', () => {
 
   it('tool calls from their real arguments', () => {
     expect(byIndex(5)).toBe('notes.txt')
-    expect(byIndex(6)).toBe('[echo] echo hi')
-    expect(byIndex(7)).toBe('[cat] cat missing-file.txt')
+    expect(byIndex(6)).toBe('echo hi')
+    expect(byIndex(7)).toBe('cat missing-file.txt')
     expect(byIndex(12)).toBe('general-purpose · Count lines in notes.txt')
   })
 
@@ -184,5 +184,31 @@ describe('extractBashBinary', () => {
     ['$(echo x)', null],
   ])('%s → %s', (cmd, bin) => {
     expect(extractBashBinary(cmd)).toBe(bin)
+  })
+})
+
+describe('getEventSummaryTag', () => {
+  it('tags a bash call with the binary it runs, kept out of the summary', () => {
+    const e = tool('bash', { command: 'npm test -- --run' })
+    expect(getEventSummaryTag(e)).toBe('npm')
+    expect(getEventSummary(e)).toBe('npm test -- --run')
+  })
+
+  it('tags a script run by path with its file name', () => {
+    expect(getEventSummaryTag(tool('bash', { command: './scripts/run.sh --fast' }))).toBe('run.sh')
+  })
+
+  it('no tag when nothing in the command looks like a binary', () => {
+    expect(getEventSummaryTag(tool('bash', { command: '"$EDITOR"' }))).toBeNull()
+  })
+
+  it('never splits a bracketed path on another tool', () => {
+    const e = tool('read', { path: '/work/proj/app/[id]/page.tsx' })
+    expect(getEventSummaryTag(e)).toBeNull()
+    expect(getEventSummary(e)).toBe('app/[id]/page.tsx')
+  })
+
+  it('non-tool events have no tag', () => {
+    expect(getEventSummaryTag(pi('UserPromptSubmit', { prompt: 'hi' }))).toBeNull()
   })
 })

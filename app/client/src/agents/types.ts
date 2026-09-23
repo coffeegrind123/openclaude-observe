@@ -22,6 +22,8 @@ export interface AgentClass {
   toolLabel(event: ParsedEvent): string | null
   /** One-line summary for the row, tooltips and thread lists. No truncation. */
   summary(event: ParsedEvent): string
+  /** Short tag the row shows muted ahead of the summary (a bash call's binary), or null. */
+  summaryTag(event: ParsedEvent): string | null
   /** Conversational text shown under the row header, or null. */
   prose(event: ParsedEvent): string | null
   /** Key into the event icon registry (lib/event-icon-registry.ts). */

@@ -9,6 +9,7 @@ import {
   piProse,
   piSpawnLink,
   piSummary,
+  piSummaryTag,
   piToolLabel,
 } from './describe'
 import { SPAWN_TOOLS } from './tools'
@@ -22,6 +23,7 @@ export const piClass: AgentClass = {
   label: piLabel,
   toolLabel: piToolLabel,
   summary: piSummary,
+  summaryTag: piSummaryTag,
   prose: piProse,
   iconId: piIconId,
   isFailure: piIsFailure,
