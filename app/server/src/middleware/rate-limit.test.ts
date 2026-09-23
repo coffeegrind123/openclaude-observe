@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, test, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 import type { Context, Next } from 'hono'
 
 const createMockContext = (ip?: string): Context => {
@@ -21,11 +21,11 @@ describe('rateLimit', () => {
 
   describe('basic behavior', () => {
     let rateLimit: (c: Context, next: Next) => Promise<void | Response>
-    let next: ReturnType<typeof vi.fn>
+    let next: Mock<Next>
 
     beforeEach(async () => {
       vi.resetModules()
-      next = vi.fn()
+      next = vi.fn<Next>()
       const mod = await import('./rate-limit')
       rateLimit = mod.rateLimit
     })

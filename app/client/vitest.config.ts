@@ -17,7 +17,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
+    // polyfill-storage must run first: it installs localStorage before
+    // setup.ts's import chain (and any store module) is evaluated.
+    setupFiles: ['./src/test/polyfill-storage.ts', './src/test/setup.ts'],
     css: false,
   },
 })

@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest'
+import { describe, test, expect, vi, beforeEach, type Mock } from 'vitest'
 import { Hono } from 'hono'
 import type { EventStore } from '../storage/types'
 
@@ -117,8 +117,8 @@ function usagePayload(overrides: Record<string, unknown> = {}) {
 describe('sessions routes', () => {
   let app: Hono<Env>
   let store: ReturnType<typeof createStore>
-  let broadcastToSession: ReturnType<typeof vi.fn>
-  let broadcastToAll: ReturnType<typeof vi.fn>
+  let broadcastToSession: Mock<(sessionId: string, msg: object) => void>
+  let broadcastToAll: Mock<(msg: object) => void>
   let computeSessionContext: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
