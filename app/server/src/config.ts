@@ -99,12 +99,11 @@ export const config = {
     process.env.INSTANTCOFFEE_OBSERVE_DB_PATH || '../../data/observe.db',
   ),
   // Directory for persistent server state outside the SQLite DB —
-  // currently just the models.dev pricing cache. Defaults to the same
-  // directory as the DB so docker volume mounts cover both.
-  dataDir: resolve(
-    process.env.INSTANTCOFFEE_OBSERVE_DATA_DIR ||
-      dirname(resolve(process.env.INSTANTCOFFEE_OBSERVE_DB_PATH || '../../data/observe.db')),
-  ),
+  // currently just the models.dev pricing cache. Always the DB's directory,
+  // so the /data mount covers both. INSTANTCOFFEE_OBSERVE_DATA_DIR is
+  // deliberately not read: it is compose's host-side mount source, and
+  // `just dev` loads it from .env too.
+  dataDir: dirname(resolve(process.env.INSTANTCOFFEE_OBSERVE_DB_PATH || '../../data/observe.db')),
   storageAdapter: process.env.INSTANTCOFFEE_OBSERVE_STORAGE_ADAPTER || 'sqlite',
   clientDistPath: process.env.INSTANTCOFFEE_OBSERVE_CLIENT_DIST_PATH || '',
   devClientPort: (() => {

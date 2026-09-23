@@ -70,7 +70,7 @@ reads.
 | `INSTANTCOFFEE_OBSERVE_RUNTIME` | `docker` | Runtime mode: `docker`, `local`, or `dev` |
 | `INSTANTCOFFEE_OBSERVE_LOG_LEVEL` | `warn` | `warn`, `debug`, or `trace` |
 | `INSTANTCOFFEE_OBSERVE_DB_PATH` | `data/observe.db` | SQLite database path |
-| `INSTANTCOFFEE_OBSERVE_DATA_DIR` | (DB dir) | Persistent state dir outside the DB (models.dev pricing cache); also the host dir bind-mounted to `/data` in compose |
+| `INSTANTCOFFEE_OBSERVE_DATA_DIR` | `./data` | _(compose only)_ host dir bind-mounted to `/data`. The server never reads it; the models.dev pricing cache sits next to the DB |
 | `INSTANTCOFFEE_OBSERVE_ALLOW_DB_RESET` | `backup` | DB reset policy: `allow`, `backup`, or `deny` |
 | `INSTANTCOFFEE_OBSERVE_CLIENT_DIST_PATH` | (auto) | Override the client dist directory |
 | `INSTANTCOFFEE_OBSERVE_STORAGE_ADAPTER` | `sqlite` | Storage backend |
