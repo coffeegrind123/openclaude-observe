@@ -5,112 +5,106 @@ import { ChatMarkdown } from '@/components/chat-feed/chat-markdown'
 import { Code, FileText } from 'lucide-react'
 
 interface ReadToolViewerProps {
-  filePath: string
-  toolInput: Record<string, unknown>
-  toolResponse: Record<string, unknown> | string | undefined
-  relPath: (p: string) => string
-}
-
-// Extracts the actual file content from whatever tool_response shape OpenClaude
-// sends — the payload is either { file: { content, startLine, numLines } },
-// { content: string }, or a plain string. Returns null if nothing usable.
-function extractFileContent(
-  toolResponse: ReadToolViewerProps['toolResponse'],
-): { content: string; startLine: number; numLines?: number } | null {
-  if (!toolResponse) return null
-  if (typeof toolResponse === 'string') {
-    return { content: toolResponse, startLine: 1 }
-  }
-  const r = toolResponse as Record<string, any>
-  const file = r.file as Record<string, any> | undefined
-  if (file?.content && typeof file.content === 'string') {
-    return {
-      content: file.content,
-      startLine: typeof file.startLine === 'number' ? file.startLine : 1,
-      numLines: typeof file.numLines === 'number' ? file.numLines : undefined,
-    }
-  }
-  if (typeof r.content === 'string') {
-    return { content: r.content, startLine: 1 }
-  }
-  return null
+  /** Path as the tool was called with it (used for language detection). */
+  path: string
+  /** Path for display (relative to cwd when possible). */
+  displayPath: string
+  offset?: number
+  limit?: number
+  /** File content returned by the tool; null when nothing was captured. */
+  content: string | null
+  /** Tool's continuation / truncation notice, shown under the content. */
+  notice?: string | null
 }
 
 export function ReadToolViewer({
-  filePath,
-  toolInput,
-  toolResponse,
-  relPath,
+  path,
+  displayPath,
+  offset,
+  limit,
+  content,
+  notice,
 }: ReadToolViewerProps) {
-  const displayPath = relPath(filePath)
-  const offset = toolInput.offset as number | undefined
-  const limit = toolInput.limit as number | undefined
-  const file = extractFileContent(toolResponse)
-
-  const isMarkdown = /\.(mdx?|markdown)$/i.test(filePath)
+  const isMarkdown = /\.(mdx?|markdown)$/i.test(path)
   const [viewMode, setViewMode] = useState<'code' | 'markdown'>(isMarkdown ? 'markdown' : 'code')
 
-  const startLine = file?.startLine ?? offset ?? 1
-
   const mermaidSource = useMemo(() => {
-    if (!file || !isMarkdown) return null
-    return extractMermaid(file.content)
-  }, [file, isMarkdown])
+    if (content == null || !isMarkdown) {
+      return null
+    }
+    return extractMermaid(content)
+  }, [content, isMarkdown])
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
         <span className="truncate font-mono">{displayPath}</span>
-        {offset != null && (
+        {(offset != null || limit != null) && (
           <span className="shrink-0 rounded bg-muted/50 px-1 py-[1px]">
-            line {offset}
-            {limit ? `, limit ${limit}` : ''}
+            {offset != null ? `offset ${offset}` : 'offset 1'}
+            {limit != null ? ` · limit ${limit}` : ''}
           </span>
         )}
-        {isMarkdown && file && (
+        {isMarkdown && content != null && (
           <div className="ml-auto flex items-center gap-0.5 text-[9px]">
-            <button
-              type="button"
+            <ModeButton
+              active={viewMode === 'code'}
               onClick={() => setViewMode('code')}
-              className={`flex items-center gap-0.5 px-1.5 py-[2px] rounded border transition-colors cursor-pointer ${
-                viewMode === 'code'
-                  ? 'bg-muted text-foreground border-border'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Code className="h-2.5 w-2.5" /> code
-            </button>
-            <button
-              type="button"
+              icon={<Code className="h-2.5 w-2.5" />}
+              label="code"
+            />
+            <ModeButton
+              active={viewMode === 'markdown'}
               onClick={() => setViewMode('markdown')}
-              className={`flex items-center gap-0.5 px-1.5 py-[2px] rounded border transition-colors cursor-pointer ${
-                viewMode === 'markdown'
-                  ? 'bg-muted text-foreground border-border'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <FileText className="h-2.5 w-2.5" /> preview
-            </button>
+              icon={<FileText className="h-2.5 w-2.5" />}
+              label="preview"
+            />
           </div>
         )}
       </div>
 
-      {file ? (
-        viewMode === 'markdown' && isMarkdown ? (
-          <div className="space-y-2">
-            {mermaidSource && <MermaidViewer source={mermaidSource} />}
-            <div className="rounded border border-border bg-muted/40 p-3 overflow-auto max-h-96 text-[11px]">
-              <ChatMarkdown text={file.content} />
-            </div>
-          </div>
-        ) : (
-          <CodeViewer fileName={filePath} content={file.content} startLine={startLine} />
-        )
-      ) : (
+      {content == null ? (
         <div className="text-[11px] italic text-muted-foreground/70">
           No content captured for this read.
         </div>
+      ) : viewMode === 'markdown' && isMarkdown ? (
+        <div className="space-y-2">
+          {mermaidSource && <MermaidViewer source={mermaidSource} />}
+          <div className="max-h-96 overflow-auto rounded border border-border bg-muted/40 p-3 text-[11px]">
+            <ChatMarkdown text={content} />
+          </div>
+        </div>
+      ) : (
+        <CodeViewer fileName={path} content={content} startLine={offset ?? 1} />
       )}
+
+      {notice && <div className="font-mono text-[10px] text-muted-foreground">{notice}</div>}
     </div>
+  )
+}
+
+function ModeButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex cursor-pointer items-center gap-0.5 rounded border px-1.5 py-[2px] transition-colors ${
+        active
+          ? 'border-border bg-muted text-foreground'
+          : 'border-transparent text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      {icon} {label}
+    </button>
   )
 }

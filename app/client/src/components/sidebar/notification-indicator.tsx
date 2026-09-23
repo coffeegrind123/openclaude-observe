@@ -21,8 +21,8 @@ import { cn } from '@/lib/utils'
 // their IDs would just accumulate forever).
 // ---------------------------------------------------------------------------
 
-const DISMISSED_KEY = 'openclaude-observe-notifications-dismissed'
-const LAST_SEEN_KEY = 'openclaude-observe-notifications-last-seen-ts'
+const DISMISSED_KEY = 'instantcoffee-observe-notifications-dismissed'
+const LAST_SEEN_KEY = 'instantcoffee-observe-notifications-last-seen-ts'
 
 function readDismissedIds(): Set<string> {
   try {
@@ -84,7 +84,7 @@ interface NotificationState {
   unannounceVisibleBell: (sessionId: string) => void
 }
 
-const useNotificationStore = create<NotificationState>((set) => ({
+export const useNotificationStore = create<NotificationState>((set) => ({
   pending: new Map(),
   dismissed: readDismissedIds(),
   lastSeenTs: readLastSeenTs(),
@@ -206,6 +206,58 @@ export function useAnyHiddenFlaggedSession(sessionIds: Array<string | null | und
   const visible = useNotificationStore((s) => s.visibleBellSessionIds)
   if (!enabled) return false
   return sessionIds.some((id) => !!id && pending.has(id) && !dismissed.has(id) && !visible.has(id))
+}
+
+/**
+ * Project-scoped variant of {@link useAnyHiddenFlaggedSession}. Reads the
+ * global pending map (each entry carries projectId), so the sidebar
+ * doesn't need to fetch the project's session list to decide whether to
+ * show the folder bell. `sessionIds` lists the flagged sessions for the
+ * dismiss-all click.
+ */
+export function useAnyHiddenFlaggedInProject(projectId: number | null | undefined): {
+  hasHidden: boolean
+  sessionIds: string[]
+} {
+  const enabled = useUIStore((s) => s.notificationsEnabled)
+  const pending = useNotificationStore((s) => s.pending)
+  const dismissed = useNotificationStore((s) => s.dismissed)
+  const visible = useNotificationStore((s) => s.visibleBellSessionIds)
+  if (!enabled || projectId == null) {
+    return { hasHidden: false, sessionIds: [] }
+  }
+  const sessionIds: string[] = []
+  let hasHidden = false
+  for (const entry of pending.values()) {
+    if (entry.projectId !== projectId || dismissed.has(entry.sessionId)) {
+      continue
+    }
+    sessionIds.push(entry.sessionId)
+    if (!visible.has(entry.sessionId)) {
+      hasHidden = true
+    }
+  }
+  return { hasHidden, sessionIds }
+}
+
+/** Project-scoped variant of {@link useAnySessionHasNotification}. */
+export function useAnyFlaggedInProject(projectId: number | null | undefined): {
+  any: boolean
+  sessionIds: string[]
+} {
+  const enabled = useUIStore((s) => s.notificationsEnabled)
+  const pending = useNotificationStore((s) => s.pending)
+  const dismissed = useNotificationStore((s) => s.dismissed)
+  if (!enabled || projectId == null) {
+    return { any: false, sessionIds: [] }
+  }
+  const sessionIds: string[] = []
+  for (const entry of pending.values()) {
+    if (entry.projectId === projectId && !dismissed.has(entry.sessionId)) {
+      sessionIds.push(entry.sessionId)
+    }
+  }
+  return { any: sessionIds.length > 0, sessionIds }
 }
 
 /**

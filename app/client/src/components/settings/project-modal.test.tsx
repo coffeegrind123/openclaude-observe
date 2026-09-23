@@ -276,3 +276,25 @@ describe('ProjectModal - Session rename', () => {
     expect(mockUpdateSessionSlug).not.toHaveBeenCalled()
   })
 })
+
+describe('ProjectModal - cache invalidation', () => {
+  it('invalidates the recent-sessions query key after moving a session', async () => {
+    const { queryClient } = renderModal()
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+
+    await waitFor(() => {
+      expect(screen.getByText('session-one')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getAllByTitle('Move to project')[0])
+    await waitFor(() => {
+      expect(screen.getByText('Other Project')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByText('Other Project'))
+
+    await waitFor(() => {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['recent-sessions'] })
+    })
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['recentSessions'] })
+  })
+})

@@ -9,7 +9,7 @@ import type {
   TranscriptUsage,
   AgentParseResult,
 } from './types'
-import { parseClaudeSession } from './agents/claude'
+import { parsePiSession } from './agents/pi'
 import { getModelsPricing, type ModelPricing } from './models-pricing'
 
 export type { TranscriptStatsV2 } from './types'
@@ -30,14 +30,14 @@ export async function parseSessionTranscripts(
   const errors: TranscriptParseError[] = []
 
   // Identify the main agent's class. The session's main agent has
-  // the same id as the session — anything else is a subagent. Fall
-  // back to claude-code for missing class data.
+  // the same id as the session — anything else is a subagent. Rows
+  // without a class predate agent_class and are treated as pi.
   const mainAgent = agents.find((a: any) => a.id === sessionId)
-  const mainAgentClass = (mainAgent as any)?.agent_class ?? 'claude-code'
+  const mainAgentClass = (mainAgent as any)?.agent_class ?? 'pi'
 
   let result
-  if (mainAgentClass === 'claude-code') {
-    result = await parseClaudeSession(containerTranscriptPath)
+  if (mainAgentClass === 'pi') {
+    result = await parsePiSession(containerTranscriptPath)
   } else {
     errors.push({
       scope: 'main',
@@ -82,6 +82,7 @@ export async function parseSessionTranscripts(
     result.calls,
     result.prompts,
     result.lastTimestampByPromptId,
+    result.promptIdToUuid,
     subagents,
     pricingMap,
   )
@@ -115,6 +116,20 @@ function computeCallCostCents(usage: TranscriptUsage, pricing: ModelPricing): nu
   return Math.round(dollars * 100)
 }
 
+/** One request's cost in cents: the agent's recorded cost, else pricing, else unknown. */
+function callCostCents(c: TranscriptCall, pricingMap: Record<string, ModelPricing>): number | null {
+  if (typeof c.costUsd === 'number' && Number.isFinite(c.costUsd)) {
+    return c.costUsd * 100
+  }
+  const pricing = pricingMap[c.model]
+  return pricing ? computeCallCostCents(c.usage, pricing) : null
+}
+
+/** Running sum where any unknown term makes the total unknown. */
+function addCost(total: number | null, term: number | null): number | null {
+  return total === null || term === null ? null : total + term
+}
+
 // ── aggregations ──────────────────────────────────────────────────
 
 function aggregateByModel(
@@ -123,9 +138,9 @@ function aggregateByModel(
   pricingMap: Record<string, ModelPricing>,
 ): TranscriptByModelV2[] {
   const m = new Map<string, TranscriptByModelV2>()
-  for (const c of mainCalls) {
-    const cur = m.get(c.model) ?? {
-      model: c.model,
+  const row = (model: string) => {
+    const cur = m.get(model) ?? {
+      model,
       calls: 0,
       inputTokens: 0,
       outputTokens: 0,
@@ -134,6 +149,11 @@ function aggregateByModel(
       cacheCreate1hTokens: 0,
       costCents: 0,
     }
+    m.set(model, cur)
+    return cur
+  }
+  for (const c of mainCalls) {
+    const cur = row(c.model)
     cur.calls += 1
     cur.inputTokens +=
       c.usage.inputTokens +
@@ -144,54 +164,27 @@ function aggregateByModel(
     cur.cacheReadTokens += c.usage.cacheReadTokens
     cur.cacheCreate5mTokens += c.usage.cacheCreate5mTokens
     cur.cacheCreate1hTokens += c.usage.cacheCreate1hTokens
-    m.set(c.model, cur)
+    cur.costCents = addCost(cur.costCents, callCostCents(c, pricingMap))
   }
+  // Subagent costs were settled in attachSubagentCosts.
   for (const s of subagents) {
-    const cur = m.get(s.model) ?? {
-      model: s.model,
-      calls: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheCreate5mTokens: 0,
-      cacheCreate1hTokens: 0,
-      costCents: 0,
-    }
+    const cur = row(s.model)
     cur.calls += s.requests
     cur.inputTokens += s.inputTokens
     cur.outputTokens += s.outputTokens
     cur.cacheReadTokens += s.cacheReadTokens
     cur.cacheCreate5mTokens += s.cacheCreate5mTokens
     cur.cacheCreate1hTokens += s.cacheCreate1hTokens
-    m.set(s.model, cur)
-  }
-  for (const row of m.values()) {
-    const pricing = pricingMap[row.model]
-    if (!pricing) {
-      row.costCents = null
-      continue
-    }
-    // Reverse-derive the "fresh" input slice (bundled total - cache parts).
-    const fresh =
-      row.inputTokens - row.cacheReadTokens - row.cacheCreate5mTokens - row.cacheCreate1hTokens
-    row.costCents = computeCallCostCents(
-      {
-        inputTokens: Math.max(fresh, 0),
-        outputTokens: row.outputTokens,
-        cacheReadTokens: row.cacheReadTokens,
-        cacheCreate5mTokens: row.cacheCreate5mTokens,
-        cacheCreate1hTokens: row.cacheCreate1hTokens,
-      },
-      pricing,
-    )
+    cur.costCents = addCost(cur.costCents, s.costCents)
   }
   return [...m.values()]
 }
 
 function aggregatePrompts(
   mainCalls: TranscriptCall[],
-  promptsIndex: Record<string, { text: string; timestamp: number }>,
+  promptsIndex: Record<string, { text: string; timestamp: number; command: string | null }>,
   lastTimestampByPromptId: Record<string, number>,
+  promptIdToUuid: Record<string, string>,
   subagents: TranscriptSubagent[],
   pricingMap: Record<string, ModelPricing>,
 ): TranscriptPrompt[] {
@@ -201,6 +194,23 @@ function aggregatePrompts(
     const arr = buckets.get(c.promptId) ?? []
     arr.push(c)
     buckets.set(c.promptId, arr)
+  }
+
+  // Resolve each subagent to the prompt uuid that spawned it, once.
+  // Preferred path: the raw promptId carried in the subagent's JSONL
+  // (covers both classic Task subagents and workflow subagents, whose
+  // meta has no toolUseId). Fallback: the Agent tool_use_id from meta,
+  // matched against the main call that issued it. Subagents that resolve
+  // to neither stay unattributed (counted only in session totals).
+  const subagentPromptUuid = new Map<TranscriptSubagent, string | null>()
+  for (const s of subagents) {
+    let uuid: string | null = null
+    if (s.originPromptId && promptIdToUuid[s.originPromptId]) {
+      uuid = promptIdToUuid[s.originPromptId]
+    } else if (s.toolUseId) {
+      uuid = mainCalls.find((c) => c.toolUseIds.includes(s.toolUseId!))?.promptId ?? null
+    }
+    subagentPromptUuid.set(s, uuid)
   }
   const sortedPromptIds = Object.keys(promptsIndex).sort(
     (a, b) => promptsIndex[a].timestamp - promptsIndex[b].timestamp,
@@ -230,18 +240,12 @@ function aggregatePrompts(
       cacheCreate1hTokens += c.usage.cacheCreate1hTokens
       toolCount += c.toolUseIds.length
       if (c.model) models.add(c.model)
-      const pricing = pricingMap[c.model]
-      if (!pricing) {
-        costCents = null
-      } else if (costCents !== null) {
-        costCents += computeCallCostCents(c.usage, pricing)
-      }
+      costCents = addCost(costCents, callCostCents(c, pricingMap))
     }
-    // Attribute subagents to this prompt via toolUseId match in mainCalls.
+    // Fold each subagent spawned by this prompt into its totals (combined
+    // input/output/cache/cost). Attribution resolved above.
     for (const s of subagents) {
-      if (!s.toolUseId) continue
-      const owner = mainCalls.find((c) => c.toolUseIds.includes(s.toolUseId!))
-      if (!owner || owner.promptId !== promptId) continue
+      if (subagentPromptUuid.get(s) !== promptId) continue
       inputTokens += s.inputTokens
       outputTokens += s.outputTokens
       cacheReadTokens += s.cacheReadTokens
@@ -273,6 +277,7 @@ function aggregatePrompts(
     out.push({
       promptId,
       text: promptMeta.text,
+      command: promptMeta.command,
       timestamp: promptMeta.timestamp,
       durationMs,
       toolCount,
@@ -294,6 +299,8 @@ function attachSubagentCosts(
   pricingMap: Record<string, ModelPricing>,
 ): TranscriptSubagent[] {
   return subagents.map((s) => {
+    // pi reports each subagent's cost itself (Agent result details.cost).
+    if (s.costCents !== null && Number.isFinite(s.costCents)) return s
     const pricing = pricingMap[s.model]
     if (!pricing) return { ...s, costCents: null }
     const fresh = s.inputTokens - s.cacheReadTokens - s.cacheCreate5mTokens - s.cacheCreate1hTokens
@@ -329,12 +336,7 @@ function aggregateSummary(
       c.usage.cacheCreate1hTokens
     outputTotal += c.usage.outputTokens
     cacheRead += c.usage.cacheReadTokens
-    const pricing = pricingMap[c.model]
-    if (!pricing) {
-      costTotalCents = null
-    } else if (costTotalCents !== null) {
-      costTotalCents += computeCallCostCents(c.usage, pricing)
-    }
+    costTotalCents = addCost(costTotalCents, callCostCents(c, pricingMap))
   }
   for (const s of subagents) {
     totalCalls += s.requests

@@ -1,4 +1,5 @@
 // app/server/src/types.ts
+import type { StackSample, StackTotals, StackStatus } from './services/stack-metrics'
 
 // === Database Row Types ===
 
@@ -46,19 +47,6 @@ export interface EventRow {
   created_at: number
   payload: string
   tool_use_id: string | null
-  instance_id: string | null
-}
-
-export interface InstanceRow {
-  id: string
-  session_id: string
-  role: string
-  name: string | null
-  machine_id: string | null
-  pid: number | null
-  first_seen: number
-  last_heartbeat: number
-  status: string
 }
 
 // === API Response Types ===
@@ -90,6 +78,8 @@ export interface Agent {
   name: string | null
   description: string | null
   agentType?: string | null
+  // Producer: 'pi', or 'claude-code' on rows from before the pi conversion.
+  agentClass?: string | null
 }
 
 export interface ParsedEvent {
@@ -100,7 +90,6 @@ export interface ParsedEvent {
   subtype: string | null
   toolName: string | null
   toolUseId: string | null
-  instanceId: string | null
   status: string // derived from subtype, not stored
   timestamp: number
   // Optional — server-side ingest timestamp. Dropped from WS broadcast and
@@ -116,7 +105,8 @@ export type WSMessage =
   | { type: 'event'; data: ParsedEvent }
   | { type: 'session_update'; data: Session }
   | { type: 'project_update'; data: { id: number; name: string } }
-  | { type: 'instance_update'; data: InstanceRow }
+  | { type: 'stack_metrics'; data: { sample: StackSample; totals: StackTotals } }
+  | { type: 'stack_status'; data: StackStatus }
 
 // Messages FROM clients
 export type WSClientMessage = { type: 'subscribe'; sessionId: string } | { type: 'unsubscribe' }

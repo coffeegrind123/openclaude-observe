@@ -10,7 +10,9 @@ const noop = () => {}
 // pays the full cold-start transform of the app's router graph. esbuild's
 // per-test transform is slow under load, so give these integration tests
 // headroom beyond the 5s default — a real hang would still exceed this.
-describe('dev mode redirect', { timeout: 20000 }, () => {
+// The first dynamic import of ./app is cold and takes 20-40 s on the 9p-mounted
+// checkout this is developed on; later imports in the file are fast.
+describe('dev mode redirect', { timeout: 60000 }, () => {
   beforeEach(() => {
     vi.resetModules()
   })
@@ -19,13 +21,14 @@ describe('dev mode redirect', { timeout: 20000 }, () => {
     vi.restoreAllMocks()
   })
 
-  test('redirects unmatched GET requests to dev client', { timeout: 10000 }, async () => {
+  test('redirects unmatched GET requests to dev client', async () => {
     vi.doMock('./config', () => ({
       config: {
         clientDistPath: '',
         isDev: true,
         devClientPort: 5174,
         transcriptStats: { enabled: false },
+        corsAllowedOrigins: [],
       },
     }))
 
@@ -44,6 +47,7 @@ describe('dev mode redirect', { timeout: 20000 }, () => {
         isDev: true,
         devClientPort: 5174,
         transcriptStats: { enabled: false },
+        corsAllowedOrigins: [],
       },
     }))
 
@@ -62,6 +66,7 @@ describe('dev mode redirect', { timeout: 20000 }, () => {
         isDev: true,
         devClientPort: 5174,
         transcriptStats: { enabled: false },
+        corsAllowedOrigins: [],
       },
     }))
 
@@ -79,6 +84,7 @@ describe('dev mode redirect', { timeout: 20000 }, () => {
         isDev: false,
         devClientPort: 5174,
         transcriptStats: { enabled: false },
+        corsAllowedOrigins: [],
       },
     }))
 
@@ -96,6 +102,7 @@ describe('dev mode redirect', { timeout: 20000 }, () => {
         isDev: true,
         devClientPort: 9999,
         transcriptStats: { enabled: false },
+        corsAllowedOrigins: [],
       },
     }))
 

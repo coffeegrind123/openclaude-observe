@@ -162,7 +162,22 @@ const OBSOLETE_KEYS = new Set([
   'UserPromptSubmitResponse',
 ])
 
-function migrateIconCustomizations(data: IconCustomizations): IconCustomizations {
+// Pass 3: Claude Code tool names → pi's. pi's built-ins are lowercase, `Glob`
+// became `find`, and MCP calls go through one `mcp` tool; without this a
+// customization made before the pi conversion silently stops applying.
+const CLAUDE_TO_PI_KEYS: Record<string, string> = {
+  Bash: 'bash',
+  Read: 'read',
+  Edit: 'edit',
+  MultiEdit: 'edit',
+  Write: 'write',
+  Grep: 'grep',
+  Glob: 'find',
+  LS: 'ls',
+  _MCP: 'mcp',
+}
+
+export function migrateIconCustomizations(data: IconCustomizations): IconCustomizations {
   const migrated: IconCustomizations = {}
   let changed = false
 
@@ -177,11 +192,16 @@ function migrateIconCustomizations(data: IconCustomizations): IconCustomizations
       continue
     }
 
-    if (logicalKey !== key) changed = true
+    const piKey = CLAUDE_TO_PI_KEYS[logicalKey] ?? logicalKey
+    if (piKey !== key) changed = true
 
-    // Idempotent: first write wins when keys collide after migration
-    if (!migrated[logicalKey]) {
-      migrated[logicalKey] = value
+    // Idempotent: first write wins when keys collide after migration, and a
+    // key already saved under the pi name beats a migrated Claude one.
+    if (piKey !== logicalKey && data[piKey]) {
+      continue
+    }
+    if (!migrated[piKey]) {
+      migrated[piKey] = value
     }
   }
 
@@ -196,18 +216,10 @@ function getCustomizations(): IconCustomizations {
   if (cachedCustomizations !== null) return cachedCustomizations
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    let data: IconCustomizations = raw ? JSON.parse(raw) : {}
-    let migrated = migrateKeys(data)
-    if (migrated !== data) {
-      data = migrated
-    }
-    // Pass 2: delete obsolete keys that are no longer in the registry
-    const remapped = migrateIconCustomizations(data)
-    if (remapped !== data) {
-      data = remapped
-    }
-    if (migrated !== data) {
-      // Migration changed keys — save the migrated data back
+    const stored: IconCustomizations = raw ? JSON.parse(raw) : {}
+    // Pass 1, then passes 2+3; save back when either changed anything.
+    const data = migrateIconCustomizations(migrateKeys(stored))
+    if (data !== stored) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
     }
     cachedCustomizations = data

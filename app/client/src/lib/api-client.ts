@@ -1,4 +1,5 @@
 import { API_BASE } from '@/config/api'
+import type { StackMetricsView } from '@/types/stack'
 import type {
   Project,
   Session,
@@ -8,7 +9,14 @@ import type {
   NotificationPayload,
   Filter,
 } from '@/types'
-import type { MemoryStore, MemoryFileHeader, MemoryFile, MemorySearchHit } from '@/types/memory'
+import type {
+  EffectiveContext,
+  InstructionsFile,
+  InstructionsFileHeader,
+  InstructionsGraph,
+  InstructionsSearchHit,
+  InstructionsStore,
+} from '@/types/instructions'
 
 /**
  * Rich error thrown by all api.* methods on failure. Carries the HTTP status,
@@ -92,8 +100,18 @@ export const api = {
   getProjects: () => fetchJson<Project[]>('/projects'),
   getPendingNotifications: (sinceTs: number) =>
     fetchJson<NotificationPayload[]>(`/notifications?since=${sinceTs}`),
-  getRecentSessions: (limit?: number) =>
-    fetchJson<RecentSession[]>(`/sessions/recent${limit ? `?limit=${limit}` : ''}`),
+  /** `since` (epoch ms) limits the list to sessions active at or after it. */
+  getRecentSessions: (limit?: number, since?: number) => {
+    const params = new URLSearchParams()
+    if (limit) {
+      params.set('limit', String(limit))
+    }
+    if (since != null) {
+      params.set('since', String(Math.floor(since)))
+    }
+    const qs = params.toString()
+    return fetchJson<RecentSession[]>(`/sessions/recent${qs ? `?${qs}` : ''}`)
+  },
   getUnassignedSessions: (limit?: number) =>
     fetchJson<RecentSession[]>(`/sessions/unassigned${limit ? `?limit=${limit}` : ''}`),
   getSessions: (projectId: number) => fetchJson<Session[]>(`/projects/${projectId}/sessions`),
@@ -149,9 +167,9 @@ export const api = {
         llmCallCount: number
       }>
     }>(`/sessions/${encodeURIComponent(sessionId)}/usage`),
-  getSessionContext: (sessionId: string) =>
+  getSessionContext: (sessionId: string, agentId?: string) =>
     fetchJson<import('@/types/context').SessionContextBreakdown>(
-      `/sessions/${encodeURIComponent(sessionId)}/context`,
+      `/sessions/${encodeURIComponent(sessionId)}/context${agentId ? `?agent=${encodeURIComponent(agentId)}` : ''}`,
     ),
   deleteSession: (sessionId: string) =>
     fetchVoid(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
@@ -196,6 +214,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
   getChangelog: () => fetchJson<{ markdown: string }>('/changelog'),
+  getStack: () => fetchJson<StackMetricsView>('/stack'),
   getDbStats: () =>
     fetchJson<{ dbPath: string; sizeBytes: number; sessionCount: number; eventCount: number }>(
       '/db/stats',
@@ -229,6 +248,22 @@ export const api = {
       }
     }
     return { ok: true, status: 200, data: body as TranscriptStatsData }
+  },
+
+  /** models.dev pricing for these ids (null when unknown). Prices requests
+   *  that carry no recorded cost; see routes/models.ts. */
+  getModelPricing: async (
+    ids: string[],
+  ): Promise<Record<string, TranscriptStatsModelPricing | null>> => {
+    if (ids.length === 0) {
+      return {}
+    }
+    const res = await fetch(`${API_BASE}/models/pricing?ids=${encodeURIComponent(ids.join(','))}`)
+    if (!res.ok) {
+      return {}
+    }
+    const body = await res.json().catch(() => ({}))
+    return (body.pricing ?? {}) as Record<string, TranscriptStatsModelPricing | null>
   },
 
   // ── Filters ──
@@ -269,74 +304,74 @@ export const api = {
     fetchJson<Filter>(`/filters/${encodeURIComponent(id)}/duplicate`, { method: 'POST' }),
   resetDefaultFilters: () => fetchJson<Filter[]>(`/filters/defaults/reset`, { method: 'POST' }),
 
-  // ── Memory browser/editor ──
-  // listStores returns a discriminated union: when the feature is disabled or
-  // unconfigured the server replies 404, which the UI renders as an explainer
-  // rather than a toast-worthy error.
-  memory: {
-    listStores: async (): Promise<MemoryStoresResponse> => {
-      const res = await fetch(`${API_BASE}/memory/stores`)
+  // ── Instructions browser/editor (pi context files + subagent definitions) ──
+  // listStores returns a discriminated union: when the feature is disabled the
+  // server replies 404, which the UI renders as an explainer rather than a
+  // toast-worthy error.
+  instructions: {
+    listStores: async (): Promise<InstructionsStoresResponse> => {
+      const res = await fetch(`${API_BASE}/instructions/stores`)
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
         return {
           ok: false,
           status: res.status,
-          error: (body.error as MemoryDisabledCode) ?? 'unknown',
+          error: (body.error as InstructionsDisabledCode) ?? 'unknown',
           message: body.message ?? 'Unknown error',
         }
       }
-      return { ok: true, stores: (body.stores ?? []) as MemoryStore[] }
+      return {
+        ok: true,
+        homes: (body.homes ?? []) as string[],
+        stores: (body.stores ?? []) as InstructionsStore[],
+      }
     },
     listFiles: (storeId: string) =>
-      fetchJson<{ storeId: string; files: MemoryFileHeader[] }>(
-        `/memory/stores/${encodeURIComponent(storeId)}/files`,
+      fetchJson<{ storeId: string; files: InstructionsFileHeader[] }>(
+        `/instructions/stores/${encodeURIComponent(storeId)}/files`,
       ),
+    context: (storeId: string) =>
+      fetchJson<EffectiveContext>(`/instructions/stores/${encodeURIComponent(storeId)}/context`),
+    graph: () => fetchJson<InstructionsGraph>(`/instructions/graph`),
     search: (query: string, limit = 100) =>
-      fetchJson<{ hits: MemorySearchHit[] }>(
-        `/memory/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+      fetchJson<{ hits: InstructionsSearchHit[] }>(
+        `/instructions/search?q=${encodeURIComponent(query)}&limit=${limit}`,
       ),
     getFile: (storeId: string, relPath: string) =>
-      fetchJson<MemoryFile>(
-        `/memory/stores/${encodeURIComponent(storeId)}/file?path=${encodeURIComponent(relPath)}`,
+      fetchJson<InstructionsFile>(
+        `/instructions/stores/${encodeURIComponent(storeId)}/file?path=${encodeURIComponent(relPath)}`,
       ),
-    saveFile: (
-      storeId: string,
-      relPath: string,
-      payload: { content: string } | { frontmatter: Record<string, unknown> | null; body: string },
-    ) =>
-      fetchJson<MemoryFile>(
-        `/memory/stores/${encodeURIComponent(storeId)}/file?path=${encodeURIComponent(relPath)}`,
+    saveFile: (storeId: string, relPath: string, payload: InstructionsWritePayload) =>
+      fetchJson<InstructionsFile>(
+        `/instructions/stores/${encodeURIComponent(storeId)}/file?path=${encodeURIComponent(relPath)}`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         },
       ),
-    createFile: (
-      storeId: string,
-      payload: { name: string } & (
-        | { content: string }
-        | { frontmatter: Record<string, unknown> | null; body: string }
-      ),
-    ) =>
-      fetchJson<MemoryFile>(`/memory/stores/${encodeURIComponent(storeId)}/file`, {
+    createFile: (storeId: string, payload: { path: string } & InstructionsWritePayload) =>
+      fetchJson<InstructionsFile>(`/instructions/stores/${encodeURIComponent(storeId)}/file`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       }),
     deleteFile: (storeId: string, relPath: string) =>
       fetchVoid(
-        `/memory/stores/${encodeURIComponent(storeId)}/file?path=${encodeURIComponent(relPath)}`,
+        `/instructions/stores/${encodeURIComponent(storeId)}/file?path=${encodeURIComponent(relPath)}`,
         { method: 'DELETE' },
       ),
   },
 }
 
-export type MemoryDisabledCode = 'disabled' | 'not_configured' | 'unknown'
+export type InstructionsWritePayload =
+  { content: string } | { frontmatter: Record<string, unknown> | null; body: string }
 
-export type MemoryStoresResponse =
-  | { ok: true; stores: MemoryStore[] }
-  | { ok: false; status: number; error: MemoryDisabledCode; message: string }
+export type InstructionsDisabledCode = 'disabled' | 'unknown'
+
+export type InstructionsStoresResponse =
+  | { ok: true; homes: string[]; stores: InstructionsStore[] }
+  | { ok: false; status: number; error: InstructionsDisabledCode; message: string }
 
 // ── Transcript stats types (V2: matches server transcript-parser) ──
 
@@ -354,6 +389,10 @@ export interface TranscriptStatsByModel {
 export interface TranscriptStatsPrompt {
   promptId: string
   text: string
+  /** Reconstructed `/name args` for slash-command prompts (rendered as the
+   *  primary clickable line, with `text` as the expanded detail beneath);
+   *  null for ordinary typed prompts. */
+  command: string | null
   timestamp: number
   durationMs: number | null
   toolCount: number
@@ -410,7 +449,8 @@ export interface TranscriptStatsToolStat {
 }
 
 export interface TranscriptStatsData {
-  source: 'jsonl'
+  /** 'events' when an agent class computed it from events (no readable transcript). */
+  source: 'jsonl' | 'events'
   summary: {
     totalCalls: number
     inputTotal: number

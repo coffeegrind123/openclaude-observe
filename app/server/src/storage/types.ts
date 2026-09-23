@@ -1,6 +1,5 @@
 // app/server/src/storage/types.ts
 
-import type { InstanceRow } from '../types'
 import type { Filter } from '../types'
 
 export class DuplicateEventSignatureError extends Error {
@@ -19,7 +18,6 @@ export interface InsertEventParams {
   timestamp: number
   payload: Record<string, unknown>
   toolUseId?: string | null
-  instanceId?: string | null
   /** Stable signature for dedup. When set, a UNIQUE constraint is enforced. */
   signatureHash?: string | null
   /** Whether this event advances last_notification_ts. Computed by the
@@ -45,7 +43,6 @@ export interface StoredEvent {
   subtype: string | null
   tool_name: string | null
   tool_use_id: string | null
-  instance_id: string | null
   timestamp: number
   created_at: number
   payload: string // JSON string in DB
@@ -84,6 +81,7 @@ export interface EventStore {
     description: string | null,
     agentType?: string | null,
     transcriptPath?: string | null,
+    agentClass?: string | null,
   ): Promise<void>
   updateAgentType(id: string, agentType: string): Promise<void>
   updateSessionStatus(id: string, status: string): Promise<void>
@@ -93,16 +91,6 @@ export interface EventStore {
   updateAgentName(agentId: string, name: string): Promise<void>
   insertEvent(params: InsertEventParams): Promise<number>
   findEventBySignatureHash(hash: string): Promise<{ id: number } | null>
-  upsertInstance(
-    id: string,
-    sessionId: string,
-    role: string,
-    name: string | null,
-    machineId: string | null,
-    pid: number | null,
-  ): void
-  updateInstanceHeartbeat(id: string, timestamp: number): void
-  getInstancesForSession(sessionId: string): InstanceRow[]
   getProjects(): Promise<any[]>
   getSessionsForProject(projectId: number): Promise<any[]>
   getSessionById(sessionId: string): Promise<any | null>
@@ -141,7 +129,9 @@ export interface EventStore {
   } | null>
   getDbStats(): Promise<{ sessionCount: number; eventCount: number }>
   vacuum(): Promise<void>
-  getRecentSessions(limit?: number): Promise<any[]>
+  /** Newest activity first. With `since` (epoch ms), only sessions whose
+   *  last activity is at or after it. */
+  getRecentSessions(limit?: number, since?: number): Promise<any[]>
   getUnassignedSessions(limit?: number): Promise<any[]>
   healthCheck(): Promise<{ ok: boolean; error?: string }>
   /**

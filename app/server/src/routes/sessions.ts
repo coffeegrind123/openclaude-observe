@@ -58,7 +58,12 @@ router.get('/sessions/recent', async (c) => {
   const store = c.get('store')
   const limitRaw = c.req.query('limit') ? parseInt(c.req.query('limit')!) : NaN
   const limit = isNaN(limitRaw) ? 20 : limitRaw
-  const rows = await store.getRecentSessions(limit)
+  // Optional activity window (epoch ms): only sessions last active at or
+  // after it. The Constellation home view renders a window, not a count.
+  const sinceRaw = c.req.query('since') ? parseInt(c.req.query('since')!) : NaN
+  const rows = Number.isFinite(sinceRaw)
+    ? await store.getRecentSessions(limit, sinceRaw)
+    : await store.getRecentSessions(limit)
   const sessions = rows.map((r: any) => ({
     id: r.id,
     projectId: r.project_id,
@@ -134,6 +139,7 @@ router.get('/sessions/:id/agents', async (c) => {
     name: r.name,
     description: r.description,
     agentType: r.agent_type || null,
+    agentClass: r.agent_class || null,
   }))
   return c.json(agents)
 })
@@ -300,7 +306,9 @@ router.get('/sessions/:id/context', async (c) => {
       `Session has too many events (>= ${MAX_CONTEXT_EVENTS}) for context computation`,
     )
   }
-  const breakdown = computeSessionContext(events)
+  // ?agent=<id> reads a subagent's own window; default is the top-level agent.
+  const agentId = c.req.query('agent') || undefined
+  const breakdown = computeSessionContext(events, agentId)
   return c.json(breakdown)
 })
 

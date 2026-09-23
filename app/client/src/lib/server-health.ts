@@ -6,10 +6,13 @@ export interface ServerHealth {
   version?: string
   logLevel?: string
   runtime?: string
+  /** Where the DB lives on the user's machine (host side of the bind mount in docker). */
   dbPath?: string
+  /** The path the server opens — /data/observe.db in docker. */
+  containerDbPath?: string
   activeConsumers?: number
   activeClients?: number
-  /** Whether OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS is set on the server. Drives
+  /** Whether INSTANTCOFFEE_OBSERVE_TRANSCRIPT_STATS is set on the server. Drives
    *  whether the Token Usage section fires the per-session
    *  transcript-stats fetch. */
   transcriptStatsEnabled?: boolean

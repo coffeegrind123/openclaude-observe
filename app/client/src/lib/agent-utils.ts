@@ -126,3 +126,56 @@ export function getAgentColorById(
   const idx = colorMap.get(agentId) ?? 0
   return getAgentColor(idx)
 }
+
+// ── Agent tree ────────────────────────────────────────────────────────
+
+export interface AgentTreeNode {
+  agent: Agent
+  /** 0 for a root agent, 1 for its subagents, 2 for a subagent's SubAgent children, … */
+  depth: number
+}
+
+/**
+ * Flatten the agent tree depth-first so nested subagents (pi's `SubAgent`
+ * delegation) sit directly under the subagent that spawned them. Siblings are
+ * newest first. An agent whose parent is not in the list (not yet fetched,
+ * or filtered out) is placed as a direct child of the root.
+ */
+export function orderAgentTree(agents: readonly Agent[]): AgentTreeNode[] {
+  const ids = new Set(agents.map((a) => a.id))
+  const roots = agents.filter((a) => !a.parentAgentId)
+  const children = new Map<string | null, Agent[]>()
+  for (const a of agents) {
+    if (!a.parentAgentId) {
+      continue
+    }
+    const key = ids.has(a.parentAgentId) ? a.parentAgentId : (roots[0]?.id ?? null)
+    const list = children.get(key) ?? []
+    list.push(a)
+    children.set(key, list)
+  }
+  for (const list of children.values()) {
+    list.sort((a, b) => (b.firstEventAt ?? 0) - (a.firstEventAt ?? 0))
+  }
+
+  const out: AgentTreeNode[] = []
+  const seen = new Set<string>()
+  function visit(agent: Agent, depth: number) {
+    if (seen.has(agent.id)) {
+      return
+    }
+    seen.add(agent.id)
+    out.push({ agent, depth })
+    for (const child of children.get(agent.id) ?? []) {
+      visit(child, depth + 1)
+    }
+  }
+  for (const root of roots) {
+    visit(root, 0)
+  }
+  // No root in the list (e.g. agent filter excludes Main): parentless orphans.
+  for (const orphan of children.get(null) ?? []) {
+    visit(orphan, 1)
+  }
+  return out
+}

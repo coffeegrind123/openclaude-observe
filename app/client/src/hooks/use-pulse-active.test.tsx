@@ -30,7 +30,12 @@ function AggregateProbe({
 
 beforeEach(() => {
   vi.useFakeTimers()
-  useUIStore.setState({ sessionPulses: {} })
+  // Reset to defaults so the config-driven tests below don't leak.
+  useUIStore.setState({
+    sessionPulses: {},
+    activeIndicatorEnabled: true,
+    activeIndicatorSeconds: ACTIVITY_CONFIG.pulseDurationMs / 1000,
+  })
 })
 
 afterEach(() => {
@@ -159,5 +164,60 @@ describe('useAggregatePulseActive', () => {
       vi.advanceTimersByTime(ACTIVITY_CONFIG.pulseDurationMs)
     })
     expect(values.at(-1)).toBe(false)
+  })
+})
+
+describe('active-session indicator settings', () => {
+  it('never activates when the indicator is disabled', () => {
+    useUIStore.setState({ activeIndicatorEnabled: false })
+    const values: boolean[] = []
+    render(<SessionProbe sessionId="sess-1" onValue={(v) => values.push(v)} />)
+    act(() => {
+      useUIStore.getState().pulseSession('sess-1')
+    })
+    expect(values.at(-1)).toBe(false)
+    act(() => {
+      vi.advanceTimersByTime(ACTIVITY_CONFIG.pulseDurationMs)
+    })
+    expect(values.at(-1)).toBe(false)
+  })
+
+  it('honors a custom duration from activeIndicatorSeconds', () => {
+    useUIStore.setState({ activeIndicatorSeconds: 3 })
+    const values: boolean[] = []
+    render(<SessionProbe sessionId="sess-1" onValue={(v) => values.push(v)} />)
+    act(() => {
+      useUIStore.getState().pulseSession('sess-1')
+    })
+    expect(values.at(-1)).toBe(true)
+    act(() => {
+      vi.advanceTimersByTime(2999)
+    })
+    expect(values.at(-1)).toBe(true)
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(values.at(-1)).toBe(false)
+  })
+
+  it('forces off immediately when disabled mid-pulse', () => {
+    const values: boolean[] = []
+    render(<SessionProbe sessionId="sess-1" onValue={(v) => values.push(v)} />)
+    act(() => {
+      useUIStore.getState().pulseSession('sess-1')
+    })
+    expect(values.at(-1)).toBe(true)
+    act(() => {
+      useUIStore.setState({ activeIndicatorEnabled: false })
+    })
+    expect(values.at(-1)).toBe(false)
+  })
+
+  it('persists the settings to localStorage', () => {
+    useUIStore.getState().setActiveIndicatorEnabled(false)
+    useUIStore.getState().setActiveIndicatorSeconds(42)
+    expect(localStorage.getItem('instantcoffee-observe-active-indicator')).toBe('off')
+    expect(localStorage.getItem('instantcoffee-observe-active-indicator-seconds')).toBe('42')
+    expect(useUIStore.getState().activeIndicatorSeconds).toBe(42)
   })
 })

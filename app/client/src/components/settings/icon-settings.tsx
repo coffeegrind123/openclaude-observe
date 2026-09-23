@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { DynamicIcon, resolveIconName } from '@/lib/dynamic-icon'
 import { eventIcons, eventColors, defaultEventIcon } from '@/config/event-icons'
+import { EVENT_ICON_REGISTRY } from '@/lib/event-icon-registry'
 import { useIconCustomizations, COLOR_PRESETS } from '@/hooks/use-icon-customizations'
 import { IconPicker } from './icon-picker'
 import { ColorPicker } from './color-picker'
@@ -25,96 +26,19 @@ function getIconComponentName(icon: LucideIcon): string {
   return (icon as { displayName?: string }).displayName || icon.name || 'Pin'
 }
 
-// Curated list of logical event keys grouped by category
 interface EventEntry {
-  key: string // logical key (matches resolveEventKey output, e.g., "Bash", "SessionStart")
+  key: string // icon id (what AgentClass.iconId returns, e.g. "bash", "SessionStart")
   label: string // human-readable label
   category: string // grouping header
 }
 
-const CURATED_EVENTS: EventEntry[] = [
-  // Session
-  { key: 'SessionStart', label: 'Session Start', category: 'Session' },
-  { key: 'SessionEnd', label: 'Session End', category: 'Session' },
-  { key: 'Stop', label: 'Stop', category: 'Session' },
-  { key: 'StopFailure', label: 'Stop Failure', category: 'Session' },
-
-  // User Input
-  { key: 'UserPromptSubmit', label: 'User Prompt', category: 'User Input' },
-  { key: 'UserPromptSubmitResponse', label: 'Prompt Response', category: 'User Input' },
-
-  // Tools
-  { key: 'Bash', label: 'Bash', category: 'Tools' },
-  { key: 'Read', label: 'Read', category: 'Tools' },
-  { key: 'Write', label: 'Write', category: 'Tools' },
-  { key: 'Edit', label: 'Edit', category: 'Tools' },
-  { key: 'Glob', label: 'Glob', category: 'Tools' },
-  { key: 'Grep', label: 'Grep', category: 'Tools' },
-  { key: 'WebSearch', label: 'Web Search', category: 'Tools' },
-  { key: 'WebFetch', label: 'Web Fetch', category: 'Tools' },
-  { key: 'Agent', label: 'Agent', category: 'Tools' },
-
-  // Agents
-  { key: 'SubagentStart', label: 'Subagent Start', category: 'Agents' },
-  { key: 'SubagentStop', label: 'Subagent Stop', category: 'Agents' },
-  { key: 'TeammateIdle', label: 'Teammate Idle', category: 'Agents' },
-
-  // Tasks
-  { key: 'TaskCreated', label: 'Task Created', category: 'Tasks' },
-  { key: 'TaskCompleted', label: 'Task Completed', category: 'Tasks' },
-
-  // System
-  { key: 'PermissionRequest', label: 'Permission Request', category: 'System' },
-  { key: 'Notification', label: 'Notification', category: 'System' },
-  { key: 'InstructionsLoaded', label: 'Instructions Loaded', category: 'System' },
-  { key: 'ConfigChange', label: 'Config Change', category: 'System' },
-  { key: 'CwdChanged', label: 'CWD Changed', category: 'System' },
-  { key: 'FileChanged', label: 'File Changed', category: 'System' },
-
-  // Compaction
-  { key: 'PreCompact', label: 'Pre-Compact', category: 'Compaction' },
-  { key: 'PostCompact', label: 'Post-Compact', category: 'Compaction' },
-
-  // MCP
-  { key: '_MCP', label: 'MCP Tool', category: 'MCP' },
-  { key: 'Elicitation', label: 'Elicitation', category: 'MCP' },
-  { key: 'ElicitationResult', label: 'Elicitation Result', category: 'MCP' },
-
-  // Worktrees
-  { key: 'WorktreeCreate', label: 'Worktree Create', category: 'Worktrees' },
-  { key: 'WorktreeRemove', label: 'Worktree Remove', category: 'Worktrees' },
-
-  // LLM
-  { key: 'LLMGeneration', label: 'LLM Generation', category: 'LLM' },
-  { key: 'CostUpdate', label: 'Cost Update', category: 'LLM' },
-  { key: 'CompactionRun', label: 'Compaction Run', category: 'LLM' },
-
-  // Daemon
-  { key: 'DaemonStart', label: 'Daemon Start', category: 'Daemon' },
-  { key: 'DaemonStop', label: 'Daemon Stop', category: 'Daemon' },
-  { key: 'DaemonHeartbeat', label: 'Daemon Heartbeat', category: 'Daemon' },
-
-  // Pipes
-  { key: 'PipeRoleAssigned', label: 'Role Assigned', category: 'Pipes' },
-  { key: 'PipeAttach', label: 'Pipe Attach', category: 'Pipes' },
-  { key: 'PipeDetach', label: 'Pipe Detach', category: 'Pipes' },
-  { key: 'PipePromptRouted', label: 'Prompt Routed', category: 'Pipes' },
-  { key: 'PipePermissionForward', label: 'Permission Forward', category: 'Pipes' },
-  { key: 'PipeLanPeerDiscovered', label: 'LAN Peer Discovered', category: 'Pipes' },
-
-  // Coordinator
-  { key: 'CoordinatorDispatch', label: 'Dispatch', category: 'Coordinator' },
-  { key: 'CoordinatorResult', label: 'Result', category: 'Coordinator' },
-
-  // Bridge
-  { key: 'BridgeConnected', label: 'Connected', category: 'Bridge' },
-  { key: 'BridgeDisconnected', label: 'Disconnected', category: 'Bridge' },
-  { key: 'BridgeWorkReceived', label: 'Work Received', category: 'Bridge' },
-
-  // Super Mode
-  { key: 'SuperModeToggle', label: 'Super Mode Toggle', category: 'System' },
-  { key: 'PermissionDenied', label: 'Permission Denied', category: 'System' },
-]
+// Every customisable key is an icon registry entry, so the settings list and
+// the icons actually rendered can't drift apart.
+const CURATED_EVENTS: EventEntry[] = EVENT_ICON_REGISTRY.map((e) => ({
+  key: e.id,
+  label: e.name,
+  category: e.group,
+}))
 
 const DEFAULT_EVENT_COLOR: [string, string] = [
   'text-muted-foreground',
@@ -158,18 +82,20 @@ export function IconSettings() {
     )
   }, [filter])
 
-  // Group filtered entries by category, preserving order
+  // Group filtered entries by category in order of first appearance. A Map
+  // aggregates categories whose entries are split across the list into one
+  // section, which also keeps the section React keys unique.
   const grouped = useMemo(() => {
-    const groups: { category: string; entries: ResolvedEventEntry[] }[] = []
-    let currentCategory = ''
+    const buckets = new Map<string, ResolvedEventEntry[]>()
     for (const entry of filteredEvents) {
-      if (entry.category !== currentCategory) {
-        currentCategory = entry.category
-        groups.push({ category: currentCategory, entries: [] })
+      let bucket = buckets.get(entry.category)
+      if (!bucket) {
+        bucket = []
+        buckets.set(entry.category, bucket)
       }
-      groups[groups.length - 1].entries.push(entry)
+      bucket.push(entry)
     }
-    return groups
+    return Array.from(buckets, ([category, entries]) => ({ category, entries }))
   }, [filteredEvents])
 
   return (

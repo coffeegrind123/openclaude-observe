@@ -144,7 +144,7 @@ export function ProjectModal({ project, open, onOpenChange }: ProjectModalProps)
       if (selectedProjectId === project!.id) setSelectedProject(null)
       await queryClient.invalidateQueries({ queryKey: ['projects'] })
       await queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      await queryClient.invalidateQueries({ queryKey: ['recentSessions'] })
+      await queryClient.invalidateQueries({ queryKey: ['recent-sessions'] })
       onOpenChange(false)
     } finally {
       setDeleting(false)
@@ -159,7 +159,7 @@ export function ProjectModal({ project, open, onOpenChange }: ProjectModalProps)
       setSelectedSessionIds(new Set())
       await queryClient.invalidateQueries({ queryKey: ['sessions', project!.id] })
       await queryClient.invalidateQueries({ queryKey: ['projects'] })
-      await queryClient.invalidateQueries({ queryKey: ['recentSessions'] })
+      await queryClient.invalidateQueries({ queryKey: ['recent-sessions'] })
     } finally {
       setDeleting(false)
       setConfirmAction(null)
@@ -177,7 +177,7 @@ export function ProjectModal({ project, open, onOpenChange }: ProjectModalProps)
       await queryClient.invalidateQueries({ queryKey: ['sessions', project!.id] })
       await queryClient.invalidateQueries({ queryKey: ['sessions', targetProjectId] })
       await queryClient.invalidateQueries({ queryKey: ['projects'] })
-      await queryClient.invalidateQueries({ queryKey: ['recentSessions'] })
+      await queryClient.invalidateQueries({ queryKey: ['recent-sessions'] })
     } finally {
       setMoving(false)
     }
@@ -369,8 +369,8 @@ export function ProjectModal({ project, open, onOpenChange }: ProjectModalProps)
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirmAction === 'delete-project'
-                ? 'This will permanently delete this project and all its Observe logs. Your original Claude session files are not modified.'
-                : 'This will permanently delete the selected session logs. Your original Claude session files are not modified.'}
+                ? 'This will permanently delete this project and all its Observe logs. Your original pi session files are not modified.'
+                : 'This will permanently delete the selected session logs. Your original pi session files are not modified.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

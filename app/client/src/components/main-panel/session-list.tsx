@@ -37,11 +37,11 @@ export function SessionList({
   showProject = false,
   sortBy = 'activity',
 }: SessionListProps) {
-  const { setSelectedProject, setSelectedSessionId } = useUIStore()
+  const openSession = useUIStore((s) => s.openSession)
 
+  // One history entry for project + session, so Back returns here.
   const handleSessionClick = (projectId: number, projectSlug: string, sessionId: string) => {
-    setSelectedProject(projectId, projectSlug)
-    setTimeout(() => setSelectedSessionId(sessionId), 0)
+    openSession(projectId, projectSlug, sessionId)
   }
 
   if (sessions.length === 0) {
@@ -96,12 +96,27 @@ function SessionRow({
   const needsAttention = useSessionHasNotification(session.id)
 
   return (
-    <button
+    // role="button" rather than a real <button>: the NotificationIndicator
+    // renders its own <button>, and nested buttons are invalid HTML.
+    <div
+      role="button"
+      tabIndex={0}
       className={cn(
         'w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors cursor-pointer',
         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
       )}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        // Ignore keys bubbling from the bell so Enter there dismisses
+        // without also navigating to the session.
+        if (e.target !== e.currentTarget) {
+          return
+        }
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
     >
       <div className="flex items-center gap-2 min-w-0">
         {needsAttention ? (
@@ -152,6 +167,6 @@ function SessionRow({
           {formatRelativeTime(lastTime)}
         </span>
       </div>
-    </button>
+    </div>
   )
 }

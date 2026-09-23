@@ -2,6 +2,8 @@ import { useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
 import type { Agent, ServerAgent, ParsedEvent } from '@/types'
+import { agentClassFor } from '@/agents/registry'
+import type { AgentIdentity } from '@/agents/types'
 
 // Module-level dedup — shared across all useAgents instances so multiple
 // components (event-stream, combobox, timeline) don't each fire a fetch
@@ -35,10 +37,13 @@ export function useAgents(sessionId: string | null, events: ParsedEvent[] | unde
         lastEventAt: number
         lastStoppedAt: number // timestamp of last stop signal, 0 if never
         cwd: string | null
+        agentClass: string | null
+        identity: AgentIdentity | null
       }
     >()
     if (!events) return stats
-    const stopSubtypes = new Set(['Stop', 'SessionEnd', 'stop_hook_summary'])
+    // A subagent's own SubagentStop ends it; Stop / SessionEnd end the root turn.
+    const stopSubtypes = new Set(['Stop', 'SessionEnd', 'SubagentStop'])
     for (const e of events) {
       let s = stats.get(e.agentId)
       if (!s) {
@@ -48,8 +53,21 @@ export function useAgents(sessionId: string | null, events: ParsedEvent[] | unde
           lastEventAt: e.timestamp,
           lastStoppedAt: 0,
           cwd: null,
+          agentClass: null,
+          identity: null,
         }
         stats.set(e.agentId, s)
+      }
+      if (!s.agentClass && typeof (e.payload as any)?.agent_class === 'string') {
+        s.agentClass = (e.payload as any).agent_class
+      }
+      // Payload-declared identity (pi: agent_id, agent_name, parent_agent_id…)
+      // stands in until the server's agent row arrives.
+      if (!s.identity) {
+        const identity = agentClassFor(e).identity(e)
+        if (identity && identity.agentId === e.agentId) {
+          s.identity = identity
+        }
       }
       if (!s.cwd && typeof (e.payload as any)?.cwd === 'string') {
         s.cwd = (e.payload as any).cwd
@@ -59,14 +77,6 @@ export function useAgents(sessionId: string | null, events: ParsedEvent[] | unde
       if (e.timestamp > s.lastEventAt) s.lastEventAt = e.timestamp
       if (stopSubtypes.has(e.subtype ?? '')) {
         s.lastStoppedAt = Math.max(s.lastStoppedAt, e.timestamp)
-      }
-      // SubagentStop targets the agent ID in the payload, not the event's agentId
-      if (e.subtype === 'SubagentStop') {
-        const targetId = (e.payload as any)?.agent_id
-        if (targetId) {
-          const target = stats.get(targetId)
-          if (target) target.lastStoppedAt = Math.max(target.lastStoppedAt, e.timestamp)
-        }
       }
     }
     return stats
@@ -113,13 +123,15 @@ export function useAgents(sessionId: string | null, events: ParsedEvent[] | unde
     const result: Agent[] = []
     for (const [agentId, s] of agentStats) {
       const server = serverMap.get(agentId)
+      const identity = s.identity
       result.push({
         id: agentId,
         sessionId: sessionId || '',
-        parentAgentId: server?.parentAgentId ?? null,
-        description: server?.description ?? null,
-        name: server?.name ?? null,
-        agentType: server?.agentType ?? null,
+        parentAgentId: server ? server.parentAgentId : (identity?.parentAgentId ?? null),
+        description: server?.description ?? identity?.description ?? null,
+        name: server?.name ?? identity?.name ?? null,
+        agentType: server?.agentType ?? identity?.agentType ?? null,
+        agentClass: server?.agentClass ?? s.agentClass,
         // Agent is stopped if the last stop signal came after or at the last activity
         status: s.lastStoppedAt >= s.lastEventAt ? 'stopped' : 'active',
         eventCount: s.eventCount,

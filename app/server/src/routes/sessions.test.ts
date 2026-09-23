@@ -279,6 +279,18 @@ describe('sessions routes', () => {
       expect(res.status).toBe(200)
       expect(store.getRecentSessions).toHaveBeenCalledWith(20)
     })
+
+    test('forwards a numeric ?since to the store as the activity-window cutoff', async () => {
+      store.getRecentSessions.mockResolvedValue([])
+      await app.request('/sessions/recent?limit=200&since=1700000000000')
+      expect(store.getRecentSessions).toHaveBeenCalledWith(200, 1700000000000)
+    })
+
+    test('ignores a non-numeric ?since (no window)', async () => {
+      store.getRecentSessions.mockResolvedValue([])
+      await app.request('/sessions/recent?since=notanumber')
+      expect(store.getRecentSessions).toHaveBeenCalledWith(20)
+    })
   })
 
   // -----------------------------------------------------------------------
@@ -353,6 +365,7 @@ describe('sessions routes', () => {
           name: 'Child Agent',
           description: null,
           agent_type: null,
+          agent_class: 'claude-code',
         }),
       ])
       const res = await app.request('/sessions/sess-1/agents')
@@ -366,6 +379,7 @@ describe('sessions routes', () => {
         name: 'Root Agent',
         description: 'The root',
         agentType: 'primary',
+        agentClass: null,
       })
       expect(body[1]).toEqual({
         id: 'agent-2',
@@ -374,6 +388,7 @@ describe('sessions routes', () => {
         name: 'Child Agent',
         description: null,
         agentType: null,
+        agentClass: 'claude-code',
       })
     })
 

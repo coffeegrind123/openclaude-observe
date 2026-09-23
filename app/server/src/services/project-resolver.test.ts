@@ -35,12 +35,12 @@ describe('resolveProject', () => {
     const existingId = await store.createProject(
       'my-project',
       'my-project',
-      '/Users/joe/.claude/projects/-Users-joe-my-app',
+      '/Users/joe/.pi/agent/sessions/--Users-joe-my-app--',
     )
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: null,
-      transcriptPath: '/Users/joe/.claude/projects/-Users-joe-my-app/session.jsonl',
+      transcriptPath: '/Users/joe/.pi/agent/sessions/--Users-joe-my-app--/session.jsonl',
     })
     expect(result.projectId).toBe(existingId)
     expect(result.created).toBe(false)
@@ -50,7 +50,7 @@ describe('resolveProject', () => {
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: null,
-      transcriptPath: '/Users/joe/.claude/projects/-Users-joe-Development-my-app/session.jsonl',
+      transcriptPath: '/Users/joe/.pi/agent/sessions/--Users-joe-Development-my-app--/session.jsonl',
     })
     expect(result.projectId).toBeGreaterThan(0)
     expect(result.projectSlug).toBe('my-app')
@@ -62,7 +62,7 @@ describe('resolveProject', () => {
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: null,
-      transcriptPath: '/Users/joe/.claude/projects/-Users-joe-Development-my-app/session.jsonl',
+      transcriptPath: '/Users/joe/.pi/agent/sessions/--Users-joe-Development-my-app--/session.jsonl',
     })
     expect(result.projectId).toBeGreaterThan(0)
     expect(result.projectSlug).toBe('development-my-app')
@@ -90,12 +90,12 @@ describe('resolveProject', () => {
     await store.createProject(
       'from-path',
       'from-path',
-      '/Users/joe/.claude/projects/-Users-joe-my-app',
+      '/Users/joe/.pi/agent/sessions/--Users-joe-my-app--',
     )
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: 'custom-slug',
-      transcriptPath: '/Users/joe/.claude/projects/-Users-joe-my-app/session.jsonl',
+      transcriptPath: '/Users/joe/.pi/agent/sessions/--Users-joe-my-app--/session.jsonl',
     })
     expect(result.projectSlug).toBe('custom-slug')
     expect(result.created).toBe(true)
@@ -113,7 +113,7 @@ describe('resolveProject', () => {
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: null,
-      transcriptPath: '/Users/joe/.claude/projects/-Users-joe-other/xxx.jsonl',
+      transcriptPath: '/Users/joe/.pi/agent/sessions/--Users-joe-other--/xxx.jsonl',
       cwd: '/Users/joe/Development/my-app',
     })
     expect(result.projectId).toBe(existingId)
@@ -125,7 +125,7 @@ describe('resolveProject', () => {
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: null,
-      transcriptPath: '/Users/joe/.claude/projects/-Users-joe-other/xxx.jsonl',
+      transcriptPath: '/Users/joe/.pi/agent/sessions/--Users-joe-other--/xxx.jsonl',
       cwd: '/Users/joe/Development/my-app',
     })
     expect(result.projectSlug).toBe('my-app')
@@ -162,13 +162,13 @@ describe('resolveProject', () => {
     await store.createProject(
       'path-match',
       'path-match',
-      '/Users/joe/.claude/projects/-Users-joe-other',
+      '/Users/joe/.pi/agent/sessions/--Users-joe-other--',
       null,
     )
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: null,
-      transcriptPath: '/Users/joe/.claude/projects/-Users-joe-other/xxx.jsonl',
+      transcriptPath: '/Users/joe/.pi/agent/sessions/--Users-joe-other--/xxx.jsonl',
       cwd: '/Users/joe/Development/my-app',
     })
     expect(result.projectId).toBe(cwdProject)
@@ -224,13 +224,13 @@ describe('resolveProject', () => {
     await store.createProject(
       'from-path',
       'from-path',
-      '/Users/joe/.claude/projects/-Users-joe-my-app',
+      '/Users/joe/.pi/agent/sessions/--Users-joe-my-app--',
       null,
     )
     const result = await resolveProject(store, {
       sessionId: 'sess1',
       slug: null,
-      transcriptPath: '/Users/joe/.claude/projects/-Users-joe-my-app/session.jsonl',
+      transcriptPath: '/Users/joe/.pi/agent/sessions/--Users-joe-my-app--/session.jsonl',
       cwd: '/Users/joe/Development/other-app',
     })
     expect(result.projectSlug).toBe('other-app')

@@ -148,6 +148,17 @@ describe('SqliteAdapter — projects', () => {
 // Sessions
 // ---------------------------------------------------------------------------
 describe('SqliteAdapter — sessions', () => {
+  test('getRecentSessions(limit, since) keeps only sessions active at/after the cutoff', async () => {
+    const projId = await store.createProject('proj1', 'Project One', null)
+    await store.upsertSession('old', projId, null, null, 1000)
+    await store.upsertSession('edge', projId, null, null, 3000)
+    await store.upsertSession('new', projId, null, null, 5000)
+
+    const windowed = await store.getRecentSessions(20, 3000)
+    expect(windowed.map((r) => r.id)).toEqual(['new', 'edge'])
+    expect(await store.getRecentSessions(20)).toHaveLength(3)
+  })
+
   test('upsert session with slug and metadata', async () => {
     const projId = await store.createProject('proj1', 'Project 1', null)
     await store.upsertSession('sess1', projId, 'twinkly-dragon', { version: '2.1' }, 1000)
@@ -271,7 +282,7 @@ describe('SqliteAdapter — sessions', () => {
     await store.upsertSession('sess1', projId, null, null, 100)
     await store.upsertAgent('sess1', 'sess1', null, null, null)
 
-    // Configurable notifications (OPENCLAUDE_OBSERVE_NOTIFICATION_ON_EVENTS) let the
+    // Configurable notifications (INSTANTCOFFEE_OBSERVE_NOTIFICATION_ON_EVENTS) let the
     // route mark e.g. a Stop event as notifying. The adapter honors the flag
     // regardless of subtype.
     await store.insertEvent({
@@ -1811,7 +1822,7 @@ describe('filters', () => {
     expect(all?.kind).toBe('default')
     expect(all?.enabled).toBe(true)
     expect(all?.combinator).toBe('and')
-    expect(all?.patterns).toEqual([{ target: 'hook', regex: '^PostToolBatch$', negate: true }])
+    expect(all?.patterns).toEqual([{ target: 'hook', regex: '^SystemPrompt$', negate: true }])
     expect(all?.config).toEqual({ role: 'all-exclusions' })
   })
 
@@ -1858,5 +1869,32 @@ describe('filters', () => {
     const after = await adapter.getFilterById(before.id)
     expect(after?.name).not.toBe('mutated') // seed name restored
     expect(after?.enabled).toBe(false) // enabled preserved
+  })
+})
+
+describe('default filter migration', () => {
+  test('retired Claude-hook defaults are removed on reopen; user filters and live defaults stay', async () => {
+    const { mkdtempSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const path = join(mkdtempSync(join(tmpdir(), 'observe-filters-')), 'observe.db')
+
+    const first = new SqliteAdapter(path)
+    const raw = (first as unknown as { db: import('better-sqlite3').Database }).db
+    const now = Date.now()
+    const insert = raw.prepare(
+      `INSERT INTO filters (id, name, pill_name, display, combinator, patterns, kind, enabled, config, created_at, updated_at)
+       VALUES (?, ?, ?, 'primary', 'and', '[]', ?, 1, '{}', ?, ?)`,
+    )
+    insert.run('default-tasks', 'Tasks', 'Tasks', 'default', now, now)
+    insert.run('user-tasks', 'My tasks', 'Mine', 'user', now, now)
+    raw.close()
+
+    const reopened = new SqliteAdapter(path)
+    const ids = (await reopened.listFilters()).map((f) => f.id)
+    expect(ids).not.toContain('default-tasks')
+    expect(ids).toContain('user-tasks')
+    expect(ids).toContain('default-llm')
+    expect(ids).toContain('default-tools')
   })
 })

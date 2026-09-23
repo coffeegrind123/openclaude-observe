@@ -2,298 +2,133 @@ import { describe, test, expect } from 'vitest'
 import { parseRawEvent } from './parser'
 
 // ---------------------------------------------------------------------------
-// Hook format (hook_event_name present)
+// pi envelope (docs/pi-protocol.md)
 // ---------------------------------------------------------------------------
-describe('parseRawEvent — hook format', () => {
+const BASE = {
+  agent_class: 'pi',
+  session_id: '01a0cea5-b997-73d4-853f-9a594c831c4e',
+  timestamp: 1790173524016,
+  cwd: '/work/proj',
+  transcript_path: '/home/u/.pi/agent/sessions/--work-proj--/s.jsonl',
+  model: 'qwen3.8-27b',
+  provider: 'forge',
+}
+
+describe('parseRawEvent — pi envelope', () => {
   test('SessionStart', () => {
-    const raw = {
-      hook_event_name: 'SessionStart',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      timestamp: 1711411200000,
-      version: '2.2.0',
-      gitBranch: 'feat/hooks',
-      cwd: '/home/dev/repo',
-      entrypoint: 'cli',
-      permissionMode: 'auto',
-    }
+    const r = parseRawEvent({ ...BASE, hook_event_name: 'SessionStart', source: 'startup', thinking_level: 'off' })
 
-    const result = parseRawEvent(raw)
-    expect(result.type).toBe('session')
-    expect(result.subtype).toBe('SessionStart')
-    expect(result.projectName).toBe('hook-proj')
-    expect(result.sessionId).toBe('hook-sess-1')
-    expect(result.toolName).toBeNull()
-    expect(result.subAgentId).toBeNull()
-    expect(result.ownerAgentId).toBeNull()
-    expect(result.metadata).toEqual({
-      version: '2.2.0',
-      gitBranch: 'feat/hooks',
-      cwd: '/home/dev/repo',
-      entrypoint: 'cli',
-      permissionMode: 'auto',
-    })
+    expect(r.type).toBe('session')
+    expect(r.subtype).toBe('SessionStart')
+    expect(r.sessionId).toBe(BASE.session_id)
+    expect(r.transcriptPath).toBe(BASE.transcript_path)
+    expect(r.agentClass).toBe('pi')
+    expect(r.ownerAgentId).toBeNull()
+    expect(r.metadata).toMatchObject({ cwd: '/work/proj', model: 'qwen3.8-27b', provider: 'forge', thinking_level: 'off' })
   })
 
-  test('UserPromptSubmit', () => {
-    const raw = {
-      hook_event_name: 'UserPromptSubmit',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      timestamp: 1711411201000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.type).toBe('user')
-    expect(result.subtype).toBe('UserPromptSubmit')
+  test.each([
+    ['UserPromptSubmit', 'user'],
+    ['UserBash', 'user'],
+    ['LLMGeneration', 'llm'],
+    ['Stop', 'system'],
+    ['PreCompact', 'system'],
+    ['PostCompact', 'system'],
+    ['SubagentStart', 'system'],
+    ['SubagentStop', 'system'],
+    ['SessionEnd', 'session'],
+    ['SystemPrompt', 'session'],
+    ['ModelChange', 'system'],
+  ])('%s is typed %s', (name, type) => {
+    const r = parseRawEvent({ ...BASE, hook_event_name: name })
+    expect(r.type).toBe(type)
+    expect(r.subtype).toBe(name)
   })
 
-  test('PreToolUse with non-Agent tool', () => {
-    const raw = {
-      hook_event_name: 'PreToolUse',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      tool_name: 'Bash',
-      tool_input: { command: 'ls -la' },
-      timestamp: 1711411202000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.type).toBe('tool')
-    expect(result.subtype).toBe('PreToolUse')
-    expect(result.toolName).toBe('Bash')
-    expect(result.subAgentName).toBeNull()
-  })
-
-  test('PreToolUse with Agent tool extracts name and description from tool_input', () => {
-    const raw = {
-      hook_event_name: 'PreToolUse',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      tool_name: 'Agent',
-      tool_input: { name: 'ls-agent', description: 'Run ls in the repo', prompt: 'List files' },
-      timestamp: 1711411202000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.type).toBe('tool')
-    expect(result.subtype).toBe('PreToolUse')
-    expect(result.toolName).toBe('Agent')
-    expect(result.subAgentName).toBe('ls-agent')
-    expect(result.subAgentDescription).toBe('Run ls in the repo')
-    expect(result.subAgentId).toBeNull()
-  })
-
-  test('PostToolUse with non-Agent tool', () => {
-    const raw = {
-      hook_event_name: 'PostToolUse',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      tool_name: 'Read',
-      tool_input: { file_path: '/tmp/test.txt' },
-      tool_response: { content: 'file contents' },
-      timestamp: 1711411203000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.type).toBe('tool')
-    expect(result.subtype).toBe('PostToolUse')
-    expect(result.toolName).toBe('Read')
-    expect(result.subAgentId).toBeNull()
-    expect(result.subAgentName).toBeNull()
-  })
-
-  test('PostToolUse with Agent tool extracts subAgentId, name, and description', () => {
-    const raw = {
-      hook_event_name: 'PostToolUse',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      tool_name: 'Agent',
-      tool_input: {
-        name: 'file-searcher',
-        description: 'Search for files',
-        prompt: 'Find all .ts files',
-      },
-      tool_response: { agentId: 'sub-agent-abc', result: 'done' },
-      timestamp: 1711411203000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.type).toBe('tool')
-    expect(result.subtype).toBe('PostToolUse')
-    expect(result.toolName).toBe('Agent')
-    expect(result.subAgentId).toBe('sub-agent-abc')
-    expect(result.subAgentName).toBe('file-searcher')
-    expect(result.subAgentDescription).toBe('Search for files')
-  })
-
-  test('PostToolUse:Agent without tool_response does not set subAgentId', () => {
-    const raw = {
-      hook_event_name: 'PostToolUse',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      tool_name: 'Agent',
-      tool_input: { description: 'Do something' },
-      timestamp: 1711411203000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.toolName).toBe('Agent')
-    expect(result.subAgentId).toBeNull()
-    expect(result.subAgentName).toBeNull()
-  })
-
-  test('Stop', () => {
-    const raw = {
-      hook_event_name: 'Stop',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      timestamp: 1711411204000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.type).toBe('system')
-    expect(result.subtype).toBe('Stop')
-  })
-
-  test('SubagentStop extracts subAgentId from agent_id', () => {
-    const raw = {
-      hook_event_name: 'SubagentStop',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      agent_id: 'sub-agent-xyz',
-      timestamp: 1711411205000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.type).toBe('system')
-    expect(result.subtype).toBe('SubagentStop')
-    expect(result.subAgentId).toBe('sub-agent-xyz')
-    // ownerAgentId is also agent_id (they use the same field)
-    expect(result.ownerAgentId).toBe('sub-agent-xyz')
-  })
-
-  test('PostToolUseFailure', () => {
-    const raw = {
+  test('tool events carry tool name and id; lowercase pi tool names are kept as-is', () => {
+    const r = parseRawEvent({
+      ...BASE,
       hook_event_name: 'PostToolUseFailure',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      tool_name: 'Bash',
-      timestamp: 1711411206000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.type).toBe('tool')
-    expect(result.subtype).toBe('PostToolUseFailure')
-    expect(result.toolName).toBe('Bash')
-  })
-
-  test('Notification', () => {
-    const raw = {
-      hook_event_name: 'Notification',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      timestamp: 1711411207000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.type).toBe('system')
-    expect(result.subtype).toBe('Notification')
-  })
-
-  test('unknown hook event name falls through to default', () => {
-    const raw = {
-      hook_event_name: 'FutureEvent',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      timestamp: 1711411208000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.type).toBe('system')
-    expect(result.subtype).toBe('FutureEvent')
-  })
-
-  test('hook event from subagent has ownerAgentId from agent_id', () => {
-    const raw = {
-      hook_event_name: 'PreToolUse',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      agent_id: 'sub-agent-owner',
-      tool_name: 'Bash',
-      timestamp: 1711411209000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.ownerAgentId).toBe('sub-agent-owner')
-    expect(result.type).toBe('tool')
-    expect(result.subtype).toBe('PreToolUse')
-  })
-
-  test('hook event extracts tool_use_id', () => {
-    const raw = {
-      hook_event_name: 'PreToolUse',
-      project_name: 'hook-proj',
-      session_id: 'hook-sess-1',
-      tool_name: 'Read',
-      tool_use_id: 'toolu_12345',
-      timestamp: 1711411210000,
-    }
-
-    const result = parseRawEvent(raw)
-    expect(result.toolUseId).toBe('toolu_12345')
-  })
-
-  test('hook event — extracts transcript_path', () => {
-    const parsed = parseRawEvent({
-      hook_event_name: 'PreToolUse',
-      session_id: 'sess-1',
-      tool_name: 'Bash',
-      tool_input: { command: 'ls' },
-      transcript_path: '/Users/joe/.claude/projects/-Users-joe-my-app/sess-1.jsonl',
-      timestamp: 1000,
+      tool_name: 'bash',
+      tool_use_id: 'call_316a9d0c',
+      tool_input: { command: 'cat missing-file.txt' },
+      is_error: true,
     })
-    expect(parsed.transcriptPath).toBe('/Users/joe/.claude/projects/-Users-joe-my-app/sess-1.jsonl')
+    expect(r.type).toBe('tool')
+    expect(r.toolName).toBe('bash')
+    expect(r.toolUseId).toBe('call_316a9d0c')
   })
 
-  test('hook event — transcriptPath is null when not present', () => {
-    const parsed = parseRawEvent({
-      hook_event_name: 'Stop',
-      session_id: 'sess-1',
-      timestamp: 1000,
+  test('tool_name on a non-tool event is not treated as a tool', () => {
+    expect(parseRawEvent({ ...BASE, hook_event_name: 'Stop', tool_name: 'bash' }).toolName).toBeNull()
+  })
+
+  test('subagent events name their agent and its spawner explicitly', () => {
+    const r = parseRawEvent({
+      ...BASE,
+      hook_event_name: 'PreToolUse',
+      tool_name: 'bash',
+      tool_use_id: 'call_c8a6d7d4',
+      agent_id: '01a0cea0-6acb-7624-ac0d-3596141578f2',
+      agent_type: 'general-purpose',
+      agent_name: 'general-purpose#e8181b66',
+      agent_description: 'Count lines in notes.txt',
+      parent_tool_use_id: 'call_5ec3e22b',
+      parent_agent_id: 'child-that-spawned-it',
     })
-    expect(parsed.transcriptPath).toBeNull()
+    expect(r).toMatchObject({
+      ownerAgentId: '01a0cea0-6acb-7624-ac0d-3596141578f2',
+      ownerAgentType: 'general-purpose',
+      ownerAgentName: 'general-purpose#e8181b66',
+      ownerAgentDescription: 'Count lines in notes.txt',
+      parentToolUseId: 'call_5ec3e22b',
+      parentAgentId: 'child-that-spawned-it',
+    })
+  })
+
+  test('an event name this server does not know is still stored, as system', () => {
+    const r = parseRawEvent({ ...BASE, hook_event_name: 'SomethingNewer' })
+    expect(r.type).toBe('system')
+    expect(r.subtype).toBe('SomethingNewer')
+  })
+
+  test('ids are length-capped and non-strings ignored', () => {
+    const r = parseRawEvent({ ...BASE, hook_event_name: 'Stop', session_id: 'x'.repeat(1000), agent_id: 42 })
+    expect(r.sessionId).toHaveLength(256)
+    expect(r.ownerAgentId).toBeNull()
   })
 })
 
-// ---------------------------------------------------------------------------
-// Common behavior: metadata, timestamp, defaults
-// ---------------------------------------------------------------------------
 describe('parseRawEvent — common behavior', () => {
-  test('extracts all metadata keys when present', () => {
+  test('extracts only the known metadata keys', () => {
     const raw = {
-      hook_event_name: 'SessionStart',
-      project_name: 'proj',
+      hook_event_name: 'LLMGeneration',
       session_id: 'sess',
       timestamp: 1711411200000,
-      version: '2.2.0',
-      gitBranch: 'main',
       cwd: '/home/user',
-      entrypoint: 'cli',
-      permissionMode: 'auto',
-      userType: 'pro',
-      permission_mode: 'auto_accept',
+      model: 'qwen3.8-27b',
+      provider: 'forge',
+      agent_class: 'pi',
+      input_tokens: 196,
+      output_tokens: 106,
+      cache_read_tokens: 5615,
+      cache_creation_tokens: 0,
+      ttft_ms: 200,
+      duration_ms: 500,
+      text: 'not metadata',
     }
 
-    const result = parseRawEvent(raw)
-    expect(result.metadata).toEqual({
-      version: '2.2.0',
-      gitBranch: 'main',
+    expect(parseRawEvent(raw).metadata).toEqual({
       cwd: '/home/user',
-      entrypoint: 'cli',
-      permissionMode: 'auto',
-      userType: 'pro',
-      permission_mode: 'auto_accept',
+      model: 'qwen3.8-27b',
+      provider: 'forge',
+      agent_class: 'pi',
+      input_tokens: 196,
+      output_tokens: 106,
+      cache_read_tokens: 5615,
+      cache_creation_tokens: 0,
+      ttft_ms: 200,
+      duration_ms: 500,
     })
   })
 
@@ -347,6 +182,35 @@ describe('parseRawEvent — timestamp parsing', () => {
     const raw = { project_name: 'p', session_id: 's', type: 'user', timestamp: 1711411200000 }
     const result = parseRawEvent(raw)
     expect(result.timestamp).toBe(1711411200000)
+  })
+
+  test('fractional epoch-seconds timestamp is scaled to integer ms', () => {
+    // Python time.time() style; read as ms it would land in Jan 1970.
+    const raw = { project_name: 'p', session_id: 's', type: 'user', timestamp: 1780084122.37901 }
+    expect(parseRawEvent(raw).timestamp).toBe(1780084122379)
+  })
+
+  test('epoch-seconds band boundary: 1e9 scales, just under does not', () => {
+    const base = { project_name: 'p', session_id: 's', type: 'user' }
+    expect(parseRawEvent({ ...base, timestamp: 1e9 }).timestamp).toBe(1e9 * 1000)
+    expect(parseRawEvent({ ...base, timestamp: 1e9 - 1 }).timestamp).toBe(1e9 - 1)
+  })
+
+  test('small fixture/sentinel timestamps and ms timestamps pass through', () => {
+    const base = { project_name: 'p', session_id: 's', type: 'user' }
+    expect(parseRawEvent({ ...base, timestamp: 1000 }).timestamp).toBe(1000)
+    expect(parseRawEvent({ ...base, timestamp: 0 }).timestamp).toBe(0)
+    expect(parseRawEvent({ ...base, timestamp: 1e12 }).timestamp).toBe(1e12)
+  })
+
+  test('meta.timestamp in epoch seconds is scaled to ms', () => {
+    const raw = {
+      project_name: 'p',
+      session_id: 's',
+      type: 'user',
+      meta: { timestamp: 1711411200 },
+    }
+    expect(parseRawEvent(raw).timestamp).toBe(1711411200000)
   })
 
   test('ISO string timestamp is converted to epoch ms', () => {

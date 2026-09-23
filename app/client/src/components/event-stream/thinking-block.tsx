@@ -4,14 +4,10 @@ import { ChatMarkdown } from '@/components/chat-feed/chat-markdown'
 
 interface ThinkingBlockProps {
   /**
-   * Raw extended-thinking text captured by OpenClaude's ClaudeObserveExporter
-   * from response blocks of type 'thinking'. Multiple passes within a single
-   * LLM call are joined by `\n\n---\n\n` on the sender side.
-   *
-   * Currently carried on `payload.thinking_preview` (capped at 4kb). The full
-   * thinking stream is only available when `OTEL_LOG_RAW_API_BODIES=1` is set
-   * on the OpenClaude side — in that case `payload.llm_response_body` has
-   * the untruncated content.
+   * Reasoning text of one LLM call — pi's LLMGeneration `thinking`, the
+   * assistant message's thinking blocks joined by newlines (clipped by the
+   * extension at OBSERVE_MAX_FIELD_CHARS). Passes separated by a
+   * `\n\n---\n\n` rule render as separate sections.
    */
   thinkingText: string
   defaultOpen?: boolean

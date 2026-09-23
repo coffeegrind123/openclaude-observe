@@ -14,7 +14,7 @@ const sharedDataDir = vi.hoisted(() => {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'transcript-parser-index-'))
 })
 vi.mock('../config', () => ({
-  config: { dataDir: sharedDataDir, transcriptStats: { enabled: true, bases: [] } },
+  config: { dataDir: sharedDataDir, transcriptStats: { enabled: true } },
 }))
 
 import { parseSessionTranscripts } from './index'
@@ -32,10 +32,10 @@ beforeEach(() => {
     vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        anthropic: {
+        deepseek: {
           models: {
-            'claude-opus-4-7': {
-              id: 'claude-opus-4-7',
+            'deepseek-flash': {
+              id: 'deepseek-flash',
               cost: { input: 15, output: 75, cache_read: 1.5, cache_write: 18.75 },
             },
           },
@@ -45,42 +45,44 @@ beforeEach(() => {
   )
 })
 
-const MAIN_FIXTURE_LINES = [
-  {
-    type: 'user',
-    uuid: 'u1',
-    parentUuid: null,
-    promptId: 'p1',
-    timestamp: '2026-05-22T00:00:00.000Z',
-    message: { content: 'hi' },
-  },
-  {
-    type: 'assistant',
-    uuid: 'a1',
-    parentUuid: 'u1',
-    timestamp: '2026-05-22T00:00:01.000Z',
-    isSidechain: false,
-    message: {
-      id: 'msg1',
-      model: 'claude-opus-4-7',
-      stop_reason: 'end_turn',
-      usage: {
-        input_tokens: 1000,
-        output_tokens: 500,
-        cache_read_input_tokens: 0,
-        cache_creation_input_tokens: 0,
-        cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 },
-        service_tier: 'standard',
-      },
-      content: [{ type: 'text', text: 'hi' }],
-    },
-  },
-]
+// pi session format v3: a header line, then entries forming a tree by
+// id/parentId. Assistant usage carries pi's own cost; `cost` omitted below
+// means "pi recorded none", which forces the models.dev pricing path.
+type Line = Record<string, unknown>
 
-function writeMainFixture(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'transcript-stats-v2-'))
+function header(): Line {
+  return { type: 'session', version: 3, id: 'sess1', timestamp: '2026-05-22T00:00:00.000Z', cwd: '/w' }
+}
+
+function user(id: string, parentId: string | null, at: string, text: string): Line {
+  return { type: 'message', id, parentId, timestamp: at, message: { role: 'user', content: [{ type: 'text', text }] } }
+}
+
+function assistant(
+  id: string,
+  parentId: string,
+  at: string,
+  model: string,
+  usage: { input: number; output: number; cacheRead?: number; costTotal?: number },
+  content: unknown[] = [{ type: 'text', text: 'ok' }],
+): Line {
+  const u: Record<string, unknown> = { input: usage.input, output: usage.output, cacheRead: usage.cacheRead ?? 0, cacheWrite: 0 }
+  if (usage.costTotal !== undefined) {
+    u.cost = { total: usage.costTotal }
+  }
+  return {
+    type: 'message',
+    id,
+    parentId,
+    timestamp: at,
+    message: { role: 'assistant', model, provider: 'p', stopReason: 'stop', responseId: `r-${id}`, usage: u, content },
+  }
+}
+
+function writeSession(lines: Line[]): string {
+  const dir = mkdtempSync(join(tmpdir(), 'transcript-stats-pi-'))
   const p = join(dir, 'session.jsonl')
-  writeFileSync(p, MAIN_FIXTURE_LINES.map((l) => JSON.stringify(l)).join('\n') + '\n')
+  writeFileSync(p, lines.map((l) => JSON.stringify(l)).join('\n') + '\n')
   return p
 }
 
@@ -91,135 +93,127 @@ function makeStore(opts: { agents: Array<{ id: string; agent_class: string }> })
   } as unknown as EventStore
 }
 
+const PI = [{ id: 'sess1', agent_class: 'pi' }]
+const REAL_SESSION = join(__dirname, 'agents', '__fixtures__', 'pi-session.jsonl')
+
 describe('parseSessionTranscripts', () => {
-  test('aggregates main-only when there are no subagents and attaches pricing', async () => {
-    const path = writeMainFixture()
-    const store = makeStore({ agents: [{ id: 'sess1', agent_class: 'claude-code' }] })
-    const stats = await parseSessionTranscripts('sess1', store, path)
-    expect(stats.source).toBe('jsonl')
+  test('a local model with pi-recorded cost 0 costs 0, not "unknown", with no pricing entry', async () => {
+    const path = writeSession([
+      header(),
+      user('u1', null, '2026-05-22T00:00:00.000Z', 'hi'),
+      assistant('a1', 'u1', '2026-05-22T00:00:01.000Z', 'qwen3.8-27b', { input: 1000, output: 500, costTotal: 0 }),
+    ])
+    const stats = await parseSessionTranscripts('sess1', makeStore({ agents: PI }), path)
+
     expect(stats.summary.totalCalls).toBe(1)
-    expect(stats.byModel).toHaveLength(1)
-    expect(stats.byModel[0].model).toBe('claude-opus-4-7')
-    // 1000 input * $15/M + 500 output * $75/M = $0.015 + $0.0375 = $0.0525 → 5 cents
-    expect(stats.byModel[0].costCents).toBe(5)
-    expect(stats.summary.costTotalCents).toBe(5)
-    expect(stats.models['claude-opus-4-7'].pricing).toMatchObject({ inputPerM: 15 })
+    expect(stats.byModel[0]).toMatchObject({ model: 'qwen3.8-27b', costCents: 0 })
+    expect(stats.summary.costTotalCents).toBe(0)
+    expect(stats.models['qwen3.8-27b'].pricing).toBeNull()
   })
 
-  test('costCents is null when pricing is missing', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ anthropic: { models: {} } }),
-      }),
-    )
-    _testReset()
-    const path = writeMainFixture()
-    const store = makeStore({ agents: [{ id: 'sess1', agent_class: 'claude-code' }] })
-    const stats = await parseSessionTranscripts('sess1', store, path)
+  test("pi's recorded cost wins over models.dev pricing", async () => {
+    const path = writeSession([
+      header(),
+      user('u1', null, '2026-05-22T00:00:00.000Z', 'hi'),
+      assistant('a1', 'u1', '2026-05-22T00:00:01.000Z', 'deepseek-flash', { input: 1000, output: 500, costTotal: 0.02 }),
+    ])
+    const stats = await parseSessionTranscripts('sess1', makeStore({ agents: PI }), path)
+    expect(stats.byModel[0].costCents).toBeCloseTo(2)
+  })
+
+  test('without a recorded cost, models.dev pricing applies', async () => {
+    const path = writeSession([
+      header(),
+      user('u1', null, '2026-05-22T00:00:00.000Z', 'hi'),
+      assistant('a1', 'u1', '2026-05-22T00:00:01.000Z', 'deepseek-flash', { input: 1000, output: 500 }),
+    ])
+    const stats = await parseSessionTranscripts('sess1', makeStore({ agents: PI }), path)
+    // 1000 input * $15/M + 500 output * $75/M = $0.0525 → 5 cents
+    expect(stats.byModel[0].costCents).toBe(5)
+    expect(stats.models['deepseek-flash'].pricing).toMatchObject({ inputPerM: 15 })
+  })
+
+  test('cost is null (unknown) when there is neither a recorded cost nor pricing', async () => {
+    const path = writeSession([
+      header(),
+      user('u1', null, '2026-05-22T00:00:00.000Z', 'hi'),
+      assistant('a1', 'u1', '2026-05-22T00:00:01.000Z', 'mystery-model', { input: 1, output: 1 }),
+    ])
+    const stats = await parseSessionTranscripts('sess1', makeStore({ agents: PI }), path)
     expect(stats.byModel[0].costCents).toBeNull()
     expect(stats.summary.costTotalCents).toBeNull()
-    expect(stats.models['claude-opus-4-7'].pricing).toBeNull()
   })
 
-  test('prompt duration is self-contained: idle gap between prompts does not bleed in', async () => {
-    // Two prompts: p1 has activity ending at +10s, then 10 minutes of
-    // idle, then p2 starts at +610s with activity ending at +613s.
-    // The old logic (next - this) would have given p1 a duration of
-    // 610s — the entire gap. The fix should give p1 ~10s.
-    const lines = [
-      {
-        type: 'user',
-        uuid: 'u1',
-        parentUuid: null,
-        promptId: 'p1',
-        timestamp: '2026-06-01T00:00:00.000Z',
-        message: { content: 'first' },
-      },
-      {
-        type: 'assistant',
-        uuid: 'a1',
-        parentUuid: 'u1',
-        timestamp: '2026-06-01T00:00:10.000Z',
-        isSidechain: false,
-        message: {
-          id: 'm1',
-          model: 'claude-opus-4-7',
-          stop_reason: 'end_turn',
-          usage: { input_tokens: 1, output_tokens: 1 },
-          content: [{ type: 'text', text: 'ok' }],
-        },
-      },
-      {
-        type: 'user',
-        uuid: 'u2',
-        parentUuid: null,
-        promptId: 'p2',
-        timestamp: '2026-06-01T00:10:10.000Z',
-        message: { content: 'second' },
-      },
-      {
-        type: 'assistant',
-        uuid: 'a2',
-        parentUuid: 'u2',
-        timestamp: '2026-06-01T00:10:13.000Z',
-        isSidechain: false,
-        message: {
-          id: 'm2',
-          model: 'claude-opus-4-7',
-          stop_reason: 'end_turn',
-          usage: { input_tokens: 1, output_tokens: 1 },
-          content: [{ type: 'text', text: 'ok' }],
-        },
-      },
-    ]
-    const dir = mkdtempSync(join(tmpdir(), 'transcript-stats-multi-'))
-    const path = join(dir, 'session.jsonl')
-    writeFileSync(path, lines.map((l) => JSON.stringify(l)).join('\n') + '\n')
+  test('prompt duration is self-contained: the idle gap between prompts does not bleed in', async () => {
+    const path = writeSession([
+      header(),
+      user('u1', null, '2026-06-01T00:00:00.000Z', 'first'),
+      assistant('a1', 'u1', '2026-06-01T00:00:10.000Z', 'qwen3.8-27b', { input: 1, output: 1, costTotal: 0 }),
+      user('u2', 'a1', '2026-06-01T00:10:10.000Z', 'second'),
+      assistant('a2', 'u2', '2026-06-01T00:10:13.000Z', 'qwen3.8-27b', { input: 1, output: 1, costTotal: 0 }),
+    ])
+    const stats = await parseSessionTranscripts('sess1', makeStore({ agents: PI }), path)
 
-    const store = makeStore({ agents: [{ id: 'sess1', agent_class: 'claude-code' }] })
-    const stats = await parseSessionTranscripts('sess1', store, path)
-
-    // promptId in the API response is the canonical user-prompt line's
-    // uuid — stable across resumes. See claude.ts walk → node.uuid.
     const p1 = stats.prompts.find((p) => p.promptId === 'u1')!
     const p2 = stats.prompts.find((p) => p.promptId === 'u2')!
-    expect(p1.durationMs).toBe(10_000) // +10s from prompt to last activity
-    expect(p2.durationMs).toBe(3_000) // +3s from prompt to last activity
-    // The gap between prompts (600s) must NOT appear anywhere.
-    expect(p1.durationMs).toBeLessThan(60_000)
+    expect(p1.durationMs).toBe(10_000)
+    expect(p2.durationMs).toBe(3_000)
   })
 
-  test('last prompt has a non-null duration (was null under previous logic)', async () => {
-    // Single-prompt fixture: the only prompt would have been the "last
-    // prompt with no next" under the old logic and gotten null. With
-    // the fix it should be ~1s (its assistant call timestamp - prompt
-    // timestamp).
-    const path = writeMainFixture()
-    const store = makeStore({ agents: [{ id: 'sess1', agent_class: 'claude-code' }] })
-    const stats = await parseSessionTranscripts('sess1', store, path)
+  test('a subagent recovered from its Agent result folds into the spawning prompt', async () => {
+    const path = writeSession([
+      header(),
+      user('u1', null, '2026-06-01T00:00:00.000Z', 'delegate'),
+      assistant('a1', 'u1', '2026-06-01T00:00:01.000Z', 'qwen3.8-27b', { input: 100, output: 10, costTotal: 0 }, [
+        { type: 'toolCall', id: 'call_1', name: 'Agent', arguments: { prompt: 'x', description: 'look' } },
+      ]),
+      {
+        type: 'message',
+        id: 'r1',
+        parentId: 'a1',
+        timestamp: '2026-06-01T00:00:09.000Z',
+        message: {
+          role: 'toolResult',
+          toolCallId: 'call_1',
+          toolName: 'Agent',
+          isError: false,
+          content: [{ type: 'text', text: '2' }],
+          details: { type: 'explorer', turnCount: 3, toolUses: 2, input: 3000, output: 200, durationMs: 8000, modelId: 'deepseek-flash', cost: 0.03 },
+        },
+      },
+    ])
+    const stats = await parseSessionTranscripts('sess1', makeStore({ agents: PI }), path)
+
+    expect(stats.subagents).toHaveLength(1)
+    expect(stats.subagents[0]).toMatchObject({ agentType: 'explorer', toolUseId: 'call_1', requests: 3, costCents: 3 })
     const prompt = stats.prompts.find((p) => p.promptId === 'u1')!
-    expect(prompt.durationMs).not.toBeNull()
-    expect(prompt.durationMs).toBe(1_000) // 1s between user line and assistant line
+    expect(prompt.inputTokens).toBe(3100)
+    expect(prompt.costCents).toBeCloseTo(3)
+    expect(stats.summary.totalCalls).toBe(4)
+  })
+
+  test('the real captured session parses end to end', async () => {
+    const stats = await parseSessionTranscripts('sess1', makeStore({ agents: PI }), REAL_SESSION)
+
+    expect(stats.errors).toEqual([])
+    expect(stats.summary.userPrompts).toBe(1)
+    // 3 top-level requests + the subagent's 2 turns
+    expect(stats.summary.totalCalls).toBe(5)
+    expect(stats.summary.costTotalCents).toBe(0)
+    expect(stats.subagents).toHaveLength(1)
+    expect(stats.summary.toolStats.find((t) => t.name === 'bash')?.count).toBe(2)
   })
 
   test('unsupported main agent class records an error without failing', async () => {
-    const path = writeMainFixture()
-    const store = makeStore({
-      // The session's main agent is of an unknown class.
-      agents: [{ id: 'sess1', agent_class: 'some-future-runtime' }],
-    })
-    const stats = await parseSessionTranscripts('sess1', store, path)
-    expect(stats.errors).toContainEqual(
-      expect.objectContaining({
-        scope: 'main',
-        code: 'parse_error',
-        message: expect.stringContaining('some-future-runtime'),
-      }),
+    const path = writeSession([header()])
+    const stats = await parseSessionTranscripts(
+      'sess1',
+      makeStore({ agents: [{ id: 'sess1', agent_class: 'some-future-runtime' }] }),
+      path,
     )
-    // No parser runs for the unknown class, so all aggregates are empty.
+    expect(stats.errors).toContainEqual(
+      expect.objectContaining({ scope: 'main', code: 'parse_error', message: expect.stringContaining('some-future-runtime') }),
+    )
     expect(stats.byModel).toHaveLength(0)
-    expect(stats.prompts).toHaveLength(0)
   })
 })

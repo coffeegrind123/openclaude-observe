@@ -43,7 +43,7 @@
 
 import { memo, useRef, useMemo, useState, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
-import { getEventIcon, getEventColor } from '@/config/event-icons'
+import { getEventIcon, getEventColor, eventIconId } from '@/config/event-icons'
 import { getRangeMs, getRangeTicks } from '@/config/time-ranges'
 import { useUIStore } from '@/stores/ui-store'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -120,8 +120,9 @@ function DotContainerInner({
         const position = ((event.timestamp - anchorTime) / rangeMs) * 100 + 100
         if (position < -5 || position > 205) return null
 
-        const Icon = getEventIcon(event.subtype, event.toolName)
-        const { dotColor, customHex } = getEventColor(event.subtype, event.toolName)
+        const iconId = eventIconId(event)
+        const Icon = getEventIcon(iconId)
+        const { dotColor, customHex } = getEventColor(iconId)
 
         return (
           <button
@@ -191,6 +192,8 @@ interface AgentLaneProps {
   events: ParsedEvent[]
   allEvents: ParsedEvent[]
   isSubagent: boolean
+  /** Nesting depth in the agent tree (0 = root). */
+  depth?: number
   color: string
 }
 
@@ -200,6 +203,7 @@ export function AgentLane({
   events,
   allEvents,
   isSubagent,
+  depth = isSubagent ? 1 : 0,
   color,
 }: AgentLaneProps) {
   const agentId = agent.id
@@ -290,7 +294,7 @@ export function AgentLane({
         )}
         onClick={handleAgentNameClick}
       >
-        {isSubagent ? '↳ ' : ''}
+        {depth > 0 ? `${'\u00a0\u00a0'.repeat(depth - 1)}↳ ` : ''}
         <AgentLabel agent={agent} parentAgent={parentAgent} tooltipSide="top" />
       </button>
 

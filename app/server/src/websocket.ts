@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 import type { Server } from 'http'
 import type { WSClientMessage } from './types'
 import { config } from './config'
+import { isWsOriginAllowed } from './cors'
 
 const LOG_LEVEL = config.logLevel
 
@@ -12,7 +13,20 @@ const allClients = new Set<WebSocket>()
 const MAX_CLIENTS = 100
 
 export function attachWebSocket(server: Server) {
-  const wss = new WebSocketServer({ server, path: '/api/events/stream' })
+  const wss = new WebSocketServer({
+    server,
+    path: '/api/events/stream',
+    // CORS doesn't gate WebSockets, and the stream is unauthenticated: without
+    // this a page the user visits could open ws://localhost and read the feed.
+    // Same allowlist as HTTP CORS (INSTANTCOFFEE_OBSERVE_CORS_ORIGINS).
+    verifyClient: (info: { origin?: string }) => {
+      const allowed = isWsOriginAllowed(info.origin, config.corsAllowedOrigins)
+      if (!allowed) {
+        console.warn(`[WS] Rejected connection from disallowed origin: ${info.origin}`)
+      }
+      return allowed
+    },
+  })
 
   wss.on('connection', (ws) => {
     if (allClients.size >= MAX_CLIENTS) {
@@ -110,11 +124,13 @@ export function shouldBroadcastActivity(
 
 /** Broadcast an activity ping for a session if we haven't sent one for
  *  this session within the throttle window. Safe to call on every event. */
-export function broadcastActivity(sessionId: string, eventId: number): void {
+export function broadcastActivity(sessionId: string, eventId: number, projectId: number | null): void {
   const now = Date.now()
   if (!shouldBroadcastActivity(lastActivityBroadcast, sessionId, now)) return
   lastActivityBroadcast.set(sessionId, now)
-  broadcastToAll({ type: 'activity', data: { sessionId, eventId, ts: now } })
+  // projectId lets the sidebar pulse a collapsed project folder without
+  // fetching that project's sessions.
+  broadcastToAll({ type: 'activity', data: { sessionId, projectId, eventId, ts: now } })
 }
 
 /** Clear the activity throttle state. Test-only. */

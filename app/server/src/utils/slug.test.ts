@@ -9,19 +9,19 @@ import {
 describe('extractProjectDir', () => {
   test('strips filename from transcript path', () => {
     expect(
-      extractProjectDir('/Users/joe/.claude/projects/-Users-joe-Dev-my-app/abc-123.jsonl'),
-    ).toBe('/Users/joe/.claude/projects/-Users-joe-Dev-my-app')
+      extractProjectDir('/Users/joe/.pi/agent/sessions/--Users-joe-Dev-my-app--/abc-123.jsonl'),
+    ).toBe('/Users/joe/.pi/agent/sessions/--Users-joe-Dev-my-app--')
   })
 
   test('returns directory as-is when no file extension', () => {
-    expect(extractProjectDir('/Users/joe/.claude/projects/-Users-joe-Dev-my-app')).toBe(
-      '/Users/joe/.claude/projects/-Users-joe-Dev-my-app',
+    expect(extractProjectDir('/Users/joe/.pi/agent/sessions/--Users-joe-Dev-my-app--')).toBe(
+      '/Users/joe/.pi/agent/sessions/--Users-joe-Dev-my-app--',
     )
   })
 
   test('strips trailing slash', () => {
-    expect(extractProjectDir('/Users/joe/.claude/projects/-Users-joe-Dev-my-app/')).toBe(
-      '/Users/joe/.claude/projects/-Users-joe-Dev-my-app',
+    expect(extractProjectDir('/Users/joe/.pi/agent/sessions/--Users-joe-Dev-my-app--/')).toBe(
+      '/Users/joe/.pi/agent/sessions/--Users-joe-Dev-my-app--',
     )
   })
 })
@@ -29,33 +29,33 @@ describe('extractProjectDir', () => {
 describe('deriveSlugCandidates', () => {
   test('extracts last two segments from Claude project path', () => {
     const candidates = deriveSlugCandidates(
-      '/Users/joe/.claude/projects/-Users-joe-Development-acme-openclaude-observe',
+      '/Users/joe/.pi/agent/sessions/--Users-joe-Development-acme-instantcoffee-observe--',
     )
-    expect(candidates[0]).toBe('openclaude-observe')
+    expect(candidates[0]).toBe('instantcoffee-observe')
   })
 
   test('returns progressively longer segments', () => {
     const candidates = deriveSlugCandidates(
-      '/Users/joe/.claude/projects/-Users-joe-Development-my-app',
+      '/Users/joe/.pi/agent/sessions/--Users-joe-Development-my-app--',
     )
     expect(candidates[0]).toBe('my-app')
     expect(candidates[1]).toBe('development-my-app')
   })
 
   test('handles single-segment encoded path', () => {
-    const candidates = deriveSlugCandidates('/Users/joe/.claude/projects/-myproject')
+    const candidates = deriveSlugCandidates('/Users/joe/.pi/agent/sessions/--myproject--')
     expect(candidates[0]).toBe('myproject')
   })
 
   test('handles transcript path with filename', () => {
     const candidates = deriveSlugCandidates(
-      '/Users/joe/.claude/projects/-Users-joe-Development-my-app/abc-123.jsonl',
+      '/Users/joe/.pi/agent/sessions/--Users-joe-Development-my-app--/abc-123.jsonl',
     )
     expect(candidates[0]).toBe('my-app')
   })
 
   test('lowercases the slug', () => {
-    const candidates = deriveSlugCandidates('/Users/joe/.claude/projects/-MyApp')
+    const candidates = deriveSlugCandidates('/Users/joe/.pi/agent/sessions/--MyApp--')
     expect(candidates[0]).toBe('myapp')
   })
 

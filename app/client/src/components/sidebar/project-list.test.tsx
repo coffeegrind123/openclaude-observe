@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, screen, fireEvent, waitFor } from '@testing-library/react'
 import { renderWithProviders } from '@/test/test-utils'
 import { ProjectList } from './project-list'
 import { useUIStore } from '@/stores/ui-store'
+import { clearNotification, pushNotification } from './notification-indicator'
 import type { Session, Project } from '@/types'
 
 // Polyfill ResizeObserver for Radix UI Tooltip in jsdom
@@ -22,8 +23,13 @@ vi.mock('@/hooks/use-projects', () => ({
   useProjects: () => ({ data: mockProjects }),
 }))
 
+const useSessionsCalls: Array<number | null> = []
+
 vi.mock('@/hooks/use-sessions', () => ({
-  useSessions: () => ({ data: mockSessions }),
+  useSessions: (projectId: number | null) => {
+    useSessionsCalls.push(projectId)
+    return { data: mockSessions }
+  },
 }))
 
 const mockUpdateSessionSlug = vi.fn((_id: string, _slug: string) => Promise.resolve({ ok: true }))
@@ -73,6 +79,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
 beforeEach(() => {
   mockProjects.length = 0
   mockSessions.length = 0
+  useSessionsCalls.length = 0
   mockUpdateSessionSlug.mockClear()
   mockRenameProject.mockClear()
 
@@ -157,5 +164,55 @@ describe('ProjectList - Project edit modal', () => {
     // Should still be expanded (selectedProjectId should not have changed)
     const state = useUIStore.getState()
     expect(state.selectedProjectId).toBe(1)
+  })
+})
+
+describe('ProjectList - per-project fetch fan-out', () => {
+  const otherProject: Project = {
+    id: 2,
+    slug: 'other-project',
+    name: 'Other Project',
+    createdAt: Date.now(),
+    sessionCount: 3,
+  }
+
+  beforeEach(() => {
+    setMockProjects([
+      { id: 1, slug: 'test-project', name: 'Test Project', createdAt: Date.now(), sessionCount: 1 },
+      otherProject,
+    ])
+    useUIStore.setState({ notificationsEnabled: true, projectPulses: {} })
+    clearNotification('sess-in-project-2', Date.now())
+  })
+
+  it('only fetches sessions for the expanded project', () => {
+    renderWithProviders(<ProjectList collapsed={false} />)
+
+    expect(useSessionsCalls).toContain(1)
+    expect(useSessionsCalls).not.toContain(2)
+  })
+
+  it('only fetches sessions for the expanded project when collapsed', () => {
+    renderWithProviders(<ProjectList collapsed={true} />)
+
+    expect(useSessionsCalls).not.toContain(2)
+  })
+
+  it('shows the folder bell for a notification in a non-expanded project', () => {
+    pushNotification({ sessionId: 'sess-in-project-2', projectId: 2, ts: Date.now() })
+    renderWithProviders(<ProjectList collapsed={false} />)
+
+    expect(screen.getAllByRole('button', { name: 'Click to dismiss' })).toHaveLength(1)
+  })
+
+  it('pulses the folder of a non-expanded project from its project pulse counter', () => {
+    const { container } = renderWithProviders(<ProjectList collapsed={false} />)
+    expect(container.querySelector('.animate-ping')).toBeNull()
+
+    act(() => {
+      useUIStore.getState().pulseSession('sess-in-project-2', 2)
+    })
+
+    expect(container.querySelector('.animate-ping')).not.toBeNull()
   })
 })

@@ -364,7 +364,7 @@ describe('ui-store', () => {
 
   describe('sidebar Projects/Labels tab', () => {
     beforeEach(() => {
-      localStorage.removeItem('openclaude-observe-sidebar-tab')
+      localStorage.removeItem('instantcoffee-observe-sidebar-tab')
       useUIStore.setState({ sidebarTab: 'projects' })
     })
 
@@ -381,9 +381,9 @@ describe('ui-store', () => {
 
     it('setSidebarTab persists to localStorage', () => {
       useUIStore.getState().setSidebarTab('labels')
-      expect(localStorage.getItem('openclaude-observe-sidebar-tab')).toBe('labels')
+      expect(localStorage.getItem('instantcoffee-observe-sidebar-tab')).toBe('labels')
       useUIStore.getState().setSidebarTab('projects')
-      expect(localStorage.getItem('openclaude-observe-sidebar-tab')).toBe('projects')
+      expect(localStorage.getItem('instantcoffee-observe-sidebar-tab')).toBe('projects')
     })
   })
 
@@ -485,8 +485,8 @@ describe('ui-store', () => {
 
   describe('labels', () => {
     beforeEach(() => {
-      localStorage.removeItem('openclaude-observe-labels')
-      localStorage.removeItem('openclaude-observe-label-memberships')
+      localStorage.removeItem('instantcoffee-observe-labels')
+      localStorage.removeItem('instantcoffee-observe-label-memberships')
       useUIStore.setState({
         labels: [],
         labelMemberships: new Map(),
@@ -516,7 +516,7 @@ describe('ui-store', () => {
 
     it('persists labels to localStorage', () => {
       useUIStore.getState().createLabel('auth')
-      const raw = localStorage.getItem('openclaude-observe-labels')
+      const raw = localStorage.getItem('instantcoffee-observe-labels')
       expect(raw).toBeTruthy()
       const parsed = JSON.parse(raw!) as { name: string }[]
       expect(parsed[0].name).toBe('auth')
@@ -530,7 +530,7 @@ describe('ui-store', () => {
       expect(useUIStore.getState().getLabelsForSession('sess-1')).toHaveLength(0)
 
       useUIStore.getState().toggleSessionLabel(label.id, 'sess-2')
-      const raw = localStorage.getItem('openclaude-observe-label-memberships')
+      const raw = localStorage.getItem('instantcoffee-observe-label-memberships')
       expect(raw).toBeTruthy()
       const parsed = JSON.parse(raw!) as Record<string, string[]>
       expect(parsed[label.id]).toEqual(['sess-2'])
@@ -587,7 +587,21 @@ describe('ui-store', () => {
 
   describe('session activity pulses', () => {
     beforeEach(() => {
-      useUIStore.setState({ sessionPulses: {} })
+      useUIStore.setState({ sessionPulses: {}, projectPulses: {} })
+    })
+
+    it('pulseSession bumps projectPulses when a projectId is supplied', () => {
+      useUIStore.getState().pulseSession('sess-1', 42)
+      useUIStore.getState().pulseSession('sess-2', 42)
+      useUIStore.getState().pulseSession('sess-3', 99)
+      expect(useUIStore.getState().projectPulses).toEqual({ 42: 2, 99: 1 })
+    })
+
+    it('pulseSession leaves projectPulses untouched when projectId is null or missing', () => {
+      const before = useUIStore.getState().projectPulses
+      useUIStore.getState().pulseSession('sess-1', null)
+      useUIStore.getState().pulseSession('sess-2')
+      expect(useUIStore.getState().projectPulses).toBe(before)
     })
 
     it('pulseSession bumps the counter for a new session from 0 to 1', () => {
@@ -615,5 +629,30 @@ describe('ui-store', () => {
       const after = useUIStore.getState().sessionPulses
       expect(after).not.toBe(before)
     })
+  })
+})
+
+describe('stack view routing', () => {
+  it('setView("stack") shows the stack page at #/stack', () => {
+    useUIStore.getState().setView('stack')
+    expect(useUIStore.getState().view).toBe('stack')
+    expect(window.location.hash).toBe('#/stack')
+  })
+
+  it('navigating to #/stack (back/forward) selects the stack view, and away returns to observe', () => {
+    useUIStore.setState({ view: 'observe' })
+    window.location.hash = '#/stack'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    expect(useUIStore.getState().view).toBe('stack')
+
+    window.location.hash = '#/'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    expect(useUIStore.getState().view).toBe('observe')
+  })
+
+  it('selecting a session leaves the stack page', () => {
+    useUIStore.getState().setView('stack')
+    useUIStore.getState().setSelectedSessionId('11111111-2222-3333-4444-555555555555')
+    expect(useUIStore.getState().view).toBe('observe')
   })
 })

@@ -22,7 +22,11 @@ router.get('/health', async (c) => {
       gitHash: config.gitHash,
       logLevel: config.logLevel,
       runtime: config.runtime,
-      dbPath: config.dbPath,
+      // Host-side path in docker (set by compose), the real path locally —
+      // always one the user can open on their own machine.
+      dbPath: config.hostDbPath,
+      // The path the server actually opens; differs from dbPath in docker.
+      containerDbPath: config.dbPath,
       activeConsumers: getConsumerCount(),
       activeClients: getClientCount(),
       transcriptStatsEnabled: config.transcriptStats.enabled,

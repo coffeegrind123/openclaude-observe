@@ -3,9 +3,11 @@
 /**
  * Runs the API server and dashboard UI locally (no Docker).
  *
- * Modes are selected via OPENCLAUDE_OBSERVE_RUNTIME:
+ * Modes are selected via INSTANTCOFFEE_OBSERVE_RUNTIME:
  *   dev   — installs deps, runs server with tsx watch + Vite client with HMR
  *   local — installs deps, builds client, runs server (serves built UI)
+ *
+ * Pass --skip-install to skip the npm install step in either mode.
  */
 
 import { execFileSync, spawn } from 'node:child_process'
@@ -16,11 +18,12 @@ const rootDir = dirname(fileURLToPath(import.meta.url))
 const serverDir = resolve(rootDir, 'app/server')
 const clientDir = resolve(rootDir, 'app/client')
 
-const runtime = (process.env.OPENCLAUDE_OBSERVE_RUNTIME || 'local').toLowerCase()
+const runtime = (process.env.INSTANTCOFFEE_OBSERVE_RUNTIME || 'local').toLowerCase()
 const isDev = runtime === 'dev'
+const skipInstall = process.argv.includes('--skip-install')
 
-const serverPort = process.env.OPENCLAUDE_OBSERVE_SERVER_PORT || '4981'
-const clientPort = process.env.OPENCLAUDE_OBSERVE_DEV_CLIENT_PORT || '5174'
+const serverPort = process.env.INSTANTCOFFEE_OBSERVE_SERVER_PORT || '4981'
+const clientPort = process.env.INSTANTCOFFEE_OBSERVE_DEV_CLIENT_PORT || '5174'
 
 function run(cmd, args, cwd) {
   const rel = cwd.replace(rootDir + '/', '') || '.'
@@ -28,8 +31,12 @@ function run(cmd, args, cwd) {
   execFileSync(cmd, args, { cwd, stdio: 'inherit' })
 }
 
-run('npm', ['install'], serverDir)
-run('npm', ['install'], clientDir)
+if (skipInstall) {
+  console.log('\nSkipping npm install (--skip-install)')
+} else {
+  run('npm', ['install'], serverDir)
+  run('npm', ['install'], clientDir)
+}
 
 if (!isDev) {
   run('npm', ['run', 'build'], clientDir)
@@ -37,15 +44,15 @@ if (!isDev) {
 
 const serverEnv = {
   ...process.env,
-  OPENCLAUDE_OBSERVE_SERVER_PORT: serverPort,
-  OPENCLAUDE_OBSERVE_RUNTIME: runtime,
-  OPENCLAUDE_OBSERVE_RUNTIME_DEV: isDev ? '1' : '0',
+  INSTANTCOFFEE_OBSERVE_SERVER_PORT: serverPort,
+  INSTANTCOFFEE_OBSERVE_RUNTIME: runtime,
+  INSTANTCOFFEE_OBSERVE_RUNTIME_DEV: isDev ? '1' : '0',
 }
 
 const clientEnv = {
   ...process.env,
-  OPENCLAUDE_OBSERVE_SERVER_PORT: serverPort,
-  OPENCLAUDE_OBSERVE_DEV_CLIENT_PORT: clientPort,
+  INSTANTCOFFEE_OBSERVE_SERVER_PORT: serverPort,
+  INSTANTCOFFEE_OBSERVE_DEV_CLIENT_PORT: clientPort,
 }
 
 if (isDev) {

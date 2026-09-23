@@ -28,7 +28,7 @@ function resolveVar(name: string, raw: RawEvent, toolName: string | null): strin
       //
       // Event details rendering uses the full command via a separate
       // code path and is unaffected.
-      if (toolName !== 'Bash') return null
+      if (toolName !== 'bash') return null
       const cmd = (raw.payload as Record<string, any>)?.tool_input?.command
       if (typeof cmd !== 'string' || cmd === '') return null
       const ENV_ASSIGNMENT_RE = /^[A-Za-z_][A-Za-z0-9_]*=/

@@ -27,6 +27,9 @@ interface SessionItemProps {
   cwd?: string | null
   /** Show the cwd line below the session name. Defaults to true. */
   showCwd?: boolean
+  /** Soft highlight + scroll-into-view for a previewed session (Constellation
+   *  drill-in), without the solid "selected" treatment. */
+  isPreview?: boolean
 }
 
 function shortenCwd(cwd: string): string {
@@ -55,10 +58,18 @@ export function SessionItem({
   relativeTime,
   cwd,
   showCwd = true,
+  isPreview = false,
 }: SessionItemProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const rowRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isPreview) {
+      rowRef.current?.scrollIntoView?.({ block: 'nearest' })
+    }
+  }, [isPreview])
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -110,6 +121,7 @@ export function SessionItem({
     <Tooltip>
       <TooltipTrigger asChild>
         <div
+          ref={rowRef}
           role="button"
           tabIndex={isEditing ? -1 : 0}
           aria-current={isSelected ? 'true' : undefined}
@@ -119,7 +131,9 @@ export function SessionItem({
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
             isSelected
               ? 'bg-accent text-accent-foreground'
-              : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+              : isPreview
+                ? 'bg-accent/40 text-foreground ring-1 ring-ring/50'
+                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
           )}
           onClick={() => !isEditing && onSelect()}
           onKeyDown={(e) => {

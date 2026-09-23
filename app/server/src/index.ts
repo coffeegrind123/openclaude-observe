@@ -6,6 +6,7 @@ import { createStore } from './storage'
 import { attachWebSocket, broadcastToSession, broadcastToAll, broadcastActivity } from './websocket'
 import { config } from './config'
 import { startConsumerSweep } from './consumer-tracker'
+import { startStackPoller } from './services/stack-poller'
 
 const store = createStore()
 const PORT = config.port
@@ -32,17 +33,17 @@ store.repairOrphans().then((result) => {
 const app = createApp(store, broadcastToSession, broadcastToAll, broadcastActivity)
 
 function start(retries = 3) {
-  const hostname = process.env.OPENCLAUDE_OBSERVE_SERVER_HOST || 'localhost'
+  const hostname = config.serverHost
   const server = serve({ fetch: app.fetch, port: PORT, hostname }, () => {
     if (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== '::1') {
       console.warn(
         `[startup] WARNING: Server is listening on non-localhost interface (${hostname}). ` +
           `This exposes the unauthenticated API to the network. ` +
-          `Set OPENCLAUDE_OBSERVE_SERVER_HOST=localhost to restrict to local only.`,
+          `Set INSTANTCOFFEE_OBSERVE_SERVER_HOST=127.0.0.1 to restrict to local only.`,
       )
     }
-    console.log(`Server running on http://localhost:${PORT}`)
-    console.log(`POST events: http://localhost:${PORT}/api/events`)
+    console.log(`Server running on http://${hostname}:${PORT}`)
+    console.log(`POST events: http://${hostname}:${PORT}/api/events`)
   })
 
   ;(server as unknown as Server).on('error', (err: NodeJS.ErrnoException) => {
@@ -57,6 +58,7 @@ function start(retries = 3) {
 
   attachWebSocket(server as unknown as Server)
   startConsumerSweep()
+  startStackPoller()
 }
 
 function gracefulShutdown(signal: string) {

@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Trash2, SquarePen, ChevronUp, ChevronDown, Tag, Plus, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { useUIStore } from '@/stores/ui-store'
+import { useUIStore, buildHash } from '@/stores/ui-store'
 import { formatBytes } from '@/lib/format-bytes'
 import type { Label, Project, RecentSession } from '@/types'
 
@@ -435,8 +435,8 @@ export function SessionsTab() {
             <AlertDialogDescription>
               This permanently removes {selected.size} session{selected.size !== 1 ? 's' : ''} and{' '}
               {selectedEventCount.toLocaleString()} event{selectedEventCount !== 1 ? 's' : ''} from
-              the Observe database, then runs VACUUM to reclaim disk space. Your original Claude
-              session files are not modified.
+              the Observe database, then runs VACUUM to reclaim disk space. Your original pi session
+              files are not modified.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -585,7 +585,7 @@ function SessionRow({
           stopPropagation in both paths keeps the surrounding <label>
           from toggling the checkbox. */}
       <a
-        href={`#/${session.projectSlug}/${session.id}`}
+        href={buildHash(session.projectSlug ?? null, session.id)}
         onClick={(e) => {
           const isModified = e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0
           e.stopPropagation()

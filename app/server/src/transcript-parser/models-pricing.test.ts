@@ -38,11 +38,11 @@ beforeEach(async () => {
   vi.resetModules()
   // Isolate the on-disk cache to a fresh tmp dir per test.
   tmpDir = mkdtempSync(join(tmpdir(), 'models-pricing-'))
-  process.env.OPENCLAUDE_OBSERVE_DATA_DIR = tmpDir
+  process.env.INSTANTCOFFEE_OBSERVE_DATA_DIR = tmpDir
 })
 
 afterEach(() => {
-  delete process.env.OPENCLAUDE_OBSERVE_DATA_DIR
+  delete process.env.INSTANTCOFFEE_OBSERVE_DATA_DIR
   try {
     rmSync(tmpDir, { recursive: true, force: true })
   } catch {}

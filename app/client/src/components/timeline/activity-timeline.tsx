@@ -38,13 +38,22 @@ import { useUIStore } from '@/stores/ui-store'
 import { useEffectiveEvents } from '@/hooks/use-effective-events'
 import { useAgents } from '@/hooks/use-agents'
 import { useSessions } from '@/hooks/use-sessions'
-import { buildAgentColorMap, getAgentColorById } from '@/lib/agent-utils'
+import { buildAgentColorMap, orderAgentTree, getAgentColorById } from '@/lib/agent-utils'
 import { AgentLane } from './agent-lane'
 import { TimelineRewind } from './timeline-rewind'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Rewind, Play } from 'lucide-react'
 import type { Agent, ParsedEvent } from '@/types'
+
+const TIMELINE_MIN_HEIGHT = 60
+const TIMELINE_MAX_VIEWPORT_FRACTION = 0.8
+
+/** Clamp a dragged timeline height to [60px, 80% of the viewport]. */
+export function clampTimelineHeight(height: number, viewportHeight: number): number {
+  const maxHeight = viewportHeight * TIMELINE_MAX_VIEWPORT_FRACTION
+  return Math.max(TIMELINE_MIN_HEIGHT, Math.min(maxHeight, height))
+}
 
 export function ActivityTimeline() {
   const {
@@ -56,7 +65,6 @@ export function ActivityTimeline() {
     setTimelineHeight,
     setTimeRange,
     rewindMode,
-    frozenEvents,
     enterRewindMode,
     exitRewindMode,
   } = useUIStore()
@@ -101,20 +109,15 @@ export function ActivityTimeline() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
+  // Depth-first agent tree: nested subagents sit under the subagent that spawned them.
   const flatAgents = useMemo(() => {
-    const mainAgents: { agent: Agent; isSubagent: boolean }[] = []
-    const nonMainAgents: { agent: Agent; isSubagent: boolean }[] = []
-    for (const a of agents) {
-      if (selectedAgentIds.length > 0 && !selectedAgentIds.includes(a.id)) continue
-      if (!a.parentAgentId) {
-        mainAgents.push({ agent: a, isSubagent: false })
-      } else {
-        nonMainAgents.push({ agent: a, isSubagent: true })
-      }
-    }
-    // Reverse non-main agents so newest appear right after Main
-    nonMainAgents.reverse()
-    return [...mainAgents, ...nonMainAgents]
+    const visible =
+      selectedAgentIds.length > 0 ? agents.filter((a) => selectedAgentIds.includes(a.id)) : agents
+    return orderAgentTree(visible).map(({ agent, depth }) => ({
+      agent,
+      depth,
+      isSubagent: depth > 0,
+    }))
   }, [agents, selectedAgentIds])
 
   const agentColorMap = useMemo(() => buildAgentColorMap(agents), [agents])
@@ -141,7 +144,7 @@ export function ActivityTimeline() {
       const onMouseMove = (e: MouseEvent) => {
         if (!resizing.current) return
         const delta = e.clientY - startY.current
-        const newHeight = Math.max(60, Math.min(400, startHeight.current + delta))
+        const newHeight = clampTimelineHeight(startHeight.current + delta, window.innerHeight)
         // Update DOM directly during drag to avoid React re-renders
         if (containerRef.current) {
           containerRef.current.style.height = `${newHeight}px`
@@ -153,7 +156,7 @@ export function ActivityTimeline() {
       const onMouseUp = (e: MouseEvent) => {
         resizing.current = false
         const delta = e.clientY - startY.current
-        const finalHeight = Math.max(60, Math.min(400, startHeight.current + delta))
+        const finalHeight = clampTimelineHeight(startHeight.current + delta, window.innerHeight)
         // Commit final height to React state
         setTimelineHeight(finalHeight)
         document.removeEventListener('mousemove', onMouseMove)
@@ -286,13 +289,10 @@ export function ActivityTimeline() {
           style={{ height: timelineHeight - 32 }}
         >
           {rewindMode ? (
-            <TimelineRewind
-              events={frozenEvents || events || []}
-              agents={frozenAgentsRef.current}
-            />
+            <TimelineRewind agents={frozenAgentsRef.current} />
           ) : (
             <>
-              {flatAgents.map(({ agent, isSubagent }) => (
+              {flatAgents.map(({ agent, isSubagent, depth }) => (
                 <AgentLane
                   key={agent.id}
                   agent={agent}
@@ -302,6 +302,7 @@ export function ActivityTimeline() {
                   events={eventsByAgent.get(agent.id) || []}
                   allEvents={events || []}
                   isSubagent={isSubagent}
+                  depth={depth}
                   color={getAgentColorById(agent.id, agentColorMap).textOnly}
                 />
               ))}

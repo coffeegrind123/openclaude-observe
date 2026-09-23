@@ -15,7 +15,6 @@ import {
 
 export function ScopeBar() {
   const {
-    selectedProjectId,
     selectedSessionId,
     autoFollow,
     setAutoFollow,
@@ -26,9 +25,13 @@ export function ScopeBar() {
     reverseFeed,
     talkMode,
     setTalkMode,
+    mergeToolEvents,
+    setMergeToolEvents,
   } = useUIStore()
 
-  if (!selectedProjectId || !selectedSessionId) return null
+  // The session's controls don't depend on its project, which may still be
+  // resolving (or absent) when the route came from a `#/_/<id>` link.
+  if (!selectedSessionId) return null
 
   return (
     <div className="flex items-center gap-2 px-4 py-1.5 min-h-[36px]">
@@ -58,6 +61,26 @@ export function ScopeBar() {
           )
         })}
       </div>
+
+      {/* Unmerged mode is a debugging lens that changes what every tool row
+          means, so it stays visible while on. Click re-merges; the setting
+          lives in Settings → Display. */}
+      {!mergeToolEvents && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => setMergeToolEvents(true)}
+              className="shrink-0 cursor-pointer rounded border border-warn/60 px-1.5 font-mono text-[10.5px] text-warn hover:bg-warn/10"
+            >
+              unmerged
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            Tool calls show PreToolUse and PostToolUse as separate rows. Click to merge them.
+          </TooltipContent>
+        </Tooltip>
+      )}
 
       <div className="flex items-center gap-1 shrink-0">
         {/* Follow — icon mirrors feed direction (top vs bottom) */}

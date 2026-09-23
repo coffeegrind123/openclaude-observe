@@ -29,6 +29,7 @@ import { Database, Container, Monitor, X } from 'lucide-react'
 
 interface ServerInfo {
   dbPath: string
+  containerDbPath: string | null
   runtime: 'docker' | 'local'
 }
 
@@ -74,7 +75,11 @@ export function SettingsModal() {
       getServerHealth().then((data) => {
         if (data?.dbPath) {
           const runtime: 'docker' | 'local' = data.runtime === 'docker' ? 'docker' : 'local'
-          setServerInfo({ dbPath: data.dbPath, runtime })
+          const containerDbPath =
+            data.containerDbPath && data.containerDbPath !== data.dbPath
+              ? data.containerDbPath
+              : null
+          setServerInfo({ dbPath: data.dbPath, containerDbPath, runtime })
         }
       })
     }
@@ -160,7 +165,16 @@ export function SettingsModal() {
             <span className="shrink-0">{serverInfo.runtime === 'docker' ? 'Docker' : 'Local'}</span>
             <span className="text-muted-foreground/30">|</span>
             <Database className="h-3 w-3 shrink-0" />
-            <span className="truncate">{serverInfo.dbPath}</span>
+            <span
+              className="truncate"
+              title={
+                serverInfo.containerDbPath
+                  ? `${serverInfo.dbPath}\nIn the container: ${serverInfo.containerDbPath}`
+                  : serverInfo.dbPath
+              }
+            >
+              {serverInfo.dbPath}
+            </span>
             {dbStats.data && (
               <>
                 <span className="text-muted-foreground/30">|</span>

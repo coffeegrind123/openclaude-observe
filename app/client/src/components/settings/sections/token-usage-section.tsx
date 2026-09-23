@@ -199,7 +199,7 @@ export function fmtMs(ms: number): string {
 
 const ERROR_MESSAGES: Record<TranscriptStatsErrorCode, string> = {
   disabled:
-    'Session transcript parsing is disabled — unset OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS (or remove the =0 override) to see models and token usage.',
+    'Session transcript parsing is disabled — unset INSTANTCOFFEE_OBSERVE_TRANSCRIPT_STATS (or remove the =0 override) to see models and token usage.',
   no_transcript:
     'Session transcript not available — models and token usage info not available for this session.',
   file_not_found: 'Session transcript file not found — models and token usage info not available.',
@@ -208,6 +208,17 @@ const ERROR_MESSAGES: Record<TranscriptStatsErrorCode, string> = {
   file_too_large: 'Session transcript exceeds the 100 MB safety cap — token stats skipped.',
   parse_error: "Couldn't parse this session's transcript — token usage info isn't available.",
   unknown: 'Token usage info is unavailable for this session.',
+}
+
+// Why the transcript couldn't be used, when the tables come from events instead.
+const EVENT_STATS_REASONS: Record<TranscriptStatsErrorCode, string> = {
+  disabled: 'transcript parsing is disabled',
+  no_transcript: 'the session has no transcript',
+  file_not_found: 'the transcript file was not found',
+  file_unreadable: "the transcript isn't readable by the server",
+  file_too_large: 'the transcript exceeds the 100 MB safety cap',
+  parse_error: "the transcript couldn't be parsed",
+  unknown: 'the transcript is unavailable',
 }
 
 function SectionShell({ title, children }: { title: string; children: React.ReactNode }) {
@@ -277,9 +288,11 @@ export function TokenUsageSection({
   onAgentClick,
   onPromptClick,
   eventPromptTexts,
+  eventStats,
+  eventStatsReason,
 }: {
   sessionId: string
-  /** Agent id of the main session agent (== session id for claude-code). */
+  /** Agent id of the main session agent (== the session id). */
   mainAgentId: string
   agents: Agent[]
   /** Per-subagent stats derived from PostToolUse:Agent events. The
@@ -298,6 +311,11 @@ export function TokenUsageSection({
    *  render as muted + non-clickable since scrollToPrompt would have
    *  nowhere to land. */
   eventPromptTexts: Set<string>
+  /** Token dataset the session's agent class computed from events, used in
+   *  place of the transcript when that couldn't be read (see SessionStats). */
+  eventStats?: TranscriptStatsData
+  /** Why the transcript wasn't usable, for the note under the tables. */
+  eventStatsReason?: TranscriptStatsErrorCode
 }) {
   // Server-side feature flag. The transcript-stats endpoint costs a
   // jsonl walk; skipping the round-trip entirely when disabled keeps
@@ -333,12 +351,19 @@ export function TokenUsageSection({
   // Transcript stats are an *augmentation* layer. The Agents table
   // always renders from event data; transcripts add Model + Est Cost
   // columns and the per-prompt/per-model tables when available.
-  const transcript: TranscriptStatsData | null = data?.ok ? data.data : null
-  const transcriptError = data && !data.ok ? data : null
+  // Events-derived stats stand in for an unreadable transcript; the
+  // transcript error / disabled notes give way to a note saying so.
+  const fromEvents = eventStats !== undefined
+  const transcript: TranscriptStatsData | null = fromEvents
+    ? eventStats
+    : data?.ok
+      ? data.data
+      : null
+  const transcriptError = !fromEvents && data && !data.ok ? data : null
   // Distinct from `transcriptError` — the flag isn't an error, it's a
   // deliberate "off" state from the server. Wait until health resolves
   // before deciding either way (avoids flashing the disabled note).
-  const transcriptDisabledByFlag = health !== undefined && !transcriptStatsEnabled
+  const transcriptDisabledByFlag = !fromEvents && health !== undefined && !transcriptStatsEnabled
 
   const { agentRows, agentTotals } = useMemo(
     () =>
@@ -468,32 +493,48 @@ export function TokenUsageSection({
               count: transcript.prompts.length,
               sortType: 'string',
               render: (r) => {
-                // Only prompts with a matching UserPromptSubmit event can
-                // scroll. Pre-plugin prompts on resumed sessions render
-                // muted + non-clickable.
-                const hasEvent = eventPromptTexts.has(r.text)
+                // Slash-command prompts render the reconstructed
+                // `/command args` as the primary line (it matches the
+                // UserPromptSubmit/Expansion event) with the expanded skill
+                // body as a muted detail line beneath. Ordinary prompts
+                // just show their text. Match/scroll on the primary line.
+                const label = r.command ?? r.text
+                const detail = r.command ? r.text : null
+                // Only prompts with a matching event can scroll. Pre-plugin
+                // prompts on resumed sessions render muted + non-clickable.
+                const hasEvent = eventPromptTexts.has(label)
+                const body = (
+                  <>
+                    <span className="block truncate max-w-[400px]">{label}</span>
+                    {detail && (
+                      <span className="block truncate max-w-[400px] text-xs text-muted-foreground/50">
+                        {detail}
+                      </span>
+                    )}
+                  </>
+                )
                 if (!hasEvent) {
                   return (
                     <span
-                      className="block truncate max-w-[400px] text-muted-foreground/50"
-                      title={`${r.text}\n\n(no matching event — pre-plugin prompt)`}
+                      className="block text-muted-foreground/50"
+                      title={`${label}\n\n(no matching event — pre-plugin prompt)`}
                     >
-                      {r.text}
+                      {body}
                     </span>
                   )
                 }
                 return (
                   <button
                     type="button"
-                    onClick={() => onPromptClick(r.text, r.timestamp)}
-                    className="block truncate max-w-[400px] text-left cursor-pointer hover:underline"
-                    title={r.text}
+                    onClick={() => onPromptClick(label, r.timestamp)}
+                    className="block text-left cursor-pointer hover:underline"
+                    title={detail ? `${label}\n\n${detail}` : label}
                   >
-                    {r.text}
+                    {body}
                   </button>
                 )
               },
-              sortValue: (r) => r.text,
+              sortValue: (r) => r.command ?? r.text,
             },
             {
               key: 'date',
@@ -883,6 +924,16 @@ export function TokenUsageSection({
           <div className="flex items-start gap-2 text-[11px] text-muted-foreground/70 italic">
             <Info className="h-3 w-3 mt-0.5 shrink-0" />
             <span>{ERROR_MESSAGES[transcriptError.error] ?? transcriptError.message}</span>
+          </div>
+        )}
+        {fromEvents && (
+          <div className="flex items-start gap-2 text-[11px] text-muted-foreground/70 italic">
+            <Info className="h-3 w-3 mt-0.5 shrink-0" />
+            <span>
+              Computed from this session's LLM events because{' '}
+              {EVENT_STATS_REASONS[eventStatsReason ?? 'unknown']}. Costs are the ones pi recorded
+              per request; requests without one are priced from models.dev.
+            </span>
           </div>
         )}
         {transcriptStatsEnabled && isLoading && !transcript && !transcriptError && (

@@ -243,13 +243,12 @@ export function LabelList({ collapsed }: LabelListProps) {
 function LabelSessionList({ label, sessions }: { label: Label; sessions: RecentSession[] }) {
   const {
     selectedSessionId,
-    setSelectedSessionId,
     sessionSortOrder,
     setSessionSortOrder,
     togglePinnedSession,
     pinnedSessionIds,
     setEditingSessionId,
-    setSelectedProject,
+    openSession,
   } = useUIStore()
 
   const groups = useMemo(() => {
@@ -336,8 +335,7 @@ function LabelSessionList({ label, sessions }: { label: Label; sessions: RecentS
                   // project — matches the sidebar's normal behavior
                   // when you click a session inside a project.
                   onSelect={() => {
-                    setSelectedProject(session.projectId, session.projectSlug || null)
-                    setSelectedSessionId(session.id)
+                    openSession(session.projectId, session.projectSlug || null, session.id)
                   }}
                   onTogglePin={() => togglePinnedSession(session.id)}
                   onRename={async () => {

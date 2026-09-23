@@ -1,15 +1,22 @@
-// Hook: compute compaction boundaries by pairing PreCompact → PostCompact
-// events and looking at the flanking LLMGeneration events to derive the
-// actual token drop (OpenClaude's PreCompact payload doesn't carry tokens,
-// so we read them from the adjacent LLM calls).
+// Hook: pair each PreCompact with its outcome (PostCompact or CompactionFailed)
+// on the same agent, with the context size before and after.
+//
+// pi reports `context` (ctx.getContextUsage) on PreCompact and PostCompact and
+// `tokens_before` on PostCompact; when one is missing the flanking
+// LLMGeneration's `context_tokens` stands in.
 
 import { useMemo } from 'react'
 import type { ParsedEvent } from '@/types'
 
 export interface CompactionInfo {
   preEventId: number
+  /** The PostCompact or CompactionFailed event, when it has arrived. */
   postEventId: number | null
-  trigger: 'manual' | 'auto' | 'unknown'
+  /** pi's reason: 'manual' | 'threshold' | 'overflow' (or 'unknown'). */
+  trigger: string
+  failed: boolean
+  error?: string | null
+  willRetry: boolean
   customInstructions?: string | null
   compactSummary?: string | null
   tokensBefore: number
@@ -19,73 +26,93 @@ export interface CompactionInfo {
   timestampEnd: number | null
 }
 
+type P = Record<string, unknown>
+
+function numOr(v: unknown, fallback = 0): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback
+}
+
+function contextTokens(p: P | undefined): number | null {
+  const ctx = p?.context as P | undefined
+  return typeof ctx?.tokens === 'number' ? ctx.tokens : null
+}
+
+/** Context size an LLM call left behind: context_tokens, else its prompt size. */
+function llmContext(p: P): number | null {
+  if (typeof p.context_tokens === 'number') {
+    return p.context_tokens
+  }
+  if (typeof p.input_tokens === 'number') {
+    return p.input_tokens + numOr(p.cache_read_tokens) + numOr(p.cache_creation_tokens)
+  }
+  return null
+}
+
+export function buildCompactions(events: readonly ParsedEvent[]): Map<number, CompactionInfo> {
+  const result = new Map<number, CompactionInfo>()
+
+  function llmNear(from: number, step: 1 | -1, agentId: string): number | null {
+    for (let j = from + step; j >= 0 && j < events.length; j += step) {
+      const e = events[j]
+      if (e.subtype === 'LLMGeneration' && e.agentId === agentId) {
+        return llmContext(e.payload as P)
+      }
+    }
+    return null
+  }
+
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i]
+    if (ev.subtype !== 'PreCompact') {
+      continue
+    }
+    const p = ev.payload as P
+
+    let postIdx = -1
+    for (let j = i + 1; j < events.length; j++) {
+      const e = events[j]
+      if (e.agentId !== ev.agentId) {
+        continue
+      }
+      if (e.subtype === 'PostCompact' || e.subtype === 'CompactionFailed') {
+        postIdx = j
+        break
+      }
+      if (e.subtype === 'PreCompact') {
+        break
+      }
+    }
+    const post = postIdx >= 0 ? events[postIdx] : null
+    const pp = post?.payload as P | undefined
+    const failed = post?.subtype === 'CompactionFailed'
+
+    const tokensBefore =
+      (typeof pp?.tokens_before === 'number' ? pp.tokens_before : null) ??
+      contextTokens(p) ??
+      llmNear(i, -1, ev.agentId) ??
+      0
+    const tokensAfter =
+      post && !failed ? (contextTokens(pp) ?? llmNear(postIdx, 1, ev.agentId) ?? 0) : 0
+
+    result.set(ev.id, {
+      preEventId: ev.id,
+      postEventId: post?.id ?? null,
+      trigger: typeof p.trigger === 'string' ? p.trigger : 'unknown',
+      failed,
+      error: failed && typeof pp?.error === 'string' ? pp.error : null,
+      willRetry: (pp?.will_retry ?? p.will_retry) === true,
+      customInstructions: typeof p.custom_instructions === 'string' ? p.custom_instructions : null,
+      compactSummary: typeof pp?.summary === 'string' && pp.summary ? pp.summary : null,
+      tokensBefore,
+      tokensAfter,
+      tokensDropped: tokensAfter > 0 ? Math.max(0, tokensBefore - tokensAfter) : 0,
+      timestampStart: ev.timestamp,
+      timestampEnd: post?.timestamp ?? null,
+    })
+  }
+  return result
+}
+
 export function useCompactions(events: ParsedEvent[] | undefined): Map<number, CompactionInfo> {
-  return useMemo(() => {
-    const result = new Map<number, CompactionInfo>()
-    if (!events || events.length === 0) return result
-
-    // Find last LLMGeneration input_tokens before index `i`.
-    function prevLlmTokens(i: number): number {
-      for (let j = i - 1; j >= 0; j--) {
-        if (events![j].subtype === 'LLMGeneration') {
-          const p = events![j].payload as Record<string, any>
-          const v = p.input_tokens
-          if (typeof v === 'number') return v
-        }
-      }
-      return 0
-    }
-
-    // Find first LLMGeneration input_tokens after index `i`.
-    function nextLlmTokens(i: number): number {
-      for (let j = i + 1; j < events!.length; j++) {
-        if (events![j].subtype === 'LLMGeneration') {
-          const p = events![j].payload as Record<string, any>
-          const v = p.input_tokens
-          if (typeof v === 'number') return v
-        }
-      }
-      return 0
-    }
-
-    // Walk events, pair PreCompact with its next PostCompact (linear scan
-    // because compactions are sequential per session).
-    for (let i = 0; i < events.length; i++) {
-      const ev = events[i]
-      if (ev.subtype !== 'PreCompact') continue
-      const p = ev.payload as Record<string, any>
-      const trigger = (p.trigger as 'manual' | 'auto') || 'unknown'
-
-      // Find paired PostCompact
-      let postIdx = -1
-      for (let j = i + 1; j < events.length; j++) {
-        if (events[j].subtype === 'PostCompact') {
-          postIdx = j
-          break
-        }
-        // Don't pair across another PreCompact (shouldn't happen but defensive).
-        if (events[j].subtype === 'PreCompact') break
-      }
-      const post = postIdx >= 0 ? events[postIdx] : null
-      const postPayload = post?.payload as Record<string, any> | undefined
-
-      const tokensBefore = prevLlmTokens(i)
-      const tokensAfter = postIdx >= 0 ? nextLlmTokens(postIdx) : 0
-      const tokensDropped = Math.max(0, tokensBefore - tokensAfter)
-
-      result.set(ev.id, {
-        preEventId: ev.id,
-        postEventId: post?.id ?? null,
-        trigger,
-        customInstructions: (p.custom_instructions as string | null) ?? null,
-        compactSummary: (postPayload?.compact_summary as string | null) ?? null,
-        tokensBefore,
-        tokensAfter,
-        tokensDropped,
-        timestampStart: ev.timestamp,
-        timestampEnd: post?.timestamp ?? null,
-      })
-    }
-    return result
-  }, [events])
+  return useMemo(() => buildCompactions(events ?? []), [events])
 }

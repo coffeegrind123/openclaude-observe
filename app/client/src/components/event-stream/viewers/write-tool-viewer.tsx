@@ -1,38 +1,32 @@
 import { CodeViewer } from './code-viewer'
 
 interface WriteToolViewerProps {
-  filePath: string
-  toolInput: Record<string, unknown>
-  toolResponse: Record<string, unknown> | string | undefined
-  relPath: (p: string) => string
+  path: string
+  displayPath: string
+  content: string | null
+  /** The tool's result text, e.g. "Successfully wrote to …". */
+  resultText?: string | null
 }
 
-function isNewFile(toolResponse: WriteToolViewerProps['toolResponse']): boolean {
-  if (!toolResponse || typeof toolResponse === 'string') return false
-  const r = toolResponse as Record<string, any>
-  return r.type === 'create' || r.created === true
-}
-
-export function WriteToolViewer({
-  filePath,
-  toolInput,
-  toolResponse,
-  relPath,
-}: WriteToolViewerProps) {
-  const content = (toolInput.content as string) ?? ''
-  const displayPath = relPath(filePath)
-  const newFile = isNewFile(toolResponse)
-
+export function WriteToolViewer({ path, displayPath, content, resultText }: WriteToolViewerProps) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
         <span className="truncate font-mono">{displayPath}</span>
+        {content != null && (
+          <span className="shrink-0 rounded bg-muted/50 px-1 py-[1px]">
+            {content.length.toLocaleString()} chars
+          </span>
+        )}
       </div>
-      <CodeViewer
-        fileName={filePath}
-        content={content}
-        badge={newFile ? 'NEW FILE' : 'OVERWRITE'}
-      />
+      {content == null ? (
+        <div className="text-[11px] italic text-muted-foreground/70">No content captured.</div>
+      ) : (
+        <CodeViewer fileName={path} content={content} />
+      )}
+      {resultText && (
+        <div className="font-mono text-[10px] text-muted-foreground">{resultText}</div>
+      )}
     </div>
   )
 }

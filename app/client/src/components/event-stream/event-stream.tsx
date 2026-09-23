@@ -1,20 +1,17 @@
-import { useMemo, useRef, useEffect, useDeferredValue, useCallback } from 'react'
+import { useMemo, useRef, useEffect, useLayoutEffect, useDeferredValue, useCallback } from 'react'
 import { useRegionShortcuts } from '@/hooks/use-region-shortcuts'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useQuery } from '@tanstack/react-query'
 import { useEffectiveEvents } from '@/hooks/use-effective-events'
 import { useAgents } from '@/hooks/use-agents'
-import { useDedupedEvents } from '@/hooks/use-deduped-events'
+import { useSessionDedupedEvents } from '@/hooks/deduped-events-context'
 import { useCompactions } from '@/hooks/use-compactions'
-import { usePermissionModeBackfill } from '@/hooks/use-permission-mode-backfill'
 import { getTimelineScrollTo, registerEventStreamScroll, withSyncLock } from '@/lib/scroll-sync'
-import { api } from '@/lib/api-client'
 import { useUIStore } from '@/stores/ui-store'
 import { EventRow } from './event-row'
 import { TimestampTooltipProvider } from './timestamp-tooltip'
 import { CompactionBoundary } from './compaction-boundary'
 import { classifyChatEvent } from '@/lib/chat-events'
-import { computeRuntimeMs } from '@/lib/runtime'
+import { buildRuntimeMap } from '@/lib/runtime'
 import { format } from 'timeago.js'
 import { buildAgentColorMap } from '@/lib/agent-utils'
 import { QueryBoundary } from '@/components/shared/query-boundary'
@@ -65,19 +62,6 @@ export function EventStream() {
 
   const agents = useAgents(selectedSessionId, events)
 
-  // Backfill permission_mode into session metadata if missing. Shares
-  // the canonical `['session', sessionId]` cache key with SessionBreadcrumb
-  // and useRouteSync — three consumers, one network fetch. The backfill
-  // hook tracks per-session "already checked" via its own ref so cache
-  // invalidations from session_update don't trigger duplicate PATCHes.
-  const { data: sessionForBackfill } = useQuery({
-    queryKey: ['session', selectedSessionId],
-    queryFn: () => api.getSession(selectedSessionId!),
-    enabled: !!selectedSessionId,
-    staleTime: 30_000,
-  })
-  usePermissionModeBackfill(sessionForBackfill, events, agents)
-
   const agentMap = useMemo(() => {
     const map = new Map<string, Agent>()
     agents.forEach((a) => map.set(a.id, a))
@@ -86,9 +70,10 @@ export function EventStream() {
 
   const agentColorMap = useMemo(() => buildAgentColorMap(agents), [agents])
 
-  // Dedupe tool events + build spawn map (shared with timeline-rewind)
-  const { deduped, spawnToolUseIds, spawnInfo, mergedIdMap, pairedPayloads } =
-    useDedupedEvents(events)
+  // Dedupe tool events + build spawn map — computed once per session by
+  // DedupedEventsProvider and shared with inspector / filter bar / rewind.
+  const { deduped, spawnToolUseIds, spawnedAgentIds, spawnInfo, mergedIdMap, pairedPayloads } =
+    useSessionDedupedEvents()
 
   // Pair PreCompact/PostCompact events with flanking LLM tokens so the row can
   // render a rich boundary. Keyed by PreCompact event id.
@@ -101,16 +86,8 @@ export function EventStream() {
     return m
   }, [compactionMap])
 
-  // Pre-compute runtime for each event (Stop/SubagentStop → preceding event)
-  const runtimeMap = useMemo(() => {
-    const map = new Map<number, number>()
-    if (!events) return map
-    for (const event of events) {
-      const ms = computeRuntimeMs(event, events)
-      if (ms != null) map.set(event.id, ms)
-    }
-    return map
-  }, [events])
+  // Runtime per displayed row (tool call, turn, subagent, compaction) — one pass.
+  const runtimeMap = useMemo(() => buildRuntimeMap(events ?? []), [events])
 
   // Apply all client-side filters: displayEventStream gate + agent
   // selection + primary/secondary pill union + search.
@@ -119,7 +96,7 @@ export function EventStream() {
     // useDedupedEvents). Rows that explicitly opt out are dropped here.
     let filtered = deduped.filter((e) => e.displayEventStream !== false)
 
-    // Agent chip filtering (client-side, includes spawning Tool:Agent calls)
+    // Agent chip filtering (client-side, includes the calls that spawned the selected agents)
     if (selectedAgentIds.length > 0) {
       const spawnIds = new Set<string>()
       for (const agentId of selectedAgentIds) {
@@ -165,7 +142,7 @@ export function EventStream() {
     // that classify as a chat message (prompts, assistant/subagent/task text),
     // dropping tool + topology telemetry.
     if (talkMode) {
-      filtered = filtered.filter((e) => classifyChatEvent(e) !== null)
+      filtered = filtered.filter((e) => classifyChatEvent(e, agentMap.get(e.agentId)) !== null)
     }
 
     return filtered
@@ -177,6 +154,7 @@ export function EventStream() {
     deferredSecondaryFilters,
     deferredSearchQuery,
     talkMode,
+    agentMap,
   ])
 
   // The list actually fed to the virtualizer. When reverseFeed is on, we show
@@ -283,8 +261,49 @@ export function EventStream() {
     getItemKey: (index) => displayedEvents[index]?.id ?? index,
   })
 
+  // Scroll anchoring on resize. The conversation thread sits at the BOTTOM
+  // of an expanded row, so when that row straddles the viewport top the
+  // default anchoring (item.start < offset) shifts scroll by the whole height
+  // delta although the change is below the fold, pushing the row out of
+  // frame. For the row whose thread was just toggled, anchor only when the
+  // whole row is above the viewport; every other item keeps the default.
+  // scrollTop already includes react-virtual's applied adjustments. Assigned
+  // on the instance: it's a public virtual-core field the React options type
+  // doesn't expose.
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
+    const offset = scrollRef.current?.scrollTop ?? 0
+    if (item.key === useUIStore.getState().threadRemeasureEventId) {
+      return item.end <= offset
+    }
+    return item.start < offset
+  }
+
   const virtualItems = virtualizer.getVirtualItems()
   const totalSize = virtualizer.getTotalSize()
+
+  // A thread toggle changes its row's height, which the virtualizer would
+  // only learn a frame late through ResizeObserver (a visible flash).
+  // Re-measure the row here, after the detail's height change commits and
+  // before paint: measureElement updates the size cache and runs the scroll
+  // anchoring above in the same frame, the smooth path row expand/collapse
+  // gets from estimateSize.
+  const threadRemeasureEventId = useUIStore((s) => s.threadRemeasureEventId)
+  useLayoutEffect(() => {
+    if (threadRemeasureEventId == null) {
+      return
+    }
+    const scroller = scrollRef.current
+    const idx = displayedEvents.findIndex((e) => e.id === threadRemeasureEventId)
+    if (scroller && idx >= 0) {
+      const rowEl = scroller.querySelector<HTMLElement>(`[data-index="${idx}"]`)
+      // measureElement no-ops during a native momentum scroll; the toggle
+      // then falls back to ResizeObserver and may flash once. Cosmetic.
+      if (rowEl) {
+        virtualizer.measureElement(rowEl)
+      }
+    }
+    useUIStore.getState().setThreadRemeasureEventId(null)
+  }, [threadRemeasureEventId, displayedEvents, virtualizer])
 
   // Re-anchor the initial scroll on session change OR feed-direction change.
   useEffect(() => {
@@ -601,6 +620,14 @@ export function EventStream() {
                               agentColorMap={agentColorMap}
                               showAgentLabel={showAgentLabel}
                               spawnInfo={spawnInfo.get(event.agentId)}
+                              spawnedAgentId={
+                                event.toolUseId ? spawnedAgentIds.get(event.toolUseId) : undefined
+                              }
+                              spawnedInfo={
+                                event.toolUseId && spawnedAgentIds.has(event.toolUseId)
+                                  ? spawnInfo.get(spawnedAgentIds.get(event.toolUseId)!)
+                                  : undefined
+                              }
                               pairedPayloads={pairedPayloads.get(event.id)}
                               runtimeMs={runtimeMap.get(event.id) ?? null}
                             />

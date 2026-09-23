@@ -1,11 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { act, screen } from '@testing-library/react'
 import { renderWithProviders } from '@/test/test-utils'
 import { EventStream } from './event-stream'
+import { DedupedEventsProvider } from '@/hooks/deduped-events-context'
 import { useUIStore } from '@/stores/ui-store'
 import { useFilterStore } from '@/stores/filter-store'
 import { compileFilters } from '@/lib/filters/compile'
 import type { ParsedEvent, Agent, Filter } from '@/types'
+import { piFixtureEvents, piFixtureAgents } from '@/test/pi-fixture'
 
 // ── Mock hooks ──────────────────────────────────────────────
 
@@ -31,6 +33,14 @@ vi.mock('timeago.js', () => ({
   format: () => 'just now',
 }))
 
+function renderStream() {
+  return renderWithProviders(
+    <DedupedEventsProvider>
+      <EventStream />
+    </DedupedEventsProvider>,
+  )
+}
+
 function setMockEvents(events: ParsedEvent[]) {
   mockEvents.length = 0
   mockEvents.push(...events)
@@ -54,9 +64,7 @@ function initializeFilterStore() {
       pillName: '{toolName}',
       display: 'secondary',
       combinator: 'and',
-      patterns: [
-        { target: 'hook', regex: '^(PreToolUse|PostToolUse|PostToolUseFailure|PostToolBatch)$' },
-      ],
+      patterns: [{ target: 'hook', regex: '^(PreToolUse|PostToolUse|PostToolUseFailure)$' }],
       kind: 'default',
       enabled: true,
       config: {},
@@ -69,7 +77,7 @@ function initializeFilterStore() {
       pillName: 'Prompts',
       display: 'primary',
       combinator: 'and',
-      patterns: [{ target: 'hook', regex: '^(UserPromptSubmit|UserPromptExpansion)$' }],
+      patterns: [{ target: 'hook', regex: '^(UserPromptSubmit|UserBash)$' }],
       kind: 'default',
       enabled: true,
       config: {},
@@ -84,7 +92,9 @@ function initializeFilterStore() {
   })
 }
 
+// Every event is a pi envelope (agent_class: 'pi'), as the server stores them.
 function makeEvent(overrides: Partial<ParsedEvent>): ParsedEvent {
+  const { payload, ...rest } = overrides
   return {
     id: 1,
     agentId: 'agent-1',
@@ -96,8 +106,8 @@ function makeEvent(overrides: Partial<ParsedEvent>): ParsedEvent {
     status: 'pending',
     timestamp: Date.now(),
     createdAt: Date.now(),
-    payload: {},
-    ...overrides,
+    ...rest,
+    payload: { agent_class: 'pi', ...(payload ?? {}) },
   }
 }
 
@@ -142,19 +152,19 @@ beforeEach(() => {
 describe('EventStream', () => {
   it('should show "Select a project" when no session selected', () => {
     useUIStore.setState({ selectedSessionId: null })
-    renderWithProviders(<EventStream />)
+    renderStream()
     expect(screen.getByText('Select a project to view events')).toBeInTheDocument()
   })
 
   it('should show "No events in this session" when session selected but no events', () => {
     setMockEvents([])
-    renderWithProviders(<EventStream />)
+    renderStream()
     expect(screen.getByText('No events in this session')).toBeInTheDocument()
   })
 
   it('should show loading spinner while events are loading', () => {
     mockEventsState.isLoading = true
-    renderWithProviders(<EventStream />)
+    renderStream()
     expect(screen.getByText('Loading events...')).toBeInTheDocument()
     mockEventsState.isLoading = false
   })
@@ -176,7 +186,7 @@ describe('EventStream', () => {
     ])
     setMockAgents([makeAgent({ id: 'agent-1' })])
 
-    renderWithProviders(<EventStream />)
+    renderStream()
 
     // Should show event count
     expect(screen.getByText('2')).toBeInTheDocument()
@@ -192,7 +202,7 @@ describe('EventStream', () => {
       makeEvent({
         id: 1,
         subtype: 'PreToolUse',
-        toolName: 'Bash',
+        toolName: 'bash',
         toolUseId: 'tu-1',
         status: 'pending',
         payload: { tool_input: { command: 'ls' } },
@@ -201,21 +211,24 @@ describe('EventStream', () => {
       makeEvent({
         id: 2,
         subtype: 'PostToolUse',
-        toolName: 'Bash',
+        toolName: 'bash',
         toolUseId: 'tu-1',
         status: 'completed',
-        payload: { tool_input: { command: 'ls' }, tool_response: { stdout: 'files' } },
+        payload: {
+          tool_input: { command: 'ls' },
+          tool_response: { content: 'files', details: null },
+        },
         timestamp: 1700000001000,
       }),
     ])
     setMockAgents([makeAgent({ id: 'agent-1' })])
 
-    renderWithProviders(<EventStream />)
+    renderStream()
 
     // Should show only 1 event (merged), not 2
     expect(screen.getByText('1')).toBeInTheDocument()
     // The tool name should appear
-    const bashElements = screen.getAllByText('Bash')
+    const bashElements = screen.getAllByText('bash')
     expect(bashElements.length).toBeGreaterThan(0)
   })
 
@@ -227,7 +240,7 @@ describe('EventStream', () => {
       makeEvent({
         id: 1,
         subtype: 'PreToolUse',
-        toolName: 'Bash',
+        toolName: 'bash',
         toolUseId: 'tu-fail',
         status: 'pending',
         payload: { tool_input: { command: 'bad-cmd' } },
@@ -236,22 +249,28 @@ describe('EventStream', () => {
       makeEvent({
         id: 2,
         subtype: 'PostToolUseFailure',
-        toolName: 'Bash',
+        toolName: 'bash',
         toolUseId: 'tu-fail',
         status: 'failed',
-        payload: { error: 'Command not found', tool_input: { command: 'bad-cmd' } },
+        payload: {
+          error: 'bash: bad-cmd: command not found\n\nCommand exited with code 127',
+          is_error: true,
+          tool_input: { command: 'bad-cmd' },
+        },
         timestamp: 1700000001000,
       }),
     ])
     setMockAgents([makeAgent({ id: 'agent-1' })])
 
-    renderWithProviders(<EventStream />)
+    renderStream()
 
     // Should show 1 merged event (not 2)
     expect(screen.getByText('1')).toBeInTheDocument()
     // The merged row keeps subtype PreToolUse so summary uses tool_input from PostToolUseFailure payload.
     // Summary is '[bin] cmd' since extractBashBinary identifies the first token as the binary.
     expect(screen.getByText('[bad-cmd] bad-cmd')).toBeInTheDocument()
+    // The failure's status line reads under the row.
+    expect(screen.getByText(/Command exited with code 127/)).toBeInTheDocument()
   })
 
   it('should NOT merge events with different toolUseIds', () => {
@@ -259,7 +278,7 @@ describe('EventStream', () => {
       makeEvent({
         id: 1,
         subtype: 'PreToolUse',
-        toolName: 'Bash',
+        toolName: 'bash',
         toolUseId: 'tu-1',
         payload: { tool_input: { command: 'ls' } },
         timestamp: 1700000000000,
@@ -267,15 +286,15 @@ describe('EventStream', () => {
       makeEvent({
         id: 2,
         subtype: 'PreToolUse',
-        toolName: 'Read',
+        toolName: 'read',
         toolUseId: 'tu-2',
-        payload: { tool_input: { file_path: '/tmp/f.txt' } },
+        payload: { tool_input: { path: '/tmp/f.txt' } },
         timestamp: 1700000001000,
       }),
     ])
     setMockAgents([makeAgent({ id: 'agent-1' })])
 
-    renderWithProviders(<EventStream />)
+    renderStream()
 
     // Should show 2 events (no merge)
     expect(screen.getByText('2')).toBeInTheDocument()
@@ -308,7 +327,7 @@ describe('EventStream', () => {
     // Select only agent-1
     useUIStore.setState({ selectedAgentIds: ['agent-1'] })
 
-    renderWithProviders(<EventStream />)
+    renderStream()
 
     expect(screen.getByText('Agent 1 prompt')).toBeInTheDocument()
     expect(screen.queryByText('Agent 2 prompt')).not.toBeInTheDocument()
@@ -336,7 +355,7 @@ describe('EventStream', () => {
     // Only show Prompts
     useUIStore.setState({ activePrimaryFilters: ['Prompts'] })
 
-    renderWithProviders(<EventStream />)
+    renderStream()
 
     expect(screen.getByText('My prompt')).toBeInTheDocument()
     expect(screen.queryByText('Session cli')).not.toBeInTheDocument()
@@ -347,7 +366,7 @@ describe('EventStream', () => {
       makeEvent({
         id: 1,
         subtype: 'PreToolUse',
-        toolName: 'Bash',
+        toolName: 'bash',
         toolUseId: 'tu-1',
         payload: { tool_input: { command: 'ls -la' } },
         timestamp: 1700000000000,
@@ -355,18 +374,18 @@ describe('EventStream', () => {
       makeEvent({
         id: 2,
         subtype: 'PreToolUse',
-        toolName: 'Read',
+        toolName: 'read',
         toolUseId: 'tu-2',
-        payload: { tool_input: { file_path: '/tmp/file.txt' } },
+        payload: { tool_input: { path: '/tmp/file.txt' } },
         timestamp: 1700000001000,
       }),
     ])
     setMockAgents([makeAgent({ id: 'agent-1' })])
 
     // Only show Bash tools
-    useUIStore.setState({ activeSecondaryFilters: ['Bash'] })
+    useUIStore.setState({ activeSecondaryFilters: ['bash'] })
 
-    renderWithProviders(<EventStream />)
+    renderStream()
 
     // Bash event should be visible
     expect(screen.getByText('[ls] ls -la')).toBeInTheDocument()
@@ -396,7 +415,7 @@ describe('EventStream', () => {
     // Filter to only Prompts (1 visible out of 2 raw)
     useUIStore.setState({ activePrimaryFilters: ['Prompts'] })
 
-    renderWithProviders(<EventStream />)
+    renderStream()
 
     // Should show "1" for filtered count and "2 raw" for total
     expect(screen.getByText('1')).toBeInTheDocument()
@@ -420,7 +439,7 @@ describe('EventStream', () => {
       makeAgent({ id: 'agent-2', parentAgentId: 'agent-1', name: 'worker' }),
     ])
 
-    renderWithProviders(<EventStream />)
+    renderStream()
 
     // With 2 agents, should show agent labels
     expect(screen.getByText('Main')).toBeInTheDocument()
@@ -438,9 +457,123 @@ describe('EventStream', () => {
     ])
     setMockAgents([makeAgent({ id: 'agent-1' })])
 
-    renderWithProviders(<EventStream />)
+    renderStream()
 
     // With only 1 agent, "Main" label should not appear
     expect(screen.queryByText('Main')).not.toBeInTheDocument()
+  })
+
+  // ── The real pi capture ───────────────────────────────────
+
+  describe('real pi capture', () => {
+    // setup.ts reports every element as 800px tall, so the virtualizer would
+    // mount only a couple of measured rows; give rows (data-index) a row height
+    // so the whole 19-row stream mounts.
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!
+    beforeEach(() => {
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+        configurable: true,
+        get(this: HTMLElement) {
+          return this.hasAttribute('data-index') ? 24 : 800
+        },
+      })
+    })
+    afterEach(() => {
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', original)
+    })
+
+    it('renders all 24 envelopes as 19 rows (5 tool results merged into their calls)', () => {
+      setMockEvents(piFixtureEvents())
+      setMockAgents(piFixtureAgents())
+      renderStream()
+
+      expect(screen.getByText('19')).toBeInTheDocument()
+      expect(screen.getByText(/24 raw/)).toBeInTheDocument()
+    })
+
+    it('shows pi tool rows with their real arguments and the failing bash as failed', () => {
+      setMockEvents(piFixtureEvents())
+      setMockAgents(piFixtureAgents())
+      renderStream()
+
+      expect(screen.getByText('[echo] echo hi')).toBeInTheDocument()
+      expect(screen.getByText('[cat] cat missing-file.txt')).toBeInTheDocument()
+      expect(
+        screen.getByText(/Command exited with code 1 — cat: missing-file.txt: No such file/),
+      ).toBeInTheDocument()
+    })
+
+    it("attributes the subagent's events to it and links the Agent call to it", () => {
+      setMockEvents(piFixtureEvents())
+      setMockAgents(piFixtureAgents())
+      renderStream()
+
+      // Agent row → spawned subagent chip.
+      expect(screen.getByTestId('spawned-agent')).toHaveTextContent('general-purpose#f322fa95')
+      // The subagent's own rows carry its label; its prompt reads as its task.
+      expect(screen.getAllByText('general-purpose#f322fa95').length).toBeGreaterThan(1)
+      expect(screen.getAllByText('task').length).toBe(1)
+      expect(screen.getByText('[wc] wc -l notes.txt')).toBeInTheDocument()
+    })
+
+    it('shows LLM generations with tokens and timing', () => {
+      setMockEvents(piFixtureEvents())
+      setMockAgents(piFixtureAgents())
+      renderStream()
+
+      expect(
+        screen.getByText('qwen3.8-27b · in 6.7k out 247 · 9.3s · → read, bash×2'),
+      ).toBeInTheDocument()
+      expect(screen.getByText('DONE')).toBeInTheDocument()
+    })
+
+    it('narrows to the subagent plus the call that spawned it', () => {
+      setMockEvents(piFixtureEvents())
+      setMockAgents(piFixtureAgents())
+      useUIStore.setState({ selectedAgentIds: ['01a0cea8-63cb-73d4-853f-9a5b79957320'] })
+      renderStream()
+
+      // 8 subagent events − 1 merged tool result + the spawning Agent row.
+      expect(screen.getByText('8')).toBeInTheDocument()
+      expect(screen.getByTestId('spawned-agent')).toBeInTheDocument()
+      expect(screen.queryByText('[echo] echo hi')).not.toBeInTheDocument()
+    })
+
+    it('talk lens keeps only the conversation', () => {
+      setMockEvents(piFixtureEvents())
+      setMockAgents(piFixtureAgents())
+      useUIStore.setState({ talkMode: true })
+      renderStream()
+
+      expect(screen.getByText('9')).toBeInTheDocument()
+      expect(screen.queryByText('[echo] echo hi')).not.toBeInTheDocument()
+      useUIStore.setState({ talkMode: false })
+    })
+
+    it('with Pre/Post merging off, shows all 24 hook events labelled by hook name', () => {
+      setMockEvents(piFixtureEvents())
+      setMockAgents(piFixtureAgents())
+      useUIStore.setState({ mergeToolEvents: false })
+      try {
+        renderStream()
+        expect(screen.getByText('24')).toBeInTheDocument()
+        // No "/ N raw" — nothing is folded away.
+        expect(screen.queryByText(/raw/)).not.toBeInTheDocument()
+        expect(screen.getAllByText('PreToolUse').length).toBe(5)
+        expect(screen.getAllByText('PostToolUse').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('PostToolUseFailure').length).toBe(1)
+      } finally {
+        useUIStore.setState({ mergeToolEvents: true })
+      }
+    })
+
+    it('re-measures a row whose conversation thread was toggled, then clears the request', () => {
+      setMockEvents(piFixtureEvents())
+      setMockAgents(piFixtureAgents())
+      renderStream()
+      const prompt = piFixtureEvents().find((e) => e.subtype === 'UserPromptSubmit')!
+      act(() => useUIStore.getState().setThreadRemeasureEventId(prompt.id))
+      expect(useUIStore.getState().threadRemeasureEventId).toBeNull()
+    })
   })
 })

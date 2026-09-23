@@ -6,7 +6,8 @@ import { useEvents } from '@/hooks/use-events'
 import { CopyButton } from '@/components/shared/copy-button'
 
 export function SessionBreadcrumb() {
-  const { selectedSessionId, selectedProjectId, setSelectedSessionId } = useUIStore()
+  const { selectedSessionId, selectedProjectId, setSelectedSessionId, setSelectedProject } =
+    useUIStore()
 
   const { data: session } = useQuery({
     queryKey: ['session', selectedSessionId],
@@ -17,13 +18,30 @@ export function SessionBreadcrumb() {
 
   const { data: events } = useEvents(selectedSessionId)
 
-  if (!selectedProjectId || !selectedSessionId || !session) return null
+  if (!selectedSessionId || !session) return null
 
   // Extract cwd from the first SessionStart event
   const sessionStartEvent = events?.find((e) => e.subtype === 'SessionStart')
   const cwd = (sessionStartEvent?.payload as Record<string, any>)?.cwd as string | undefined
 
-  const projectName = session.projectSlug || session.projectName || 'Project'
+  // Keyed off the session row, not the store: on a `#/_/<id>` link the
+  // store's project is still resolving while the session already names it.
+  // A session with no project at all links back home instead.
+  const hasProject = session.projectId != null
+  const projectName = hasProject
+    ? session.projectSlug || session.projectName || 'Project'
+    : 'Unassigned'
+  const goToProject = () => {
+    if (!hasProject) {
+      setSelectedProject(null)
+      return
+    }
+    if (selectedProjectId === session.projectId) {
+      setSelectedSessionId(null)
+      return
+    }
+    setSelectedProject(session.projectId, session.projectSlug ?? null)
+  }
   const sessionName = session.slug || selectedSessionId.slice(0, 8)
   const transcriptPath = session.transcriptPath || null
 
@@ -31,8 +49,8 @@ export function SessionBreadcrumb() {
     <div className="group/breadcrumb flex items-center gap-1.5 px-4 pt-2 pb-1 font-mono text-xs text-muted-foreground min-h-[28px]">
       <button
         className="hover:text-foreground transition-colors cursor-pointer truncate max-w-[150px]"
-        onClick={() => setSelectedSessionId(null)}
-        title={`Back to ${projectName}`}
+        onClick={goToProject}
+        title={hasProject ? `Back to ${projectName}` : 'Back to dashboard'}
       >
         {projectName}
       </button>

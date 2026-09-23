@@ -7,7 +7,7 @@ type Env = {
     store: EventStore
     broadcastToSession: (sessionId: string, msg: object) => void
     broadcastToAll: (msg: object) => void
-    broadcastActivity: (sessionId: string, eventId: number) => void
+    broadcastActivity: (sessionId: string, eventId: number, projectId: number | null) => void
   }
 }
 
@@ -56,11 +56,13 @@ function makeParsed(hookPayload: Record<string, unknown>) {
     toolName: (hookPayload.tool_name as string) || null,
     toolUseId: (hookPayload.tool_use_id as string) || null,
     timestamp: isNaN(timestamp) ? Date.now() : timestamp,
+    agentClass: (hookPayload.agent_class as string) || null,
     ownerAgentId: (hookPayload.agent_id as string) || null,
-    subAgentId: null,
-    subAgentName: null,
-    subAgentDescription: null,
-    instanceId: (hookPayload.instance_id as string) || null,
+    ownerAgentType: (hookPayload.agent_type as string) || null,
+    ownerAgentName: (hookPayload.agent_name as string) || null,
+    ownerAgentDescription: (hookPayload.agent_description as string) || null,
+    parentAgentId: (hookPayload.parent_agent_id as string) || null,
+    parentToolUseId: (hookPayload.parent_tool_use_id as string) || null,
     metadata: {},
     raw: hookPayload,
   }
@@ -76,9 +78,8 @@ function createStore(overrides = {}) {
     upsertSession: vi.fn(),
     upsertAgent: vi.fn(),
     insertEvent: vi.fn(),
-    upsertInstance: vi.fn(),
-    updateInstanceHeartbeat: vi.fn(),
-    getInstancesForSession: vi.fn(),
+    getAgentById: vi.fn(),
+    updateSessionSlug: vi.fn(),
     updateSessionStatus: vi.fn(),
     updateSessionProject: vi.fn(),
     getThreadForEvent: vi.fn(),
@@ -150,7 +151,6 @@ function setupSuccessfulPost(
   store.upsertSession.mockResolvedValue(undefined)
   store.upsertAgent.mockResolvedValue(undefined)
   store.insertEvent.mockResolvedValue(42)
-  store.getInstancesForSession.mockReturnValue([])
 }
 
 describe('events routes — POST /events', () => {
@@ -245,7 +245,6 @@ describe('events routes — POST /events session lifecycle', () => {
     store.upsertSession.mockResolvedValue(undefined)
     store.upsertAgent.mockResolvedValue(undefined)
     store.insertEvent.mockResolvedValue(1)
-    store.getInstancesForSession.mockReturnValue([])
 
     const res = await app.request('/api/events', {
       method: 'POST',
@@ -276,7 +275,6 @@ describe('events routes — POST /events session lifecycle', () => {
     store.upsertAgent.mockResolvedValue(undefined)
     store.insertEvent.mockResolvedValue(1)
     store.updateSessionProject.mockResolvedValue(undefined)
-    store.getInstancesForSession.mockReturnValue([])
 
     const res = await app.request('/api/events', {
       method: 'POST',
@@ -347,200 +345,6 @@ describe('events routes — POST /events session lifecycle', () => {
   })
 })
 
-describe('events routes — POST /events instance handling', () => {
-  it('upserts instance when instanceId is present on the parsed event', async () => {
-    const { app, store, broadcastToSession } = await createApp()
-    setupSuccessfulPost(store, { id: 'sess-inst' })
-    store.getInstancesForSession.mockReturnValue([
-      {
-        id: 'inst-1',
-        session_id: 'sess-inst',
-        role: 'main',
-        name: 'my-instance',
-        machine_id: 'm1',
-        pid: 42,
-        first_seen: Date.now(),
-        last_heartbeat: Date.now(),
-        status: 'active',
-      },
-    ])
-
-    const res = await app.request('/api/events', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        hook_payload: {
-          hook_event_name: 'PreToolUse',
-          session_id: 'sess-inst',
-          instance_id: 'inst-1',
-          instance_role: 'main',
-          instance_name: 'my-instance',
-          machine_id: 'm1',
-          pid: 42,
-        },
-        meta: {},
-      }),
-    })
-
-    expect(res.status).toBe(201)
-    expect(store.upsertInstance).toHaveBeenCalledWith(
-      'inst-1',
-      'sess-inst',
-      'main',
-      'my-instance',
-      'm1',
-      42,
-    )
-    expect(broadcastToSession).toHaveBeenCalledWith(
-      'sess-inst',
-      expect.objectContaining({ type: 'instance_update' }),
-    )
-  })
-
-  it('maps unknown instance_role to "unknown"', async () => {
-    const { app, store } = await createApp()
-    setupSuccessfulPost(store, { id: 'sess-unk' })
-    store.getInstancesForSession.mockReturnValue([
-      {
-        id: 'inst-u',
-        session_id: 'sess-unk',
-        role: 'unknown',
-        name: null,
-        machine_id: null,
-        pid: null,
-        first_seen: 1,
-        last_heartbeat: 1,
-        status: 'active',
-      },
-    ])
-
-    const res = await app.request('/api/events', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        hook_payload: {
-          hook_event_name: 'PreToolUse',
-          session_id: 'sess-unk',
-          instance_id: 'inst-u',
-          instance_role: 'bogus_role_xyz',
-        },
-        meta: {},
-      }),
-    })
-
-    expect(res.status).toBe(201)
-    expect(store.upsertInstance).toHaveBeenCalledWith(
-      'inst-u',
-      'sess-unk',
-      'unknown',
-      null,
-      null,
-      null,
-    )
-  })
-
-  it('updates heartbeat for DaemonHeartbeat subtype', async () => {
-    const { app, store } = await createApp()
-    setupSuccessfulPost(store, { id: 'sess-daemon' })
-    store.getInstancesForSession.mockReturnValue([
-      {
-        id: 'inst-d',
-        session_id: 'sess-daemon',
-        role: 'daemon',
-        name: null,
-        machine_id: null,
-        pid: null,
-        first_seen: 1,
-        last_heartbeat: 1,
-        status: 'active',
-      },
-    ])
-
-    const now = Date.now()
-    const res = await app.request('/api/events', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        hook_payload: {
-          hook_event_name: 'DaemonHeartbeat',
-          session_id: 'sess-daemon',
-          instance_id: 'inst-d',
-          instance_role: 'daemon',
-          timestamp: now,
-        },
-        meta: {},
-      }),
-    })
-
-    expect(res.status).toBe(201)
-    expect(store.updateInstanceHeartbeat).toHaveBeenCalledWith('inst-d', now)
-  })
-
-  it('silently skips instance handling for non-string instanceId', async () => {
-    const { app, store } = await createApp()
-    setupSuccessfulPost(store, { id: 'sess-bad-inst' })
-
-    const res = await app.request('/api/events', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        hook_payload: {
-          hook_event_name: 'PreToolUse',
-          session_id: 'sess-bad-inst',
-          instance_id: 42, // number, not string
-        },
-        meta: {},
-      }),
-    })
-
-    // Should still succeed — invalid instanceId is silently skipped
-    expect(res.status).toBe(201)
-    expect(store.upsertInstance).not.toHaveBeenCalled()
-  })
-
-  it('silently skips instance handling for empty string instanceId', async () => {
-    const { app, store } = await createApp()
-    setupSuccessfulPost(store, { id: 'sess-empty-inst' })
-
-    const res = await app.request('/api/events', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        hook_payload: {
-          hook_event_name: 'PreToolUse',
-          session_id: 'sess-empty-inst',
-          instance_id: '',
-        },
-        meta: {},
-      }),
-    })
-
-    expect(res.status).toBe(201)
-    expect(store.upsertInstance).not.toHaveBeenCalled()
-  })
-
-  it('silently skips instance handling for overly long instanceId', async () => {
-    const { app, store } = await createApp()
-    setupSuccessfulPost(store, { id: 'sess-long' })
-
-    const res = await app.request('/api/events', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        hook_payload: {
-          hook_event_name: 'PreToolUse',
-          session_id: 'sess-long',
-          instance_id: 'x'.repeat(300),
-        },
-        meta: {},
-      }),
-    })
-
-    expect(res.status).toBe(201)
-    expect(store.upsertInstance).not.toHaveBeenCalled()
-  })
-})
-
 describe('events routes — POST /events broadcast behavior', () => {
   it('broadcasts event to session subscribers', async () => {
     const { app, store, broadcastToSession } = await createApp()
@@ -607,7 +411,6 @@ describe('events routes — POST /events broadcast behavior', () => {
     store.upsertSession.mockResolvedValue(undefined)
     store.upsertAgent.mockResolvedValue(undefined)
     store.insertEvent.mockResolvedValue(1)
-    store.getInstancesForSession.mockReturnValue([])
 
     const broadcastToAll = vi.fn()
     const app = new Hono<Env>()
@@ -660,9 +463,9 @@ describe('events routes — POST /events broadcast behavior', () => {
     )
   })
 
-  it('calls broadcastActivity for every event', async () => {
+  it('calls broadcastActivity for every event, with the session project id', async () => {
     const { app, store, broadcastActivity } = await createApp()
-    setupSuccessfulPost(store, { id: 'test-session' })
+    setupSuccessfulPost(store, { id: 'test-session', project_id: 1 })
 
     await app.request('/api/events', {
       method: 'POST',
@@ -676,7 +479,7 @@ describe('events routes — POST /events broadcast behavior', () => {
       }),
     })
 
-    expect(broadcastActivity).toHaveBeenCalledWith('test-session', 42)
+    expect(broadcastActivity).toHaveBeenCalledWith('test-session', 42, 1)
   })
 })
 
@@ -762,7 +565,6 @@ describe('events routes — GET /events/:id/thread', () => {
         subtype: 'PreToolUse',
         tool_name: 'Bash',
         tool_use_id: null,
-        instance_id: null,
         timestamp: 1700000000000,
         created_at: 1700000000100,
         payload: JSON.stringify({ cmd: 'ls' }),
@@ -775,7 +577,6 @@ describe('events routes — GET /events/:id/thread', () => {
         subtype: 'PostToolUse',
         tool_name: 'Bash',
         tool_use_id: 'tu-1',
-        instance_id: null,
         timestamp: 1700000001000,
         created_at: 1700000001100,
         payload: JSON.stringify({ result: 'ok' }),
@@ -794,7 +595,6 @@ describe('events routes — GET /events/:id/thread', () => {
       subtype: 'PreToolUse',
       toolName: 'Bash',
       toolUseId: null,
-      instanceId: null,
       status: 'running',
       timestamp: 1700000000000,
       createdAt: 1700000000100,
@@ -827,7 +627,6 @@ describe('events routes — GET /events/:id/thread', () => {
         subtype: 'Stop',
         tool_name: null,
         tool_use_id: null,
-        instance_id: null,
         timestamp: 1700000000000,
         payload: JSON.stringify({}),
       },
@@ -850,7 +649,6 @@ describe('events routes — GET /events/:id/thread', () => {
         subtype: 'PreToolUse',
         tool_name: null,
         tool_use_id: null,
-        instance_id: null,
         timestamp: 1700000000000,
         created_at: 1700000000100,
         payload: JSON.stringify({}),
@@ -874,7 +672,6 @@ describe('events routes — GET /events/:id/thread', () => {
         subtype: 'PostToolUse',
         tool_name: null,
         tool_use_id: null,
-        instance_id: null,
         timestamp: 1700000000000,
         created_at: 1700000000100,
         payload: JSON.stringify({}),
@@ -898,7 +695,6 @@ describe('events routes — GET /events/:id/thread', () => {
         subtype: 'UnknownSubtype',
         tool_name: null,
         tool_use_id: null,
-        instance_id: null,
         timestamp: 1700000000000,
         created_at: 1700000000100,
         payload: JSON.stringify({}),
@@ -910,7 +706,7 @@ describe('events routes — GET /events/:id/thread', () => {
     expect(body[0].status).toBe('pending')
   })
 
-  it('maps tool_use_id and instance_id from DB fields', async () => {
+  it('maps tool_use_id from DB fields', async () => {
     const { app, store } = await createApp()
 
     store.getThreadForEvent.mockResolvedValue([
@@ -922,7 +718,6 @@ describe('events routes — GET /events/:id/thread', () => {
         subtype: 'PreToolUse',
         tool_name: 'Write',
         tool_use_id: 'tu-xyz',
-        instance_id: 'inst-xyz',
         timestamp: 1700000000000,
         created_at: 1700000000100,
         payload: JSON.stringify({}),
@@ -932,6 +727,6 @@ describe('events routes — GET /events/:id/thread', () => {
     const res = await app.request('/api/events/1/thread')
     const body = await res.json()
     expect(body[0].toolUseId).toBe('tu-xyz')
-    expect(body[0].instanceId).toBe('inst-xyz')
+    expect('instanceId' in body[0]).toBe(false)
   })
 })

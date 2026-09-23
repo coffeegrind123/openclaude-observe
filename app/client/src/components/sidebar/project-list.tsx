@@ -11,12 +11,12 @@ import { api } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { ProjectModal } from '@/components/settings/project-modal'
 import { SessionItem } from './session-item'
-import { useAggregatePulseActive } from '@/hooks/use-pulse-active'
+import { useProjectPulseActive } from '@/hooks/use-pulse-active'
 import {
   NotificationIndicator,
   dismissNotifications,
-  useAnyHiddenFlaggedSession,
-  useAnySessionHasNotification,
+  useAnyHiddenFlaggedInProject,
+  useAnyFlaggedInProject,
 } from './notification-indicator'
 import type { Project, Session } from '@/types'
 
@@ -123,6 +123,7 @@ function groupSessionsByDate(sessions: Session[], sortBy: 'activity' | 'created'
 export function ProjectList({ collapsed }: ProjectListProps) {
   const { data: projects } = useProjects()
   const { selectedProjectId, setSelectedProject } = useUIStore()
+  const previewProjectId = useUIStore((s) => s.previewProjectId)
 
   const [modalProjectId, setModalProjectId] = useState<number | null>(null)
   const modalProject = projects?.find((p) => p.id === modalProjectId) ?? null
@@ -195,7 +196,7 @@ export function ProjectList({ collapsed }: ProjectListProps) {
                   }
                 }}
               >
-                {isSelected ? (
+                {isSelected || previewProjectId === project.id ? (
                   <ChevronDown className="h-3.5 w-3.5 shrink-0" />
                 ) : (
                   <ChevronRight className="h-3.5 w-3.5 shrink-0" />
@@ -219,7 +220,10 @@ export function ProjectList({ collapsed }: ProjectListProps) {
                   Edit
                 </span>
               </div>
-              {isSelected && <SessionList projectId={project.id} />}
+              {/* Also expanded for the Constellation drill-in's previewed project. */}
+              {(isSelected || previewProjectId === project.id) && (
+                <SessionList projectId={project.id} />
+              )}
             </div>
           )
         })}
@@ -249,17 +253,19 @@ export function ProjectList({ collapsed }: ProjectListProps) {
  * Clicking the bell dismisses every flagged session in the project.
  */
 function ProjectFolderWithBell({ projectId }: { projectId: number }) {
-  const { data: sessions } = useSessions(projectId)
-  const sessionIds = sessions?.map((s) => s.id) ?? []
-  const hasHiddenFlagged = useAnyHiddenFlaggedSession(sessionIds)
-  const pulseActive = useAggregatePulseActive(sessionIds)
+  // Derived from global stores keyed by projectId, NOT a per-project
+  // session fetch — calling useSessions(projectId) here fanned out to one
+  // /api/projects/:id/sessions request per sidebar project on page load.
+  const { hasHidden: hasHiddenFlagged, sessionIds: flaggedIds } =
+    useAnyHiddenFlaggedInProject(projectId)
+  const pulseActive = useProjectPulseActive(projectId)
   if (hasHiddenFlagged) {
     return (
       <NotificationIndicator
         className="h-3.5 w-3.5 shrink-0"
         onClick={(e) => {
           e.stopPropagation()
-          dismissNotifications(sessionIds)
+          dismissNotifications(flaggedIds)
         }}
       />
     )
@@ -297,9 +303,7 @@ function ProjectNotificationDot({
   projectId: number
   className?: string
 }) {
-  const { data: sessions } = useSessions(projectId)
-  const sessionIds = sessions?.map((s) => s.id) ?? []
-  const anyFlagged = useAnySessionHasNotification(sessionIds)
+  const { any: anyFlagged, sessionIds } = useAnyFlaggedInProject(projectId)
   if (!anyFlagged) return null
   return (
     <button
@@ -328,6 +332,7 @@ function SessionList({ projectId }: { projectId: number }) {
     pinnedSessionIds,
     setEditingSessionId,
   } = useUIStore()
+  const previewSessionId = useUIStore((s) => s.previewSessionId)
   const queryClient = useQueryClient()
   const { data: currentEvents } = useEvents(selectedSessionId)
 
@@ -418,6 +423,7 @@ function SessionList({ projectId }: { projectId: number }) {
                   key={session.id}
                   session={session}
                   isSelected={isSelected}
+                  isPreview={!isSelected && previewSessionId === session.id}
                   isPinned={pinnedSessionIds.has(session.id)}
                   onSelect={() => setSelectedSessionId(session.id)}
                   onTogglePin={() => togglePinnedSession(session.id)}

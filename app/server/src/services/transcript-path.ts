@@ -1,30 +1,52 @@
-export interface BindMountBase {
-  host: string
-  container: string
+// Which transcript files the server is willing to read.
+//
+// transcript_path is supplied by whoever posts to /api/events, and the
+// transcript-stats route reads that file — while the docker setup mounts
+// whole pi homes. So a path is only honoured when it is a .jsonl file inside
+// `<home>/.pi/agent/sessions/` of a configured pi home, after resolving `..`
+// and symlinks. pi homes are mounted at the same absolute path pi uses, so
+// there is no host/container translation to do.
+
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
+
+export const SESSIONS_SUBDIR = path.join('.pi', 'agent', 'sessions')
+
+function inside(child: string, parent: string): boolean {
+  return child.startsWith(parent + path.sep)
+}
+
+async function realOrSelf(p: string): Promise<string> {
+  try {
+    return await fs.realpath(p)
+  } catch {
+    // Missing file: resolve the directory instead, so a symlinked parent
+    // still can't smuggle a path out.
+    try {
+      return path.join(await fs.realpath(path.dirname(p)), path.basename(p))
+    } catch {
+      return p
+    }
+  }
 }
 
 /**
- * Translate a host-side transcript path into the path the server can
- * read inside its runtime. In docker mode with the transcript-stats
- * feature enabled we bind-mount the host's Claude session dir into the
- * container (e.g. `~/.claude/projects` → `/host/.claude/projects`). The
- * transcript_path stored in the DB is always the host path; this helper
- * rewrites it for the container.
- *
- * Trailing-slash precision matters: a path equal to the base or one
- * that starts with `${base}/` is translated; everything else passes
- * through. This rejects e.g. `/Users/joe/.claude/projects-other`
- * from matching `/Users/joe/.claude/projects`.
- *
- * A null/empty base (local mode, or one side unset) short-circuits to
- * the identity function.
+ * The readable path for a pi session transcript, or null when the path is not
+ * one the server may read.
  */
-export function resolveTranscriptPath(hostPath: string, base: BindMountBase | null): string {
-  if (!base || !base.host || !base.container) return hostPath
-  const { host, container } = base
-  if (hostPath === host) return container
-  if (hostPath.startsWith(host + '/')) {
-    return container + hostPath.slice(host.length)
+export async function resolvePiTranscript(transcriptPath: string, homes: string[]): Promise<string | null> {
+  if (!path.isAbsolute(transcriptPath) || !transcriptPath.endsWith('.jsonl') || transcriptPath.includes('\0')) {
+    return null
   }
-  return hostPath
+  const requested = path.resolve(transcriptPath)
+  const real = await realOrSelf(requested)
+
+  for (const home of homes) {
+    const sessionsDir = path.join(path.resolve(home), SESSIONS_SUBDIR)
+    const realSessionsDir = await realOrSelf(sessionsDir)
+    if (inside(requested, sessionsDir) && inside(real, realSessionsDir)) {
+      return requested
+    }
+  }
+  return null
 }

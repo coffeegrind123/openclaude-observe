@@ -1,18 +1,12 @@
 import { format } from 'timeago.js'
 import { getEventSummary } from '@/lib/event-summary'
+import { agentClassFor } from '@/agents/registry'
 import type { ParsedEvent } from '@/types'
 
-// Friendly label for event types shown at the top of the tooltip
+// Tool rows lead with the tool name; everything else with the class's label.
 function tooltipLabel(event: ParsedEvent): string {
-  if (event.subtype === 'PreToolUse' || event.subtype === 'PostToolUse') {
-    return event.toolName || 'Tool'
-  }
-  const map: Record<string, string> = {
-    UserPromptSubmit: 'Prompt',
-    Stop: 'Stop',
-    SessionStart: 'Session Start',
-  }
-  return map[event.subtype || ''] || event.subtype || event.type
+  const cls = agentClassFor(event)
+  return cls.toolLabel(event) ?? cls.label(event)
 }
 
 function formatTimeOfDay(ts: number): string {

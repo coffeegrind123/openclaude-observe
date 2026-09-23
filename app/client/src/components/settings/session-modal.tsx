@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type TranscriptStatsData } from '@/lib/api-client'
 import { formatTokens } from '@/lib/format-utils'
 import { getServerHealth } from '@/lib/server-health'
-import { useUIStore } from '@/stores/ui-store'
+import { useUIStore, buildHash } from '@/stores/ui-store'
 import { Dialog, DialogContent, DialogClose, DialogTitle } from '@/components/ui/dialog'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
@@ -33,13 +33,13 @@ import {
   CalendarDays,
   Hash,
   Terminal,
-  Shield,
   ExternalLink,
 } from 'lucide-react'
 import { MoveSessionModal } from './project-modal'
 import { CollapsibleSection } from './sections/collapsible-section'
 import { TokenUsageSection } from './sections/token-usage-section'
 import { useAgents } from '@/hooks/use-agents'
+import { getAgentClass } from '@/agents/registry'
 import type { Project, ParsedEvent } from '@/types'
 
 function formatRelativeTime(ts: number): string {
@@ -67,7 +67,7 @@ export function SessionEditModal() {
   const setEditingSessionId = useUIStore((s) => s.setEditingSessionId)
   const selectedSessionId = useUIStore((s) => s.selectedSessionId)
   const setSelectedSessionId = useUIStore((s) => s.setSelectedSessionId)
-  const setSelectedProject = useUIStore((s) => s.setSelectedProject)
+  const openSession = useUIStore((s) => s.openSession)
   const closeSettings = useUIStore((s) => s.closeSettings)
 
   const open = editingSessionId !== null
@@ -106,15 +106,10 @@ export function SessionEditModal() {
   const label = session?.slug || session?.id.slice(0, 8) || ''
   const cwd = typeof session?.metadata?.cwd === 'string' ? session.metadata.cwd : null
   const jsonlPath = session?.transcriptPath || null
-  const permissionMode =
-    typeof session?.metadata?.permission_mode === 'string'
-      ? session.metadata.permission_mode
-      : typeof session?.metadata?.permissionMode === 'string'
-        ? session.metadata.permissionMode
-        : null
-  const permFlag = permissionMode ? ` --permission-mode ${permissionMode}` : ''
-  const resumeCmd = session ? `claude --resume ${session.id}${permFlag}` : null
-  const forkCmd = session ? `claude --fork-session --resume ${session.id}${permFlag}` : null
+  // pi resolves a session by file path or (partial) id: `--session` resumes
+  // it, `--fork` copies it into a new session.
+  const resumeCmd = session ? `pi --session ${session.id}` : null
+  const forkCmd = session ? `pi --fork ${session.id}` : null
 
   function copyToClipboard(field: string, text: string) {
     navigator.clipboard.writeText(text)
@@ -249,17 +244,16 @@ export function SessionEditModal() {
                     closes both modals and selects the session in-app. */}
                 {session && (
                   <a
-                    href={`#/${session.projectSlug ?? ''}/${session.id}`}
+                    href={buildHash(session.projectSlug ?? null, session.id)}
                     onClick={(e) => {
                       const isModified =
                         e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0
                       if (isModified) return
                       e.preventDefault()
-                      if (session.projectSlug) {
-                        setSelectedProject(session.projectId, session.projectSlug)
-                      }
-                      setTimeout(() => setSelectedSessionId(session.id), 0)
+                      // Close first: with the modal open, the open would
+                      // carry its `:session.details` suffix into the URL.
                       setEditingSessionId(null)
+                      openSession(session.projectId, session.projectSlug ?? null, session.id)
                       closeSettings()
                     }}
                     className="shrink-0 inline-flex h-6 w-6 items-center justify-center rounded hover:bg-muted text-muted-foreground cursor-pointer"
@@ -330,11 +324,6 @@ export function SessionEditModal() {
                   copied={copiedField === 'cwd'}
                   onCopy={() => copyToClipboard('cwd', cwd)}
                 />
-              )}
-              {permissionMode && (
-                <DetailRow icon={<Shield className="h-3.5 w-3.5" />} label="Permissions">
-                  <span>{permissionMode}</span>
-                </DetailRow>
               )}
               <CopyRow
                 icon={<Hash className="h-3.5 w-3.5" />}
@@ -449,8 +438,8 @@ export function SessionEditModal() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirmAction === 'delete'
-                ? 'This will permanently delete this session and its Observe logs. Your original Claude session file is not modified.'
-                : 'This will remove all events recorded for this session. Your original Claude session file is not modified.'}
+                ? 'This will permanently delete this session and its Observe logs. Your original pi session file is not modified.'
+                : 'This will remove all events recorded for this session. Your original pi session file is not modified.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -484,14 +473,15 @@ export function SessionEditModal() {
 }
 
 /**
- * Per-subagent stats derived from `PostToolUse:Agent` events. Used as
- * the always-available baseline for the Agents table — augmented (but
- * not replaced) by transcript-stats data when that's available.
+ * Per-subagent stats derived from the result `details` of pi's spawning
+ * calls (`Agent` / `SubAgent` PostToolUse: input, output, durationMs,
+ * toolUses — pi-subagents-lite buildAgentDetails), falling back to the
+ * child's own SubagentStop totals. Used as the always-available baseline
+ * for the Agents table — augmented (but not replaced) by transcript-stats
+ * data when that's available.
  *
- * `inputTokens` here is the **bundled** total (fresh + cache_read +
- * cache_create) to match the convention the transcript-parser uses.
- * Events do not split cache_create into 5m vs 1h — that distinction
- * only exists in the jsonl transcript.
+ * pi's per-agent totals don't split out cache reads/writes, so those stay 0
+ * here and `inputTokens` is the lifetime input the tool reports.
  */
 export interface AgentTokenUsage {
   agentId: string
@@ -521,8 +511,6 @@ interface SessionStatsData {
   subagentsSpawned: number
   userPrompts: number
   gitCommits: number
-  permissionRequests: number
-  permissionDenials: number
   toolSuccessRate: string
   /** All tools sorted by count desc, with duration stats per tool. */
   tools: ToolStat[]
@@ -545,13 +533,15 @@ interface SessionStatsData {
   mainAgentToolCount: number
 }
 
+function num(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined
+}
+
 function computeStats(events: ParsedEvent[], sessionId: string): SessionStatsData {
   let toolCalls = 0
   let subagentsSpawned = 0
   let userPrompts = 0
   let gitCommits = 0
-  let permissionRequests = 0
-  let permissionDenials = 0
   let postToolUseCount = 0
   let postToolUseFailureCount = 0
   let turns = 0
@@ -584,18 +574,13 @@ function computeStats(events: ParsedEvent[], sessionId: string): SessionStatsDat
         preToolTimestamps.set(e.toolUseId, { tool, timestamp: e.timestamp, eventId: e.id })
       }
 
-      // Track files from tool inputs. Read tool → filesRead; Edit/Write → filesEdited.
-      // The generic filesSet keeps backward compat for any callers that still read it.
-      const input = e.payload as any
-      if (input?.tool_input) {
-        const ti = input.tool_input
-        if (typeof ti.file_path === 'string') {
-          filesSet.add(ti.file_path)
-          if (tool === 'Read') filesReadSet.add(ti.file_path)
-          if (tool === 'Edit' || tool === 'Write') filesEditedSet.add(ti.file_path)
-        }
-        if (typeof ti.path === 'string') filesSet.add(ti.path)
-        if (typeof ti.pattern === 'string' && ti.path) filesSet.add(ti.path)
+      // Files from pi tool inputs: read → filesRead; edit/write → filesEdited;
+      // grep/find/ls paths only count as touched.
+      const ti = (e.payload as any)?.tool_input
+      if (ti && typeof ti.path === 'string') {
+        filesSet.add(ti.path)
+        if (tool === 'read') filesReadSet.add(ti.path)
+        if (tool === 'edit' || tool === 'write') filesEditedSet.add(ti.path)
       }
     }
 
@@ -627,57 +612,80 @@ function computeStats(events: ParsedEvent[], sessionId: string): SessionStatsDat
     // Turns (prompt→stop cycles)
     if (e.subtype === 'Stop' || e.subtype === 'SessionEnd') turns++
 
-    // Permissions
-    if (e.subtype === 'PermissionRequest') permissionRequests++
-    if (e.subtype === 'PermissionDenied') permissionDenials++
-
     // Git commits
-    if (e.subtype === 'PreToolUse' && e.toolName === 'Bash') {
+    if (e.subtype === 'PreToolUse' && e.toolName === 'bash') {
       const cmd = (e.payload as any)?.tool_input?.command || ''
       if (/git\s+commit\b/.test(cmd)) gitCommits++
     }
   }
 
-  // Agent token usage from PostToolUse:Agent events
+  // Agent usage from pi's spawning calls. The child's id comes from the
+  // links events declare: SubagentStart.parent_tool_use_id, or a background
+  // call's spawned_agent_id.
   const agentUsage: AgentTokenUsage[] = []
   const totalTokens = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 }
-
+  const childByToolUse = new Map<string, string>()
+  const subagentStops = new Map<string, Record<string, any>>()
   for (const e of events) {
-    if (
-      (e.subtype === 'PostToolUse' || e.subtype === 'PostToolUseFailure') &&
-      e.toolName === 'Agent'
-    ) {
-      const resp = (e.payload as any)?.tool_response
-      if (!resp) continue
-
-      const usage = resp.usage
-      const input = usage?.input_tokens ?? 0
-      const output = usage?.output_tokens ?? 0
-      const cacheRead = usage?.cache_read_input_tokens ?? 0
-      const cacheCreation = usage?.cache_creation_input_tokens ?? 0
-
-      totalTokens.input += input
-      totalTokens.output += output
-      totalTokens.cacheRead += cacheRead
-      totalTokens.cacheCreation += cacheCreation
-
-      const toolInput = (e.payload as any)?.tool_input
-      // Bundled input matches the transcript-parser convention so the
-      // events-and-transcripts merge in TokenUsageSection compares like
-      // for like.
-      const bundledInput = input + cacheRead + cacheCreation
-      agentUsage.push({
-        agentId: resp.agentId || 'unknown',
-        agentType: typeof resp.agentType === 'string' ? resp.agentType : null,
-        description: toolInput?.description || resp.agentType || 'Agent',
-        inputTokens: bundledInput,
-        outputTokens: output,
-        cacheReadTokens: cacheRead,
-        cacheCreationTokens: cacheCreation,
-        totalDurationMs: resp.totalDurationMs ?? 0,
-        toolUseCount: resp.totalToolUseCount ?? 0,
-      })
+    const p = e.payload as Record<string, any>
+    if (e.subtype === 'SubagentStart' && typeof p.parent_tool_use_id === 'string') {
+      childByToolUse.set(p.parent_tool_use_id, e.agentId)
     }
+    if (typeof p.spawned_agent_id === 'string' && e.toolUseId) {
+      childByToolUse.set(e.toolUseId, p.spawned_agent_id)
+    }
+    if (e.subtype === 'SubagentStop') {
+      subagentStops.set(e.agentId, p)
+    }
+  }
+
+  const counted = new Set<string>()
+  for (const e of events) {
+    const isPost = e.subtype === 'PostToolUse' || e.subtype === 'PostToolUseFailure'
+    if (!isPost || (e.toolName !== 'Agent' && e.toolName !== 'SubAgent')) {
+      continue
+    }
+    const p = e.payload as Record<string, any>
+    const details = p.tool_response?.details ?? {}
+    const agentId = (e.toolUseId && childByToolUse.get(e.toolUseId)) || 'unknown'
+    const stop = subagentStops.get(agentId)
+    const input = num(details.input) ?? num(stop?.input_tokens) ?? 0
+    const output = num(details.output) ?? num(stop?.output_tokens) ?? 0
+    totalTokens.input += input
+    totalTokens.output += output
+    counted.add(agentId)
+    agentUsage.push({
+      agentId,
+      agentType: typeof details.type === 'string' ? details.type : (p.tool_input?.agent ?? null),
+      description: p.tool_input?.description || details.description || details.type || 'Agent',
+      inputTokens: input,
+      outputTokens: output,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalDurationMs: num(details.durationMs) ?? num(stop?.duration_ms) ?? 0,
+      toolUseCount: num(details.toolUses) ?? num(stop?.tool_uses) ?? 0,
+    })
+  }
+  // Background children settle after their call returned: take their own totals.
+  for (const [agentId, stop] of subagentStops) {
+    if (counted.has(agentId)) {
+      continue
+    }
+    const input = num(stop.input_tokens) ?? 0
+    const output = num(stop.output_tokens) ?? 0
+    totalTokens.input += input
+    totalTokens.output += output
+    agentUsage.push({
+      agentId,
+      agentType: typeof stop.agent_type === 'string' ? stop.agent_type : null,
+      description: stop.agent_description || stop.agent_type || 'Agent',
+      inputTokens: input,
+      outputTokens: output,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalDurationMs: num(stop.duration_ms) ?? 0,
+      toolUseCount: num(stop.tool_uses) ?? 0,
+    })
   }
 
   // Sort by duration desc — matches the events-only default sort in
@@ -720,8 +728,6 @@ function computeStats(events: ParsedEvent[], sessionId: string): SessionStatsDat
     subagentsSpawned,
     userPrompts,
     gitCommits,
-    permissionRequests,
-    permissionDenials,
     toolSuccessRate,
     tools,
     longestToolCall,
@@ -805,6 +811,10 @@ export function formatDuration(ms: number): string {
   return h === 0 ? `${d}d` : `${d}d ${h}h`
 }
 
+function isPromptEventSubtype(subtype: string | null): boolean {
+  return subtype === 'UserPromptSubmit'
+}
+
 function SessionStats({ sessionId }: { sessionId: string }) {
   const setEditingSessionId = useUIStore((s) => s.setEditingSessionId)
   const setScrollToEventId = useUIStore((s) => s.setScrollToEventId)
@@ -824,14 +834,14 @@ function SessionStats({ sessionId }: { sessionId: string }) {
 
   const agents = useAgents(sessionId, events)
 
-  // Set of prompt texts the plugin captured a UserPromptSubmit event
-  // for. Lets the prompts table render rows without a matching event
-  // (pre-plugin prompts on resumed sessions) as muted/non-clickable.
+  // Set of prompt texts the extension captured a prompt event for. Lets the
+  // prompts table render rows without a matching event (prompts from before
+  // the extension was loaded, on resumed sessions) as muted/non-clickable.
   const eventPromptTexts = useMemo(() => {
     const s = new Set<string>()
     if (!events) return s
     for (const e of events) {
-      if (e.subtype !== 'UserPromptSubmit') continue
+      if (!isPromptEventSubtype(e.subtype)) continue
       const p = (e.payload as any)?.prompt
       if (typeof p === 'string') s.add(p)
     }
@@ -858,6 +868,41 @@ function SessionStats({ sessionId }: { sessionId: string }) {
     refetchOnWindowFocus: false,
   })
   const transcript = transcriptResponse?.ok ? transcriptResponse.data : null
+
+  // Per-agent-class stats provider. pi's LLMGeneration events carry each
+  // request's usage and recorded cost, so when the transcript can't be read
+  // (disabled, --no-session, outside the pi homes, missing) the token tables
+  // are computed from events instead of disappearing.
+  const statsProvider = useMemo(() => {
+    const mainClass = agents.find((a) => a.id === sessionId)?.agentClass ?? null
+    return getAgentClass(mainClass).stats ?? null
+  }, [agents, sessionId])
+  const transcriptUnavailableReason =
+    health === undefined
+      ? null
+      : !transcriptStatsEnabled
+        ? ('disabled' as const)
+        : transcriptResponse && !transcriptResponse.ok
+          ? transcriptResponse.error
+          : null
+  const useEventStats = statsProvider !== null && transcriptUnavailableReason !== null
+  const pricingIds = useMemo(
+    () => (useEventStats && statsProvider && events ? statsProvider.modelIds(events) : []),
+    [useEventStats, statsProvider, events],
+  )
+  const { data: pricing } = useQuery({
+    queryKey: ['model-pricing', pricingIds],
+    queryFn: () => api.getModelPricing(pricingIds),
+    enabled: pricingIds.length > 0,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  })
+  const eventStats = useMemo(() => {
+    if (!useEventStats || !statsProvider || !events) {
+      return undefined
+    }
+    return statsProvider.computeTokenStats(events, sessionId, pricing ?? {})
+  }, [useEventStats, statsProvider, events, sessionId, pricing])
 
   const stats = useMemo(() => {
     if (!events) return null
@@ -887,9 +932,9 @@ function SessionStats({ sessionId }: { sessionId: string }) {
   const scrollToPrompt = useCallback(
     (promptText: string, promptTimestamp: number) => {
       if (!events) return
-      // Match by prompt text + closest timestamp. Falls back to text-only.
+      // Match by prompt text + closest timestamp.
       const ups = events.filter(
-        (e) => e.subtype === 'UserPromptSubmit' && (e.payload as any)?.prompt === promptText,
+        (e) => isPromptEventSubtype(e.subtype) && (e.payload as any)?.prompt === promptText,
       )
       if (ups.length === 0) return
       const closest = ups.reduce((best, e) =>
@@ -911,7 +956,7 @@ function SessionStats({ sessionId }: { sessionId: string }) {
     )
   }
 
-  // Overview preview: 6 cards. Expanded adds the rest + Permissions.
+  // Overview preview: 6 cards. Expanded adds the rest.
   const overviewPreview = (
     <div className="grid grid-cols-6 gap-2">
       <StatCard label="Duration" value={stats.duration} />
@@ -956,17 +1001,6 @@ function SessionStats({ sessionId }: { sessionId: string }) {
         <StatCard label="Files Read" value={stats.filesRead.toLocaleString()} />
         <StatCard label="Files Edited" value={stats.filesEdited.toLocaleString()} />
       </div>
-      {(stats.permissionRequests > 0 || stats.permissionDenials > 0) && (
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1.5">
-            Permissions
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <StatCard label="Requests" value={stats.permissionRequests.toLocaleString()} />
-            <StatCard label="Denials" value={stats.permissionDenials.toLocaleString()} />
-          </div>
-        </div>
-      )}
     </div>
   )
 
@@ -1102,6 +1136,8 @@ function SessionStats({ sessionId }: { sessionId: string }) {
         onAgentClick={scrollToAgent}
         onPromptClick={scrollToPrompt}
         eventPromptTexts={eventPromptTexts}
+        eventStats={eventStats}
+        eventStatsReason={transcriptUnavailableReason ?? undefined}
       />
     </div>
   )

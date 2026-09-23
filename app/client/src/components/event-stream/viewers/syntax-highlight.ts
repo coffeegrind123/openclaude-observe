@@ -1,6 +1,6 @@
 // Lightweight wrapper around highlight.js. Core-only import + selective language
 // registrations keeps the bundle small (~50kb gzipped) while covering what
-// Claude Code tools actually touch day-to-day.
+// pi's tools actually touch day-to-day.
 
 import hljs from 'highlight.js/lib/core'
 import bash from 'highlight.js/lib/languages/bash'

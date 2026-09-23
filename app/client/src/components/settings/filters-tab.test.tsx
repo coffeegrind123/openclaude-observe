@@ -60,7 +60,7 @@ const defaultAll: Filter = {
   pillName: 'All',
   display: 'primary',
   combinator: 'and',
-  patterns: [{ target: 'hook', regex: '^PostToolBatch$', negate: true }],
+  patterns: [{ target: 'hook', regex: '^SystemPrompt$', negate: true }],
   kind: 'default',
   enabled: true,
   config: { role: 'all-exclusions' },
@@ -128,7 +128,7 @@ describe('FiltersTab — All filter', () => {
   test('defaults new pattern rows to negate=true when editing default-all', () => {
     renderWithQuery(<FiltersTab />)
     fireEvent.click(screen.getAllByText('All')[0])
-    // Editor opens with one negated pattern (the PostToolBatch seed).
+    // Editor opens with one negated pattern (the SystemPrompt seed).
     // The `!` button visible next to a pattern's regex input indicates
     // it's negated.
     const negatedBefore = screen.queryAllByTitle(/Negated/i).length

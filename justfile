@@ -1,15 +1,15 @@
-# OpenClaude Observe
+# instantcoffee-observe
 # Usage: just <recipe>
 #
-# OPENCLAUDE_OBSERVE_SERVER_PORT & OPENCLAUDE_OBSERVE_DEV_CLIENT_PORT are read from .env
+# INSTANTCOFFEE_OBSERVE_SERVER_PORT & INSTANTCOFFEE_OBSERVE_DEV_CLIENT_PORT are read from .env
 # to override the defaults (4981 / 5174).
 
 set dotenv-load := true
 set export := true
 set quiet := true
 
-port := env("OPENCLAUDE_OBSERVE_SERVER_PORT", "4981")
-dev_client_port := env("OPENCLAUDE_OBSERVE_DEV_CLIENT_PORT", "5174")
+port := env("INSTANTCOFFEE_OBSERVE_SERVER_PORT", "4981")
+dev_client_port := env("INSTANTCOFFEE_OBSERVE_DEV_CLIENT_PORT", "5174")
 project_root := justfile_directory()
 server := project_root / "app" / "server"
 client := project_root / "app" / "client"
@@ -27,21 +27,21 @@ install:
 
 # Start server + client in dev mode (hot reload)
 dev:
-    OPENCLAUDE_OBSERVE_RUNTIME=dev OPENCLAUDE_OBSERVE_SHUTDOWN_DELAY_MS=${OPENCLAUDE_OBSERVE_SHUTDOWN_DELAY_MS:-0} node {{ project_root }}/start.mjs
+    INSTANTCOFFEE_OBSERVE_RUNTIME=dev node {{ project_root }}/start.mjs --skip-install
 
 # Start server locally without Docker (production-style)
 start-local:
-    OPENCLAUDE_OBSERVE_RUNTIME=local node {{ project_root }}/start.mjs
+    INSTANTCOFFEE_OBSERVE_RUNTIME=local node {{ project_root }}/start.mjs
 
 # ─── Docker ─────────────────────────────────────────────
 
 # Build the Docker image locally
 build:
-    docker build -t openclaude-observe:local .
+    docker build -t instantcoffee-observe:local .
 
 # Start server via docker compose
 start:
-    docker compose up -d openclaude-observe
+    docker compose up -d instantcoffee-observe
     @just open
 
 # Stop the docker compose stack
@@ -50,11 +50,11 @@ stop:
 
 # Restart the docker compose stack
 restart:
-    docker compose restart openclaude-observe
+    docker compose restart instantcoffee-observe
 
 # Follow docker container logs
 logs:
-    docker compose logs -f openclaude-observe
+    docker compose logs -f instantcoffee-observe
 
 # ─── Testing ────────────────────────────────────────────
 
@@ -62,9 +62,10 @@ logs:
 test:
     npm test
 
-# Run tests, format, and rebuild the client (run before every commit)
+# Run tests, typecheck the server, format, and rebuild the client (run before every commit)
 check:
     npm test
+    cd app/server && npm run typecheck
     npm run fmt
     cd app/client && npm install && npm run build
 

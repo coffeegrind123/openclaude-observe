@@ -814,7 +814,7 @@ interface LivePreviewPattern {
 }
 
 // Cap on the rendered payload text so a multi-MB event can't lock the
-// browser. 32KB is comfortably more than any real Claude Code event we
+// browser. 32KB is comfortably more than any real pi event we
 // see, while still bounding the worst case for Range construction.
 const MAX_PREVIEW_TEXT = 32_000
 

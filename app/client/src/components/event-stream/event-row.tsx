@@ -1,8 +1,7 @@
 import { memo } from 'react'
 import { cn } from '@/lib/utils'
 import { getEventIcon, getEventColor } from '@/config/event-icons'
-import { getEventSummary } from '@/lib/event-summary'
-import { classifyChatEvent } from '@/lib/chat-events'
+import { agentClassFor } from '@/agents/registry'
 import { getAgentColorById, getAgentStreamColorById, getAgentDisplayName } from '@/lib/agent-utils'
 import { AgentLabel } from '@/components/shared/agent-label'
 import { useUIStore } from '@/stores/ui-store'
@@ -10,21 +9,21 @@ import { EventDetail } from './event-detail'
 import { ContextBadge } from './context-badge'
 import { useTimestampTooltip } from './timestamp-tooltip'
 import { formatRuntime } from '@/lib/runtime'
-import { Check, X, Loader } from 'lucide-react'
+import { Check, X, Loader, CornerDownRight } from 'lucide-react'
 import type { ParsedEvent, Agent } from '@/types'
+import type { RowBadge, SpawnInfo } from '@/agents/types'
 import type { PairedPayloads } from '@/hooks/use-deduped-events'
-
-export interface SpawnInfo {
-  description?: string
-  prompt?: string
-}
 
 interface EventRowProps {
   event: ParsedEvent
   agentMap: Map<string, Agent>
   agentColorMap: Map<string, number>
   showAgentLabel: boolean
+  /** For an event of a subagent: how that subagent was spawned. */
   spawnInfo?: SpawnInfo
+  /** For a spawning tool row: the subagent it spawned. */
+  spawnedAgentId?: string | null
+  spawnedInfo?: SpawnInfo
   pairedPayloads?: PairedPayloads
   runtimeMs?: number | null
 }
@@ -40,81 +39,11 @@ function formatTime(ts: number): string {
   })
 }
 
-// Friendly display labels for subtypes
-const LABEL_MAP: Record<string, string> = {
-  UserPromptSubmit: 'Prompt',
-  stop_hook_summary: 'Stop',
-  StopFailure: 'Error',
-  SubagentStart: 'SubStart',
-  SubagentStop: 'SubStop',
-  SessionStart: 'Session',
-  SessionEnd: 'Session',
-  PostToolUseFailure: 'ToolErr',
-  PermissionRequest: 'Permit',
-  TaskCreated: 'Task',
-  TaskCompleted: 'Task',
-  TeammateIdle: 'Team',
-  InstructionsLoaded: 'Config',
-  ConfigChange: 'Config',
-  CwdChanged: 'CwdChg',
-  FileChanged: 'FileChg',
-  PreCompact: 'Compact',
-  PostCompact: 'Compact',
-  Elicitation: 'MCP',
-  ElicitationResult: 'MCP',
-  WorktreeCreate: 'Worktree',
-  WorktreeRemove: 'Worktree',
-  LLMGeneration: 'LLM',
-  DaemonStart: 'Start',
-  DaemonStop: 'Stop',
-  DaemonHeartbeat: 'Beat',
-  PipeRoleAssigned: 'PipeRole',
-  PipeAttach: 'Attach',
-  PipeDetach: 'Detach',
-  PipePromptRouted: 'Route',
-  PipePermissionForward: 'PipePerm',
-  PipeLanPeerDiscovered: 'LANPeer',
-  CoordinatorDispatch: 'Dispatch',
-  CoordinatorResult: 'Result',
-  BridgeConnected: 'Connect',
-  BridgeDisconnected: 'Disconn',
-  BridgeWorkReceived: 'BrgWork',
-  SuperModeToggle: 'Super',
-  CompactionRun: 'Compact',
-  CostUpdate: 'Cost',
-  ToolBatch: 'Batch',
-  PermissionDenied: 'Denied',
-}
-
-function formatTokens(n: unknown): string {
-  if (typeof n !== 'number' || n === 0) return '0'
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
-  return String(n)
-}
-
-function llmSummary(payload: Record<string, unknown>): string | null {
-  // Prefer the upstream-reported model (e.g. glm-4.6 when z.ai re-routes
-  // claude-sonnet-4-6) over the request model so the row label matches
-  // what actually ran.
-  const model =
-    (payload.actual_model as string | undefined) ?? (payload.model as string | undefined)
-  const inputTokens = payload.input_tokens as number | undefined
-  const outputTokens = payload.output_tokens as number | undefined
-  const cacheRead = payload.cache_read_tokens as number | undefined
-  const durationMs = payload.duration_ms as number | undefined
-  if (!model && inputTokens == null) return null
-  const parts: string[] = []
-  if (model) parts.push(model)
-  const tokenParts: string[] = []
-  if (inputTokens != null) tokenParts.push(`in:${formatTokens(inputTokens)}`)
-  if (outputTokens != null) tokenParts.push(`out:${formatTokens(outputTokens)}`)
-  if (cacheRead != null && inputTokens != null && cacheRead + inputTokens > 0) {
-    const pct = Math.round((cacheRead / (cacheRead + inputTokens)) * 100)
-    tokenParts.push(`cache:${pct}%`)
-  }
-  if (tokenParts.length) parts.push(tokenParts.join(' '))
-  if (durationMs != null) parts.push(`${(durationMs / 1000).toFixed(1)}s`)
-  return parts.join(' · ')
+const BADGE_CLASSES: Record<RowBadge['tone'], string> = {
+  accent: 'bg-primary/15 text-primary',
+  warn: 'bg-amber-500/20 text-amber-700 dark:text-amber-400',
+  fail: 'bg-red-500/15 text-red-700 dark:text-red-400',
+  muted: 'bg-muted text-muted-foreground',
 }
 
 // Spine geometry — must match the spine line + container padding in
@@ -129,6 +58,8 @@ export const EventRow = memo(function EventRow({
   agentColorMap,
   showAgentLabel,
   spawnInfo,
+  spawnedAgentId,
+  spawnedInfo,
   pairedPayloads,
   runtimeMs,
 }: EventRowProps) {
@@ -136,6 +67,7 @@ export const EventRow = memo(function EventRow({
   const isExpanded = useUIStore((s) => s.expandedEventIds.has(event.id))
   const isSelected = useUIStore((s) => s.selectedEventId === event.id)
   const isFlashing = useUIStore((s) => s.flashingEventId === event.id)
+  const mergeToolEvents = useUIStore((s) => s.mergeToolEvents)
   const toggleExpandedEvent = useUIStore((s) => s.toggleExpandedEvent)
   const setSelectedEventId = useUIStore((s) => s.setSelectedEventId)
   const { show: showTimestampTooltip, hide: hideTimestampTooltip } = useTimestampTooltip()
@@ -143,39 +75,34 @@ export const EventRow = memo(function EventRow({
   const agent = agentMap.get(event.agentId)
   const isSubagent = agent?.parentAgentId != null
   const parentAgent = agent?.parentAgentId ? agentMap.get(agent.parentAgentId) : null
-  const Icon = getEventIcon(event.subtype, event.toolName)
-  const { iconColor, customHex } = getEventColor(event.subtype, event.toolName)
+  const cls = agentClassFor(event, agent)
+  const iconId = cls.iconId(event)
+  const Icon = getEventIcon(iconId)
+  const { iconColor, customHex } = getEventColor(iconId)
 
-  const isTool =
-    event.subtype === 'PreToolUse' ||
-    event.subtype === 'PostToolUse' ||
-    event.subtype === 'PostToolUseFailure'
-  const isFailure = event.subtype === 'PostToolUseFailure' || event.status === 'failed'
+  const toolLabel = cls.toolLabel(event)
+  const isTool = toolLabel != null
+  const isFailure = cls.isFailure(event)
   const isCompleted = event.status === 'completed'
-  const isPending = event.status === 'pending' || event.status === 'running'
-  const showStatus = isFailure || isCompleted || isPending
+  // Only tool rows have a lifecycle; other events are instantaneous.
+  const isPending = isTool && (event.status === 'pending' || event.status === 'running')
+  const showStatus = isFailure || (isTool && (isCompleted || isPending))
 
   const isLLM = event.subtype === 'LLMGeneration'
   const isPrompt = event.subtype === 'UserPromptSubmit'
 
-  const rawLabel = isTool ? 'Tool' : event.subtype || event.type
-  const displayLabel = LABEL_MAP[rawLabel] || rawLabel
-  const displaySummary = getEventSummary(event)
+  // Unmerged, a call's Pre and Post are separate rows: label each with its
+  // hook name so the pair reads as two events, not a duplicated call.
+  const displayLabel =
+    !mergeToolEvents && isTool && event.subtype ? event.subtype : cls.label(event)
+  const displaySummary = cls.summary(event)
+  const proseText = cls.prose(event)
+  const badges = cls.badges(event)
 
-  // Human-voice prose pulled into the river so the "talk" lens reads as a
-  // conversation. Skip the Stop family's last_assistant_message — it would
-  // duplicate the LLM row's response_preview shown just above it.
-  const chatMsg = classifyChatEvent(event)
-  let proseText: string | null = null
-  if (chatMsg) {
-    if (chatMsg.kind === 'user') proseText = chatMsg.text
-    else if (chatMsg.kind === 'assistant' && isLLM) proseText = chatMsg.text || null
-    else if (chatMsg.kind === 'subagent-start')
-      proseText = chatMsg.prompt || chatMsg.description || null
-    else if (chatMsg.kind === 'subagent-stop') proseText = chatMsg.text || null
-    else if (chatMsg.kind === 'task') proseText = chatMsg.description || null
-    else if (chatMsg.kind === 'status') proseText = chatMsg.reason || null
-  }
+  const spawnedAgent = spawnedAgentId ? agentMap.get(spawnedAgentId) : undefined
+  const spawnedName = spawnedAgent
+    ? getAgentDisplayName(spawnedAgent)
+    : (spawnedInfo?.agentName ?? spawnedAgentId?.slice(0, 8))
 
   // Agent identity color (main = brand blue; subagents = muted hues). The
   // bead, the agent name, and the subagent rail all key off this.
@@ -285,7 +212,7 @@ export const EventRow = memo(function EventRow({
             )}
 
             {isPrompt ? (
-              <span className="shrink-0 font-semibold text-ink-2">you</span>
+              <span className="shrink-0 font-semibold text-ink-2">{displayLabel}</span>
             ) : (
               <>
                 <Icon
@@ -313,29 +240,49 @@ export const EventRow = memo(function EventRow({
               </span>
             )}
 
-            {isTool && event.toolName && (
+            {isTool && (
               <span
-                className={cn(
-                  'shrink-0 font-semibold',
-                  event.toolName.startsWith('mcp__') ? 'text-a-slate' : 'text-primary',
-                )}
+                className={cn('shrink-0 font-semibold', isFailure ? 'text-fail' : 'text-primary')}
               >
-                {event.toolName.startsWith('mcp__') ? 'MCP' : event.toolName}
+                {toolLabel}
+              </span>
+            )}
+
+            {badges.map((b) => (
+              <span
+                key={b.text}
+                className={cn('shrink-0 rounded px-1 text-[10px]', BADGE_CLASSES[b.tone])}
+                title={b.title}
+              >
+                {b.text}
+              </span>
+            ))}
+
+            {spawnedAgentId && (
+              <span
+                className="flex shrink-0 items-center gap-0.5 text-[10.5px] text-a-plum"
+                title={`Spawned ${spawnedAgentId}`}
+                data-testid="spawned-agent"
+              >
+                <CornerDownRight className="h-3 w-3" />
+                {spawnedName}
               </span>
             )}
 
             {!isPrompt &&
               (isLLM ? (
                 <>
-                  <span className="min-w-0 flex-1 truncate text-ink-2">
-                    {llmSummary(event.payload) || displaySummary}
-                  </span>
+                  <span className="min-w-0 flex-1 truncate text-ink-2">{displaySummary}</span>
                   <span
                     className="shrink-0"
                     onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
                   >
-                    <ContextBadge sessionId={event.sessionId} llmEventId={event.id} />
+                    <ContextBadge
+                      sessionId={event.sessionId}
+                      agentId={event.agentId}
+                      llmEventId={event.id}
+                    />
                   </span>
                 </>
               ) : (
@@ -352,7 +299,7 @@ export const EventRow = memo(function EventRow({
             <div
               className={cn(
                 'mt-1 line-clamp-4 max-w-[64ch] text-[13px] leading-snug break-words whitespace-pre-wrap',
-                isPrompt ? 'text-foreground' : 'text-foreground/90',
+                isPrompt ? 'text-foreground' : isFailure ? 'text-fail' : 'text-foreground/90',
               )}
             >
               {proseText}
@@ -367,6 +314,8 @@ export const EventRow = memo(function EventRow({
             event={event}
             agentMap={agentMap}
             spawnInfo={spawnInfo}
+            spawnedAgentId={spawnedAgentId}
+            spawnedInfo={spawnedInfo}
             pairedPayloads={pairedPayloads}
             runtimeMs={runtimeMs}
           />

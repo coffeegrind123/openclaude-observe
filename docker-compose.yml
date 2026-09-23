@@ -1,48 +1,69 @@
-# Docker Compose config for OpenClaude Observe
-# Start with `docker compose up openclaude-observe` (or `just start`).
+# Docker Compose config for instantcoffee-observe
+# Start with `docker compose up instantcoffee-observe` (or `just start`).
 # For local dev with hot reload, use `just dev` instead.
 #
+# Docker Desktop on WSL: bind-mount SOURCES must be the Windows-side path
+# (//c/...), not a WSL path — a WSL source silently mounts an empty view. Set
+# the *_HOST variables below in .env accordingly.
 services:
-  openclaude-observe:
+  instantcoffee-observe:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: openclaude-observe
+    container_name: instantcoffee-observe
+    # The server polls llama-server and forge on the host (see
+    # INSTANTCOFFEE_OBSERVE_LLAMA_URL). Docker Desktop provides this name;
+    # plain Docker on Linux needs the explicit host-gateway mapping.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      OPENCLAUDE_OBSERVE_SERVER_PORT: "${OPENCLAUDE_OBSERVE_SERVER_PORT:-4981}"
-      OPENCLAUDE_OBSERVE_DB_PATH: /data/observe.db
-      OPENCLAUDE_OBSERVE_CLIENT_DIST_PATH: /app/client/dist
-      OPENCLAUDE_OBSERVE_LOG_LEVEL: "${OPENCLAUDE_OBSERVE_LOG_LEVEL:-debug}"
-      OPENCLAUDE_OBSERVE_RUNTIME: docker
+      INSTANTCOFFEE_OBSERVE_SERVER_PORT: "${INSTANTCOFFEE_OBSERVE_SERVER_PORT:-4981}"
+      INSTANTCOFFEE_OBSERVE_DB_PATH: /data/observe.db
+      # Host side of the /data bind mount, so the dashboard shows a path the
+      # user can open instead of /data/observe.db. Compose doesn't resolve
+      # relative paths inside env values, hence ${PWD} for the default.
+      INSTANTCOFFEE_OBSERVE_HOST_DB_PATH: "${INSTANTCOFFEE_OBSERVE_HOST_DB_PATH:-${INSTANTCOFFEE_OBSERVE_DATA_DIR:-${PWD}/data}/observe.db}"
+      INSTANTCOFFEE_OBSERVE_CLIENT_DIST_PATH: /app/client/dist
+      INSTANTCOFFEE_OBSERVE_LOG_LEVEL: "${INSTANTCOFFEE_OBSERVE_LOG_LEVEL:-debug}"
+      INSTANTCOFFEE_OBSERVE_RUNTIME: docker
       # Bind to all interfaces inside the container so Docker's published
       # port can reach the server. The container network namespace is the
       # boundary here; the default 'localhost' bind is only listenable from
       # inside the container and yields ERR_EMPTY_RESPONSE on the host.
-      OPENCLAUDE_OBSERVE_SERVER_HOST: "${OPENCLAUDE_OBSERVE_SERVER_HOST:-0.0.0.0}"
-      # Transcript token stats. On-demand parse of ~/.claude/projects JSONL
-      # transcripts for per-prompt / per-model token + cost breakdowns.
-      # Set OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS=0 to disable. The host base is
-      # translated to the in-container mount path below; transcript_path
-      # values stored in the DB are always host paths.
-      OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS: "${OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS:-1}"
-      OPENCLAUDE_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE: "${OPENCLAUDE_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE:-${HOME}/.claude/projects}"
-      OPENCLAUDE_OBSERVE_TRANSCRIPT_CLAUDE_CONTAINER_BASE: /host/.claude/projects
-      # Interactive memory browser/editor. Reads AND WRITES OpenClaude's
-      # file-based memory under ~/.claude. The host config dir is bind-mounted
-      # read-write below; the container base mirrors that mount point.
-      # Set OPENCLAUDE_OBSERVE_MEMORY=0 to disable the feature + drop the mount.
-      OPENCLAUDE_OBSERVE_MEMORY: "${OPENCLAUDE_OBSERVE_MEMORY:-1}"
-      OPENCLAUDE_OBSERVE_MEMORY_CLAUDE_HOST_BASE: "${OPENCLAUDE_OBSERVE_MEMORY_CLAUDE_HOST_BASE:-${HOME}/.claude}"
-      OPENCLAUDE_OBSERVE_MEMORY_CLAUDE_CONTAINER_BASE: /host-rw/.claude
+      INSTANTCOFFEE_OBSERVE_SERVER_HOST: "${INSTANTCOFFEE_OBSERVE_SERVER_HOST:-0.0.0.0}"
+      INSTANTCOFFEE_OBSERVE_CORS_ORIGINS: "${INSTANTCOFFEE_OBSERVE_CORS_ORIGINS:-}"
+      INSTANTCOFFEE_OBSERVE_NOTIFICATION_ON_EVENTS: "${INSTANTCOFFEE_OBSERVE_NOTIFICATION_ON_EVENTS:-Notification}"
+      # pi homes, each mounted below at the SAME absolute path pi uses, so the
+      # transcript_path and cwd values pi reports resolve here unchanged:
+      # the host pi's home, and instantcoffee's containerised pi's home
+      # (scripts/pi-container.sh gives it its own, /home/piuser).
+      INSTANTCOFFEE_OBSERVE_PI_HOMES: "${INSTANTCOFFEE_OBSERVE_PI_HOME:-${HOME}},${INSTANTCOFFEE_OBSERVE_PI_CONTAINER_HOME:-/home/piuser}"
+      # Session stats parsed on demand from pi's JSONL transcripts. 0 disables.
+      INSTANTCOFFEE_OBSERVE_TRANSCRIPT_STATS: "${INSTANTCOFFEE_OBSERVE_TRANSCRIPT_STATS:-1}"
+      # Instructions browser/editor for pi's context files and subagent
+      # definitions. It WRITES through the read-write home mounts below.
+      INSTANTCOFFEE_OBSERVE_INSTRUCTIONS: "${INSTANTCOFFEE_OBSERVE_INSTRUCTIONS:-1}"
+      # Inference-stack metrics: llama-server /metrics and forge /forge/usage.
+      INSTANTCOFFEE_OBSERVE_LLAMA_URL: "${INSTANTCOFFEE_OBSERVE_LLAMA_URL:-http://host.docker.internal:8080}"
+      INSTANTCOFFEE_OBSERVE_FORGE_URL: "${INSTANTCOFFEE_OBSERVE_FORGE_URL:-http://host.docker.internal:8081}"
+      INSTANTCOFFEE_OBSERVE_STACK_POLL_MS: "${INSTANTCOFFEE_OBSERVE_STACK_POLL_MS:-5000}"
+    # Publish on host loopback only: the dashboard, API and WebSocket are
+    # unauthenticated. Set INSTANTCOFFEE_OBSERVE_BIND=0.0.0.0 for LAN access.
     ports:
-      - "${OPENCLAUDE_OBSERVE_SERVER_PORT:-4981}:${OPENCLAUDE_OBSERVE_SERVER_PORT:-4981}"
+      - "${INSTANTCOFFEE_OBSERVE_BIND:-127.0.0.1}:${INSTANTCOFFEE_OBSERVE_SERVER_PORT:-4981}:${INSTANTCOFFEE_OBSERVE_SERVER_PORT:-4981}"
+    # Mount options. Default `rw` changes nothing (Docker Desktop, macOS,
+    # non-SELinux Linux). On SELinux hosts (Fedora/RHEL/openSUSE) the confined
+    # container can't open host-labelled files — SQLITE_CANTOPEN on startup,
+    # no sessions/instructions — so set the options to `rw,z` (shared relabel;
+    # never `Z`, the host uses these dirs too). The data dir and the pi homes
+    # are separate because `z` on a home RECURSIVELY relabels the whole home.
     volumes:
-      - ${OPENCLAUDE_OBSERVE_DATA_DIR:-./data}:/data
-      # Read-only mount of the host's Claude transcripts so the server can
-      # parse them for the Token Usage stats panel.
-      - ${OPENCLAUDE_OBSERVE_TRANSCRIPT_CLAUDE_HOST_BASE:-${HOME}/.claude/projects}:/host/.claude/projects:ro
-      # Read-WRITE mount of the host's Claude config dir so the Memory browser
-      # can view and EDIT OpenClaude's memory files. Distinct from the
-      # read-only transcript mount above — same host tree, separate mount with
-      # write access scoped to the memory feature's path guards.
-      - ${OPENCLAUDE_OBSERVE_MEMORY_CLAUDE_HOST_BASE:-${HOME}/.claude}:/host-rw/.claude
+      - ${INSTANTCOFFEE_OBSERVE_DATA_DIR:-./data}:/data:${INSTANTCOFFEE_OBSERVE_DATA_MOUNT_OPTS:-rw}
+      # The host pi's home: its .pi/agent (sessions, AGENTS.md, agents/) and
+      # the projects pi works in, whose AGENTS.md the Instructions editor can
+      # edit. Read-write for that editor; every write is confined by the
+      # server's allowlist of instruction-file paths.
+      - ${INSTANTCOFFEE_OBSERVE_PI_HOME_HOST:-${HOME}}:${INSTANTCOFFEE_OBSERVE_PI_HOME:-${HOME}}:${INSTANTCOFFEE_OBSERVE_PI_HOME_MOUNT_OPTS:-rw}
+      # The containerised pi's home. Without a host path configured this is an
+      # empty placeholder directory, which the server treats as "no sessions".
+      - ${INSTANTCOFFEE_OBSERVE_PI_CONTAINER_HOME_HOST:-./data/pi-container-home}:${INSTANTCOFFEE_OBSERVE_PI_CONTAINER_HOME:-/home/piuser}:${INSTANTCOFFEE_OBSERVE_PI_HOME_MOUNT_OPTS:-rw}

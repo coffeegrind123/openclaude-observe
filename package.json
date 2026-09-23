@@ -1,10 +1,10 @@
 {
-  "name": "openclaude-observe",
+  "name": "instantcoffee-observe",
   "version": "06.06.2026",
-  "description": "Real-time observability dashboard for OpenClaude",
+  "description": "Real-time observability dashboard for instantcoffee: pi sessions, subagents, and the llama.cpp/forge inference stack",
   "license": "MIT",
-  "repository": "https://github.com/coffeegrind123/openclaude-observe",
-  "homepage": "https://github.com/coffeegrind123/openclaude-observe",
+  "repository": "https://github.com/coffeegrind123/instantcoffee-observe",
+  "homepage": "https://github.com/coffeegrind123/instantcoffee-observe",
   "private": true,
   "scripts": {
     "start": "node start.mjs",

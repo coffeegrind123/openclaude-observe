@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useUIStore } from '@/stores/ui-store'
-import { ACTIVITY_CONFIG } from '@/config/activity'
 
 /**
- * Returns true for `pulseDurationMs` after the given session last received
- * an activity ping from the server, then flips back to false.
+ * Returns true for the user-configured duration (Settings → Display →
+ * Sidebar) after the given session last received an activity ping from the
+ * server, then flips back to false. Never true while the indicator is off.
  *
  * The pulse counter lives in ui-store and is incremented by the WS handler
  * on every `{ type: 'activity' }` message. We read it here, track changes
@@ -16,9 +16,20 @@ export function useSessionPulseActive(sessionId: string): boolean {
 }
 
 /**
+ * Project-scoped variant. Pulses whenever any session in the project
+ * pulses, read from the `projectPulses` counter the WS handler bumps
+ * alongside `sessionPulses` — no need for the project's session list.
+ */
+export function useProjectPulseActive(projectId: number | null | undefined): boolean {
+  const pulseCount = useUIStore((s) => (projectId != null ? (s.projectPulses[projectId] ?? 0) : 0))
+  return usePulseTimer(pulseCount)
+}
+
+/**
  * Variant that aggregates a set of session pulse counters into a single
- * value, so any child pulse re-triggers the timer. Used for the project
- * rollup — pulses any time any of its child sessions pulses.
+ * value, so any child pulse re-triggers the timer. For callers that
+ * already hold the session-id list; prefer `useProjectPulseActive` for
+ * project rollups.
  */
 export function useAggregatePulseActive(sessionIds: string[]): boolean {
   const sum = useUIStore((s) => {
@@ -30,6 +41,8 @@ export function useAggregatePulseActive(sessionIds: string[]): boolean {
 }
 
 function usePulseTimer(counter: number): boolean {
+  const enabled = useUIStore((s) => s.activeIndicatorEnabled)
+  const durationMs = useUIStore((s) => s.activeIndicatorSeconds) * 1000
   const prevRef = useRef(counter)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [active, setActive] = useState(false)
@@ -41,13 +54,16 @@ function usePulseTimer(counter: number): boolean {
     // so on subsequent renders any change means a real new ping.
     if (counter === prevRef.current) return
     prevRef.current = counter
+    if (!enabled) {
+      return
+    }
     setActive(true)
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       setActive(false)
       timerRef.current = null
-    }, ACTIVITY_CONFIG.pulseDurationMs)
-  }, [counter])
+    }, durationMs)
+  }, [counter, enabled, durationMs])
 
   useEffect(() => {
     return () => {
@@ -55,5 +71,6 @@ function usePulseTimer(counter: number): boolean {
     }
   }, [])
 
-  return active
+  // Disabling mid-pulse drops the indicator immediately.
+  return enabled ? active : false
 }

@@ -1,4 +1,4 @@
-# Contributing to OpenClaude Observe
+# Contributing to instantcoffee-observe
 
 Thanks for your interest in contributing!
 
@@ -21,11 +21,9 @@ Thanks for your interest in contributing!
 
 ## Architecture
 
-OpenClaude Observe receives events via two in-process paths:
-- **Hook forwarding** — OpenClaude's `forwardHookToObserve()` POSTs every hook event to `/api/events`
-- **OTel tracing** — `ClaudeObserveExporter` sends LLMGeneration and multi-instance spans
-
-No Claude Code plugin, no hook scripts, no MCP server.
+instantcoffee-observe has two inputs:
+- **pi events** — instantcoffee's pi extension (`.pi/extensions/observe/`) POSTs each session event to `/api/events`. It links subagents to the call that spawned them itself; the contract is [docs/pi-protocol.md](docs/pi-protocol.md), and both sides test against the same real captured session.
+- **Stack metrics** — the server polls llama-server `/metrics` and forge `/forge/usage` (`app/server/src/services/stack-metrics.ts`).
 
 ## Development
 

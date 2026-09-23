@@ -34,12 +34,12 @@ const baseRaw = {
 
 describe('applyFilters', () => {
   test('returns empty when no compiled filters', () => {
-    expect(applyFilters(baseRaw, 'Bash', [])).toEqual({ primary: [], secondary: [] })
+    expect(applyFilters(baseRaw, 'bash', [])).toEqual({ primary: [], secondary: [] })
   })
 
   test('hook-target match emits a primary pill', () => {
     const f = compile({ name: 'Hook', patterns: [{ target: 'hook', regex: '^PostToolUse$' }] })
-    expect(applyFilters(baseRaw, 'Bash', [f])).toEqual({ primary: ['Hook'], secondary: [] })
+    expect(applyFilters(baseRaw, 'bash', [f])).toEqual({ primary: ['Hook'], secondary: [] })
   })
 
   test('AND combinator requires all patterns', () => {
@@ -48,12 +48,12 @@ describe('applyFilters', () => {
       combinator: 'and',
       patterns: [
         { target: 'hook', regex: '^PostToolUse$' },
-        { target: 'tool', regex: '^Read$' },
+        { target: 'tool', regex: '^read$' },
       ],
     })
-    // toolName=Bash; second pattern fails
-    expect(applyFilters(baseRaw, 'Bash', [f]).primary).toEqual([])
-    expect(applyFilters(baseRaw, 'Read', [f]).primary).toEqual(['AndCase'])
+    // toolName=bash; second pattern fails
+    expect(applyFilters(baseRaw, 'bash', [f]).primary).toEqual([])
+    expect(applyFilters(baseRaw, 'read', [f]).primary).toEqual(['AndCase'])
   })
 
   test('OR combinator passes on first match', () => {
@@ -62,16 +62,16 @@ describe('applyFilters', () => {
       combinator: 'or',
       patterns: [
         { target: 'hook', regex: '^Nope$' },
-        { target: 'tool', regex: '^Bash$' },
+        { target: 'tool', regex: '^bash$' },
       ],
     })
-    expect(applyFilters(baseRaw, 'Bash', [f]).primary).toEqual(['OrCase'])
+    expect(applyFilters(baseRaw, 'bash', [f]).primary).toEqual(['OrCase'])
   })
 
   test('payload-target triggers JSON.stringify once and is reused', () => {
     const f1 = compile({ name: 'Cmd', patterns: [{ target: 'payload', regex: 'ls' }] })
     const f2 = compile({ name: 'Cmd2', patterns: [{ target: 'payload', regex: 'tool_input' }] })
-    const out = applyFilters(baseRaw, 'Bash', [f1, f2])
+    const out = applyFilters(baseRaw, 'bash', [f1, f2])
     expect(out.primary.sort()).toEqual(['Cmd', 'Cmd2'])
   })
 
@@ -79,7 +79,7 @@ describe('applyFilters', () => {
     const spy = vi.spyOn(JSON, 'stringify')
     const f = compile({ name: 'Hook', patterns: [{ target: 'hook', regex: '.' }] })
     const before = spy.mock.calls.length
-    applyFilters(baseRaw, 'Bash', [f])
+    applyFilters(baseRaw, 'bash', [f])
     const after = spy.mock.calls.length
     expect(after).toBe(before)
     spy.mockRestore()
@@ -92,8 +92,8 @@ describe('applyFilters', () => {
       display: 'secondary',
       patterns: [{ target: 'hook', regex: '^PostToolUse$' }],
     })
-    expect(applyFilters(baseRaw, 'Bash', [f])).toEqual({ primary: [], secondary: ['Bash'] })
-    expect(applyFilters(baseRaw, 'Read', [f])).toEqual({ primary: [], secondary: ['Read'] })
+    expect(applyFilters(baseRaw, 'bash', [f])).toEqual({ primary: [], secondary: ['bash'] })
+    expect(applyFilters(baseRaw, 'read', [f])).toEqual({ primary: [], secondary: ['read'] })
   })
 
   test('filter is skipped when pillName variable is null', () => {
@@ -102,17 +102,18 @@ describe('applyFilters', () => {
       pillName: '{bashCommand}',
       patterns: [{ target: 'hook', regex: '^PostToolUse$' }],
     })
-    expect(applyFilters({ ...baseRaw, payload: {} }, 'Read', [f]).primary).toEqual([])
+    expect(applyFilters({ ...baseRaw, payload: {} }, 'read', [f]).primary).toEqual([])
   })
 
-  test('bashCommand variable resolves only when toolName is Bash', () => {
+  test('bashCommand variable resolves only when toolName is bash', () => {
     const f = compile({
       name: 'Cmd',
       pillName: '{bashCommand}',
       display: 'secondary',
-      patterns: [{ target: 'tool', regex: '^Bash$' }],
+      patterns: [{ target: 'tool', regex: '^bash$' }],
     })
-    expect(applyFilters(baseRaw, 'Bash', [f])).toEqual({ primary: [], secondary: ['ls'] })
+    expect(applyFilters(baseRaw, 'bash', [f])).toEqual({ primary: [], secondary: ['ls'] })
+    expect(applyFilters(baseRaw, 'read', [f])).toEqual({ primary: [], secondary: [] })
   })
 
   test('bashCommand strips arguments and resolves to the leading binary', () => {
@@ -120,7 +121,7 @@ describe('applyFilters', () => {
       name: 'Cmd',
       pillName: '{bashCommand}',
       display: 'secondary',
-      patterns: [{ target: 'tool', regex: '^Bash$' }],
+      patterns: [{ target: 'tool', regex: '^bash$' }],
     })
     const cases: { command: string; expected: string }[] = [
       { command: 'ls -la foo', expected: 'ls' },
@@ -136,7 +137,7 @@ describe('applyFilters', () => {
     ]
     for (const { command, expected } of cases) {
       const raw = { ...baseRaw, payload: { tool_input: { command } } }
-      expect(applyFilters(raw, 'Bash', [f]).secondary).toEqual([expected])
+      expect(applyFilters(raw, 'bash', [f]).secondary).toEqual([expected])
     }
   })
 
@@ -145,7 +146,7 @@ describe('applyFilters', () => {
       name: 'Cmd',
       pillName: '{bashCommand}',
       display: 'secondary',
-      patterns: [{ target: 'tool', regex: '^Bash$' }],
+      patterns: [{ target: 'tool', regex: '^bash$' }],
     })
     const cases: { command: string; expected: string }[] = [
       // The example from the screenshot: var=value; cmd …
@@ -155,7 +156,7 @@ describe('applyFilters', () => {
     ]
     for (const { command, expected } of cases) {
       const raw = { ...baseRaw, payload: { tool_input: { command } } }
-      expect(applyFilters(raw, 'Bash', [f]).secondary).toEqual([expected])
+      expect(applyFilters(raw, 'bash', [f]).secondary).toEqual([expected])
     }
   })
 
@@ -168,7 +169,7 @@ describe('applyFilters', () => {
       name: 'Cmd',
       pillName: '{bashCommand}',
       display: 'secondary',
-      patterns: [{ target: 'tool', regex: '^Bash$' }],
+      patterns: [{ target: 'tool', regex: '^bash$' }],
     })
     const noPillCases = [
       '', // empty
@@ -184,7 +185,7 @@ describe('applyFilters', () => {
     ]
     for (const command of noPillCases) {
       const raw = { ...baseRaw, payload: { tool_input: { command } } }
-      expect(applyFilters(raw, 'Bash', [f]).secondary).toEqual([])
+      expect(applyFilters(raw, 'bash', [f]).secondary).toEqual([])
     }
   })
 
@@ -196,27 +197,32 @@ describe('applyFilters', () => {
   test('negate inverts a single-pattern match result', () => {
     const f = compile({
       name: 'NotBash',
-      patterns: [{ target: 'tool', regex: '^Bash$', negate: true }],
+      patterns: [{ target: 'tool', regex: '^bash$', negate: true }],
     })
-    expect(applyFilters(baseRaw, 'Bash', [f]).primary).toEqual([])
-    expect(applyFilters(baseRaw, 'Read', [f]).primary).toEqual(['NotBash'])
+    expect(applyFilters(baseRaw, 'bash', [f]).primary).toEqual([])
+    expect(applyFilters(baseRaw, 'read', [f]).primary).toEqual(['NotBash'])
   })
 
   test('negate participates in AND combinator (Tools-style exclusion)', () => {
-    // Mirrors the rewritten Tools default seed: hook in [...] AND tool
-    // non-empty AND tool NOT in {Agent, TaskCreate, TaskUpdate, mcp__*}.
+    // Mirrors the Tools default seed: hook in [...] AND tool non-empty AND
+    // tool NOT one of pi's subagent / MCP / browser tools.
     const tools = compile({
       name: 'Tools',
       patterns: [
         { target: 'hook', regex: '^PostToolUse$' },
         { target: 'tool', regex: '^.+' },
-        { target: 'tool', regex: '^(Agent$|TaskCreate$|TaskUpdate$|mcp__)', negate: true },
+        {
+          target: 'tool',
+          regex: '^(Agent|SubAgent|StopAgent|AgentStatus|mcp|browser_.*)$',
+          negate: true,
+        },
       ],
     })
-    expect(applyFilters(baseRaw, 'Bash', [tools]).primary).toEqual(['Tools'])
+    expect(applyFilters(baseRaw, 'bash', [tools]).primary).toEqual(['Tools'])
     expect(applyFilters(baseRaw, 'Agent', [tools]).primary).toEqual([])
-    expect(applyFilters(baseRaw, 'TaskCreate', [tools]).primary).toEqual([])
-    expect(applyFilters(baseRaw, 'mcp__chrome-devtools', [tools]).primary).toEqual([])
+    expect(applyFilters(baseRaw, 'SubAgent', [tools]).primary).toEqual([])
+    expect(applyFilters(baseRaw, 'mcp', [tools]).primary).toEqual([])
+    expect(applyFilters(baseRaw, 'browser_navigate', [tools]).primary).toEqual([])
     expect(applyFilters(baseRaw, 'AgentMaker', [tools]).primary).toEqual(['Tools'])
     // Empty toolName fails the non-empty pattern, so no match even
     // though the negated check would otherwise pass.
@@ -228,7 +234,7 @@ describe('applyFilters', () => {
       name: 'default-all', // local helper sets id := name
       pillName: 'All',
       combinator: 'and',
-      patterns: [{ target: 'hook', regex: '^PostToolBatch$', negate: true }],
+      patterns: [{ target: 'hook', regex: '^SystemPrompt$', negate: true }],
     })
     const raw = {
       id: 1,
@@ -237,6 +243,6 @@ describe('applyFilters', () => {
       timestamp: 0,
       payload: {},
     }
-    expect(applyFilters(raw, 'Bash', [f])).toEqual({ primary: [], secondary: [] })
+    expect(applyFilters(raw, 'bash', [f])).toEqual({ primary: [], secondary: [] })
   })
 })

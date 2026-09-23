@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest'
 import { Hono } from 'hono'
-import { writeFileSync, mkdtempSync, chmodSync } from 'node:fs'
+import { writeFileSync, mkdtempSync, mkdirSync, chmodSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { EventStore } from '../storage/types'
@@ -16,11 +16,17 @@ const sharedTmpDir = vi.hoisted(() => {
 })
 const transcriptConfig = vi.hoisted(() => ({
   enabled: true,
-  base: null as { host: string; container: string } | null,
   maxFileBytes: 100 * 1024 * 1024,
 }))
+// A pi home: the only place the route will read transcripts from.
+const piHome = vi.hoisted(() => {
+  const fs = require('node:fs') as typeof import('node:fs')
+  const os = require('node:os') as typeof import('node:os')
+  const path = require('node:path') as typeof import('node:path')
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'transcript-stats-home-'))
+})
 vi.mock('../config', () => ({
-  config: { transcriptStats: transcriptConfig, dataDir: sharedTmpDir },
+  config: { transcriptStats: transcriptConfig, dataDir: sharedTmpDir, pi: { homes: [piHome] } },
 }))
 
 // Import after the mock is set up.
@@ -42,41 +48,39 @@ function makeApp(store: Partial<EventStore>) {
   return app
 }
 
+const SESSIONS_DIR = join(piHome, '.pi', 'agent', 'sessions', '--work-proj--')
+
+// pi session format v3, one prompt and one request.
 const MINIMAL_FIXTURE = [
+  { type: 'session', version: 3, id: 'sess1', timestamp: '2026-05-22T00:00:00.000Z', cwd: '/work/proj' },
   {
-    type: 'user',
-    uuid: 'u1',
-    parentUuid: null,
-    promptId: 'p1',
+    type: 'message',
+    id: 'u1',
+    parentId: null,
     timestamp: '2026-05-22T00:00:00.000Z',
-    message: { content: 'hi' },
+    message: { role: 'user', content: [{ type: 'text', text: 'hi' }] },
   },
   {
-    type: 'assistant',
-    uuid: 'a1',
-    parentUuid: 'u1',
+    type: 'message',
+    id: 'a1',
+    parentId: 'u1',
     timestamp: '2026-05-22T00:00:01.000Z',
-    isSidechain: false,
     message: {
-      id: 'msg1',
-      model: 'claude-opus-4-7',
-      stop_reason: 'end_turn',
-      usage: {
-        input_tokens: 1,
-        output_tokens: 10,
-        cache_read_input_tokens: 0,
-        cache_creation_input_tokens: 0,
-        cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 },
-        service_tier: 'standard',
-      },
+      role: 'assistant',
+      model: 'qwen3.8-27b',
+      provider: 'forge',
+      stopReason: 'stop',
+      responseId: 'chatcmpl-1',
+      usage: { input: 1, output: 10, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } },
       content: [{ type: 'text', text: 'hi' }],
     },
   },
 ]
 
+let fixtureSeq = 0
 function writeFixture(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'transcript-route-'))
-  const p = join(dir, 'session.jsonl')
+  mkdirSync(SESSIONS_DIR, { recursive: true })
+  const p = join(SESSIONS_DIR, `2026-05-22T00-00-00-000Z_${++fixtureSeq}.jsonl`)
   writeFileSync(p, MINIMAL_FIXTURE.map((l) => JSON.stringify(l)).join('\n') + '\n')
   return p
 }
@@ -84,7 +88,6 @@ function writeFixture(): string {
 describe('GET /api/sessions/:sessionId/transcript-stats', () => {
   beforeEach(() => {
     transcriptConfig.enabled = true
-    transcriptConfig.base = null
     transcriptConfig.maxFileBytes = 100 * 1024 * 1024
     // Mock models.dev fetch so pricing resolves deterministically.
     vi.stubGlobal(
@@ -109,7 +112,7 @@ describe('GET /api/sessions/:sessionId/transcript-stats', () => {
     const path = writeFixture()
     const app = makeApp({
       getSessionTranscriptPath: async () => path,
-      getAgentsForSession: async () => [{ id: 'sess1', agent_class: 'claude-code' }] as any,
+      getAgentsForSession: async () => [{ id: 'sess1', agent_class: 'pi' }] as any,
     })
     const res = await app.request('/api/sessions/sess1/transcript-stats')
     expect(res.status).toBe(200)
@@ -117,7 +120,8 @@ describe('GET /api/sessions/:sessionId/transcript-stats', () => {
     expect(body.source).toBe('jsonl')
     expect(body.summary.totalCalls).toBe(1)
     expect(body.byModel).toHaveLength(1)
-    expect(body.byModel[0].model).toBe('claude-opus-4-7')
+    expect(body.byModel[0].model).toBe('qwen3.8-27b')
+    expect(body.byModel[0].costCents).toBe(0)
     expect(body.prompts).toBeInstanceOf(Array)
     expect(body.subagents).toBeInstanceOf(Array)
     expect(body.models).toBeDefined()
@@ -145,9 +149,18 @@ describe('GET /api/sessions/:sessionId/transcript-stats', () => {
     expect(body.error).toBe('no_transcript')
   })
 
+  test('returns 403 outside_pi_sessions for a path outside every pi home', async () => {
+    const outside = join(mkdtempSync(join(tmpdir(), 'elsewhere-')), 'secret.jsonl')
+    writeFileSync(outside, '{}\n')
+    const app = makeApp({ getSessionTranscriptPath: async () => outside })
+    const res = await app.request('/api/sessions/sess1/transcript-stats')
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toBe('outside_pi_sessions')
+  })
+
   test('returns 404 file_not_found when transcript file does not exist', async () => {
     const app = makeApp({
-      getSessionTranscriptPath: async () => '/nonexistent/foo.jsonl',
+      getSessionTranscriptPath: async () => join(SESSIONS_DIR, 'gone.jsonl'),
     })
     const res = await app.request('/api/sessions/sess1/transcript-stats')
     expect(res.status).toBe(404)

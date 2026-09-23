@@ -58,8 +58,7 @@ function matchesSearch(session: RecentSession, sessionLabels: Label[], query: st
 export function LabelsModalBody() {
   const labels = useUIStore((s) => s.labels)
   const labelMemberships = useUIStore((s) => s.labelMemberships)
-  const setSelectedProject = useUIStore((s) => s.setSelectedProject)
-  const setSelectedSessionId = useUIStore((s) => s.setSelectedSessionId)
+  const openSession = useUIStore((s) => s.openSession)
   const closeLabelsModal = useUIStore((s) => s.closeLabelsModal)
   const createLabel = useUIStore((s) => s.createLabel)
   const setEditingSessionId = useUIStore((s) => s.setEditingSessionId)
@@ -129,8 +128,7 @@ export function LabelsModalBody() {
   }, [labels, labelMemberships])
 
   const handleOpenSession = (session: RecentSession) => {
-    setSelectedProject(session.projectId, session.projectSlug || null)
-    setSelectedSessionId(session.id)
+    openSession(session.projectId, session.projectSlug || null, session.id)
     closeLabelsModal()
   }
 

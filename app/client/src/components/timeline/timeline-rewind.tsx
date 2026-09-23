@@ -2,9 +2,9 @@ import { memo, useRef, useMemo, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { getRangeMs } from '@/config/time-ranges'
 import { useUIStore } from '@/stores/ui-store'
-import { useDedupedEvents } from '@/hooks/use-deduped-events'
-import { getEventIcon, getEventColor } from '@/config/event-icons'
-import { buildAgentColorMap, getAgentColorById } from '@/lib/agent-utils'
+import { useSessionDedupedEvents } from '@/hooks/deduped-events-context'
+import { getEventIcon, getEventColor, eventIconId } from '@/config/event-icons'
+import { buildAgentColorMap, orderAgentTree, getAgentColorById } from '@/lib/agent-utils'
 import { AgentLabel } from '@/components/shared/agent-label'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { DotTooltipContent } from './dot-tooltip'
@@ -48,20 +48,16 @@ export function findFirstEventAtOrAfter(events: ParsedEvent[], targetTs: number)
 let pendingLeftmostTs: number | null = null
 
 interface TimelineRewindProps {
-  events: ParsedEvent[] // frozen deduped events (shared with event stream)
   agents: Agent[]
 }
 
-export const TimelineRewind = memo(function TimelineRewind({
-  events,
-  agents,
-}: TimelineRewindProps) {
+export const TimelineRewind = memo(function TimelineRewind({ agents }: TimelineRewindProps) {
   const { timeRange, selectedAgentIds, setScrollToEventId } = useUIStore()
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Re-dedupe is a no-op since we receive already-deduped events, but we still
-  // need spawnInfo/etc. for filtering consistency with event-stream.
-  const { deduped } = useDedupedEvents(events)
+  // Shared with the event stream so rows and dots line up. In rewind mode
+  // the provider's input is the frozen snapshot, so this stays stable.
+  const { deduped } = useSessionDedupedEvents()
 
   // Compute session time span and pixel scale
   const { sessionStart, totalWidth, pixelsPerMs } = useMemo(() => {
@@ -81,19 +77,15 @@ export const TimelineRewind = memo(function TimelineRewind({
   }, [deduped, timeRange])
 
   // Group agents into main + subagents (same logic as ActivityTimeline)
+  // Depth-first agent tree: nested subagents sit under the subagent that spawned them.
   const flatAgents = useMemo(() => {
-    const mainAgents: { agent: Agent; isSubagent: boolean }[] = []
-    const nonMainAgents: { agent: Agent; isSubagent: boolean }[] = []
-    for (const a of agents) {
-      if (selectedAgentIds.length > 0 && !selectedAgentIds.includes(a.id)) continue
-      if (!a.parentAgentId) {
-        mainAgents.push({ agent: a, isSubagent: false })
-      } else {
-        nonMainAgents.push({ agent: a, isSubagent: true })
-      }
-    }
-    nonMainAgents.reverse()
-    return [...mainAgents, ...nonMainAgents]
+    const visible =
+      selectedAgentIds.length > 0 ? agents.filter((a) => selectedAgentIds.includes(a.id)) : agents
+    return orderAgentTree(visible).map(({ agent, depth }) => ({
+      agent,
+      depth,
+      isSubagent: depth > 0,
+    }))
   }, [agents, selectedAgentIds])
 
   const agentColorMap = useMemo(() => buildAgentColorMap(agents), [agents])
@@ -227,7 +219,7 @@ export const TimelineRewind = memo(function TimelineRewind({
   return (
     <div ref={scrollRef} className="overflow-x-auto overflow-y-auto h-full relative">
       <div style={{ width: `${totalWidth}px`, minWidth: '100%' }} className="relative">
-        {flatAgents.map(({ agent, isSubagent }) => {
+        {flatAgents.map(({ agent, isSubagent, depth }) => {
           const agentEvents = eventsByAgent.get(agent.id) || []
           const color = getAgentColorById(agent.id, agentColorMap).textOnly
           const parentAgent = agent.parentAgentId
@@ -250,7 +242,7 @@ export const TimelineRewind = memo(function TimelineRewind({
                 style={{ height: `${LANE_HEIGHT}px` }}
                 onClick={() => handleAgentClick(agent.id)}
               >
-                {isSubagent ? '↳ ' : ''}
+                {depth > 0 ? `${'\u00a0\u00a0'.repeat(depth - 1)}↳ ` : ''}
                 <AgentLabel agent={agent} parentAgent={parentAgent} />
               </button>
 
@@ -258,8 +250,9 @@ export const TimelineRewind = memo(function TimelineRewind({
               <div className="flex-1 relative h-full">
                 {agentEvents.map((event) => {
                   const left = LEFT_PADDING + (event.timestamp - sessionStart) * pixelsPerMs
-                  const Icon = getEventIcon(event.subtype, event.toolName)
-                  const { dotColor, customHex } = getEventColor(event.subtype, event.toolName)
+                  const iconId = eventIconId(event)
+                  const Icon = getEventIcon(iconId)
+                  const { dotColor, customHex } = getEventColor(iconId)
 
                   return (
                     <Tooltip key={event.id}>

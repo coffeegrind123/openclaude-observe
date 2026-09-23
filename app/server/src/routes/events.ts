@@ -6,6 +6,7 @@ import type { ParsedEvent } from '../types'
 import { parseRawEvent } from '../parser'
 import { resolveProject } from '../services/project-resolver'
 import { computeEventSignature } from '../utils/event-signature'
+import { redactImageData } from '../utils/redact-image-data'
 import { config } from '../config'
 import { apiError } from '../errors'
 import { rateLimit } from '../middleware/rate-limit'
@@ -15,7 +16,7 @@ type Env = {
     store: EventStore
     broadcastToSession: (sessionId: string, msg: object) => void
     broadcastToAll: (msg: object) => void
-    broadcastActivity: (sessionId: string, eventId: number) => void
+    broadcastActivity: (sessionId: string, eventId: number, projectId: number | null) => void
   }
 }
 
@@ -33,24 +34,11 @@ function deriveEventStatus(subtype: string | null): string {
 // Track root agent IDs per session (sessionId -> agentId)
 const sessionRootAgents = new Map<string, string>()
 
-// Track pending Agent tool metadata so we can name subagents early.
-// When PreToolUse:Agent fires, we store name+description keyed by tool_use_id
-// and also push onto a per-session FIFO queue. The queue is necessary because
-// subagent events carry only agent_id (not the parent tool_use_id), so we can't
-// directly look up by tool_use_id when a new subagent first appears.
-//
-// When multiple Agent tools are invoked concurrently (e.g. two subagents spawned
-// in the same turn), each gets its own queue entry so names are assigned 1:1.
-interface PendingAgentMeta {
-  name: string | null
-  description: string | null
-}
-const pendingAgentMeta = new Map<string, PendingAgentMeta>() // toolUseId -> { name, description }
-const pendingAgentTypes = new Map<string, string>() // toolUseId -> subagent_type
-const pendingAgentMetaQueue = new Map<string, PendingAgentMeta[]>() // sessionId -> FIFO queue
-const namedAgents = new Map<string, Set<string>>() // sessionId -> set of agent IDs already named via queue
-
-async function ensureRootAgent(store: EventStore, sessionId: string): Promise<string> {
+async function ensureRootAgent(
+  store: EventStore,
+  sessionId: string,
+  agentClass: string | null,
+): Promise<string> {
   // Fast path: trust the in-memory cache. Cache invalidation happens in all
   // delete paths (DELETE /projects/:id, DELETE /sessions/:id, DELETE /data),
   // and the startup repairOrphans pass cleans up any pre-existing orphans.
@@ -59,7 +47,7 @@ async function ensureRootAgent(store: EventStore, sessionId: string): Promise<st
   let rootId = sessionRootAgents.get(sessionId)
   if (!rootId) {
     rootId = sessionId
-    await store.upsertAgent(rootId, sessionId, null, null, null)
+    await store.upsertAgent(rootId, sessionId, null, null, null, null, null, agentClass)
     sessionRootAgents.set(sessionId, rootId)
   }
   return rootId
@@ -86,6 +74,13 @@ router.post('/events', rateLimit, async (c) => {
     const hookPayload = body.hook_payload as Record<string, unknown>
     const meta: { env?: Record<string, string> } =
       (body.meta as { env?: Record<string, string> }) || {}
+
+    // Before logging and parsing, so trace logs, the dedup signature, the 1 MB oversize guard and the
+    // stored row all see the redacted payload.
+    const redactedImages = redactImageData(hookPayload, config.maxImageDataChars)
+    if (redactedImages > 0 && config.verbose) {
+      console.log(`[event] redacted ${redactedImages} base64 image blob(s)`)
+    }
 
     if (LOG_LEVEL === 'debug' || LOG_LEVEL === 'trace') {
       const logKeys = Object.keys(hookPayload).join(', ')
@@ -147,7 +142,7 @@ router.post('/events', rateLimit, async (c) => {
         console.log(
           `[event] Session ${parsed.sessionId} references missing project ${effectiveProjectId}; re-resolving`,
         )
-        const projectSlugOverride = meta.env?.OPENCLAUDE_OBSERVE_PROJECT_SLUG || null
+        const projectSlugOverride = meta.env?.INSTANTCOFFEE_OBSERVE_PROJECT_SLUG || null
         const resolved = await resolveProject(store, {
           sessionId: parsed.sessionId,
           slug: projectSlugOverride,
@@ -162,7 +157,7 @@ router.post('/events', rateLimit, async (c) => {
         // Now that SessionStart has given us a cwd, try to land on the
         // right project — either an existing cwd-keyed one, or create a
         // new one with a cwd-derived slug.
-        const projectSlugOverride = meta.env?.OPENCLAUDE_OBSERVE_PROJECT_SLUG || null
+        const projectSlugOverride = meta.env?.INSTANTCOFFEE_OBSERVE_PROJECT_SLUG || null
         const resolved = await resolveProject(store, {
           sessionId: parsed.sessionId,
           slug: projectSlugOverride,
@@ -178,7 +173,7 @@ router.post('/events', rateLimit, async (c) => {
         }
       }
     } else {
-      const projectSlugOverride = meta.env?.OPENCLAUDE_OBSERVE_PROJECT_SLUG || null
+      const projectSlugOverride = meta.env?.INSTANTCOFFEE_OBSERVE_PROJECT_SLUG || null
       const resolved = await resolveProject(store, {
         sessionId: parsed.sessionId,
         slug: projectSlugOverride,
@@ -197,113 +192,41 @@ router.post('/events', rateLimit, async (c) => {
       parsed.transcriptPath,
     )
 
-    const rootAgentId = await ensureRootAgent(store, parsed.sessionId)
+    const rootAgentId = await ensureRootAgent(store, parsed.sessionId, parsed.agentClass)
 
-    // When PreToolUse:Agent fires, stash name + description for early naming.
-    // We store it both by toolUseId (for definitive lookup at PostToolUse) and
-    // in a per-session FIFO queue (for early naming when subagent events arrive
-    // before PostToolUse, since those events don't carry the parent tool_use_id).
-    if (parsed.subtype === 'PreToolUse' && parsed.toolName === 'Agent') {
-      const meta: PendingAgentMeta = {
-        name: parsed.subAgentName,
-        description: parsed.subAgentDescription,
-      }
-      if (meta.name || meta.description) {
-        if (parsed.toolUseId) {
-          pendingAgentMeta.set(parsed.toolUseId, meta)
-        }
-        const queue = pendingAgentMetaQueue.get(parsed.sessionId) || []
-        queue.push(meta)
-        pendingAgentMetaQueue.set(parsed.sessionId, queue)
-      }
-      // Stash agent type from tool_input.subagent_type
-      const agentType = (hookPayload as any)?.tool_input?.subagent_type
-      if (agentType && parsed.toolUseId) {
-        pendingAgentTypes.set(parsed.toolUseId, agentType)
-      }
-    }
-
-    // If the event has an ownerAgentId (from payload.agent_id), this event
-    // belongs to that agent. Ensure the agent record exists.
+    // Subagent events name their agent explicitly: the pi extension links a
+    // child to the call that spawned it (pi itself exposes no link), so the
+    // server just records what it is told. The parent is the spawning subagent
+    // for nested delegation — but only one this session already knows, so an
+    // out-of-order or foreign id can never orphan the tree.
+    let agentId = rootAgentId
     if (parsed.ownerAgentId && parsed.ownerAgentId !== rootAgentId) {
-      // Before awaiting store.upsertAgent(), capture pending metadata
-      // from the per-session FIFO queue. The queue is consumed
-      // synchronously here so two concurrent event handlers for the
-      // same session cannot interleave on the same array entry.
-      // namedAgents prevents a subagent appearing in multiple events
-      // from depleting the queue before its intended recipient arrives.
-      const alreadyNamed = namedAgents.get(parsed.sessionId)?.has(parsed.ownerAgentId) ?? false
-      let pending: PendingAgentMeta | undefined
-
-      if (!alreadyNamed) {
-        const queue = pendingAgentMetaQueue.get(parsed.sessionId) || []
-        pending = queue.shift()
-        if (pending) {
-          pendingAgentMetaQueue.set(parsed.sessionId, queue)
-          // Mark this agent as named so subsequent events for the same
-          // agent don't also consume a queue entry.
-          const sessionNamed = namedAgents.get(parsed.sessionId)
-          if (!sessionNamed) {
-            namedAgents.set(parsed.sessionId, new Set([parsed.ownerAgentId]))
-          } else {
-            sessionNamed.add(parsed.ownerAgentId)
-          }
-        } else if (queue.length === 0) {
-          pendingAgentMetaQueue.delete(parsed.sessionId)
+      let parentId = rootAgentId
+      if (parsed.parentAgentId && parsed.parentAgentId !== parsed.ownerAgentId) {
+        const parent = await store.getAgentById(parsed.parentAgentId)
+        if (parent && parent.session_id === parsed.sessionId) {
+          parentId = parsed.parentAgentId
         }
       }
-
-      // Extract agent_type and transcript_path from the hook payload
-      const ownerAgentType: string | null = (hookPayload as any)?.agent_type ?? null
-      const agentTranscriptPath: string | null = (hookPayload as any)?.agent_transcript_path ?? null
-
       await store.upsertAgent(
         parsed.ownerAgentId,
         parsed.sessionId,
-        rootAgentId,
-        pending?.name ?? null,
-        pending?.description ?? null,
-        ownerAgentType,
-        agentTranscriptPath,
+        parentId,
+        parsed.ownerAgentName,
+        parsed.ownerAgentDescription,
+        parsed.ownerAgentType,
+        null,
+        parsed.agentClass,
       )
+      agentId = parsed.ownerAgentId
     }
-    let agentId = parsed.ownerAgentId || rootAgentId
 
-    // Create/update subagent records (from Agent tool PostToolUse or SubagentStop)
-    if (parsed.subAgentId) {
-      let subAgentName = parsed.subAgentName
-      let subAgentDescription = parsed.subAgentDescription
-      let subAgentType: string | null = (hookPayload as any)?.agent_type ?? null
-      if (parsed.subtype === 'PostToolUse' && parsed.toolName === 'Agent' && parsed.toolUseId) {
-        const metaFromPre = pendingAgentMeta.get(parsed.toolUseId)
-        if (metaFromPre) {
-          subAgentName = subAgentName || metaFromPre.name
-          subAgentDescription = subAgentDescription || metaFromPre.description
-          pendingAgentMeta.delete(parsed.toolUseId)
-        }
-        // Agent type: prefer stashed value from PreToolUse, then tool_input/tool_response
-        const toolResponse = (hookPayload as any)?.tool_response
-        subAgentType =
-          pendingAgentTypes.get(parsed.toolUseId) ??
-          (hookPayload as any)?.tool_input?.subagent_type ??
-          toolResponse?.agentType ??
-          toolResponse?.subagent_type ??
-          subAgentType
-        pendingAgentTypes.delete(parsed.toolUseId)
-      }
-
-      await store.upsertAgent(
-        parsed.subAgentId,
-        parsed.sessionId,
-        rootAgentId,
-        subAgentName,
-        subAgentDescription,
-        subAgentType,
-      )
-
-      // agent_progress events belong to the subagent
-      if (parsed.subtype === 'agent_progress') {
-        agentId = parsed.subAgentId
+    // pi session names (/name, or set by an extension) become the slug.
+    if (parsed.subtype === 'SessionRename' && !parsed.ownerAgentId) {
+      const name = typeof hookPayload.name === 'string' ? hookPayload.name.trim().slice(0, 256) : ''
+      if (name) {
+        await store.updateSessionSlug(parsed.sessionId, name)
+        broadcastToAll({ type: 'session_update', data: { id: parsed.sessionId, slug: name } })
       }
     }
 
@@ -327,6 +250,15 @@ router.post('/events', rateLimit, async (c) => {
 
     const now = Date.now()
     const isNotification = config.notificationEventSubtypes.has(parsed.subtype ?? '')
+
+    // Trace-only: shows which events trip the notification bell, for tuning
+    // the notification subtype list without wading through payload dumps.
+    if (LOG_LEVEL === 'trace' && isNotification) {
+      console.log(
+        `[NOTIFY] isNotification=true subtype=${parsed.subtype} session=${parsed.sessionId}`,
+      )
+    }
+
     let eventId: number
     try {
       eventId = await store.insertEvent({
@@ -338,7 +270,6 @@ router.post('/events', rateLimit, async (c) => {
         timestamp: parsed.timestamp,
         payload: parsed.raw,
         toolUseId: parsed.toolUseId,
-        instanceId: parsed.instanceId,
         signatureHash,
         isNotification,
       })
@@ -368,53 +299,6 @@ router.post('/events', rateLimit, async (c) => {
       throw err
     }
 
-    if (parsed.instanceId) {
-      // Validate instanceId: must be a non-empty string of reasonable length
-      if (
-        typeof parsed.instanceId !== 'string' ||
-        parsed.instanceId.length === 0 ||
-        parsed.instanceId.length > 255
-      ) {
-        // Silently skip invalid instance data instead of failing the whole event
-        console.warn(`[event] Invalid instanceId: ${parsed.instanceId}`)
-        // Jump past the instance block
-      } else {
-        const instanceRoleRaw = (hookPayload.instance_role as string) || 'main'
-        const VALID_INSTANCE_ROLES = new Set([
-          'main',
-          'daemon',
-          'pipe',
-          'coordinator',
-          'bridge',
-          'worker',
-          'subagent',
-          'unknown',
-        ])
-        const instanceRole = VALID_INSTANCE_ROLES.has(instanceRoleRaw) ? instanceRoleRaw : 'unknown'
-        const instanceName = (hookPayload.instance_name as string) || null
-        const machineId = (hookPayload.machine_id as string) || null
-        const pid = typeof hookPayload.pid === 'number' ? hookPayload.pid : null
-        store.upsertInstance(
-          parsed.instanceId,
-          parsed.sessionId,
-          instanceRole,
-          instanceName,
-          machineId,
-          pid,
-        )
-
-        if (parsed.subtype === 'DaemonHeartbeat') {
-          store.updateInstanceHeartbeat(parsed.instanceId, parsed.timestamp)
-        }
-
-        const instances = store.getInstancesForSession(parsed.sessionId)
-        const instanceRow = instances.find((i) => i.id === parsed.instanceId)
-        if (instanceRow) {
-          broadcastToSession(parsed.sessionId, { type: 'instance_update', data: instanceRow })
-        }
-      }
-    }
-
     // Broadcast token update for LLM events so sidebar updates in real-time
     if (parsed.subtype === 'LLMGeneration') {
       const session = await store.getSessionById(parsed.sessionId)
@@ -442,7 +326,6 @@ router.post('/events', rateLimit, async (c) => {
       subtype: parsed.subtype,
       toolName: parsed.toolName,
       toolUseId: parsed.toolUseId,
-      instanceId: parsed.instanceId,
       status: deriveEventStatus(parsed.subtype),
       timestamp: parsed.timestamp,
       // createdAt is the server-side ingest timestamp; WS subscribers don't
@@ -457,8 +340,10 @@ router.post('/events', rateLimit, async (c) => {
     // broadcastActivity helper internally throttles to once per
     // session per ACTIVITY_PING_THROTTLE_MS, so calling it on every
     // insert is safe and cheap.
+    // projectId rides along so the sidebar can pulse the project folder
+    // without fetching each project's session list.
     const broadcastActivity = c.get('broadcastActivity')
-    broadcastActivity(parsed.sessionId, eventId)
+    broadcastActivity(parsed.sessionId, eventId, effectiveProjectId)
 
     // Fan out sidebar notification signals to every connected client so
     // bells can light up regardless of which session the viewer is on.
@@ -483,21 +368,6 @@ router.post('/events', rateLimit, async (c) => {
       })
     }
 
-    // Build response -- request local data if the server is missing info
-    const requests: Array<{ cmd: string; args: Record<string, unknown>; callback: string }> = []
-
-    // Request session slug if missing
-    if (parsed.raw.transcript_path) {
-      const session = await store.getSessionById(parsed.sessionId)
-      if (session && !session.slug) {
-        requests.push({
-          cmd: 'getSessionSlug',
-          args: { transcript_path: parsed.raw.transcript_path },
-          callback: `/api/callbacks/session-slug/${encodeURIComponent(parsed.sessionId)}`,
-        })
-      }
-    }
-
     const responseBody: Record<string, unknown> = {
       status: 'OK',
       meta: {
@@ -505,10 +375,6 @@ router.post('/events', rateLimit, async (c) => {
         session_id: parsed.sessionId,
         project_id: effectiveProjectId,
       },
-    }
-
-    if (requests.length > 0) {
-      responseBody.requests = requests
     }
 
     return c.json(responseBody, 201)
@@ -536,7 +402,6 @@ router.get('/events/:id/thread', async (c) => {
     subtype: r.subtype,
     toolName: r.tool_name,
     toolUseId: r.tool_use_id || null,
-    instanceId: r.instance_id || null,
     status: deriveEventStatus(r.subtype),
     timestamp: r.timestamp,
     createdAt: r.created_at || r.timestamp,
@@ -548,16 +413,11 @@ router.get('/events/:id/thread', async (c) => {
 /** Remove a single session from the in-memory root agent cache */
 export function removeSessionRootAgent(sessionId: string): void {
   sessionRootAgents.delete(sessionId)
-  pendingAgentMetaQueue.delete(sessionId)
-  namedAgents.delete(sessionId)
 }
 
 /** Clear all in-memory session state */
 export function clearSessionRootAgents(): void {
   sessionRootAgents.clear()
-  pendingAgentMeta.clear()
-  pendingAgentMetaQueue.clear()
-  namedAgents.clear()
 }
 
 export default router

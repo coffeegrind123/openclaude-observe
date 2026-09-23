@@ -33,6 +33,9 @@ export function resolveIconName(name: string): IconName | null {
   if (isValidIconName(name)) return name
   const kebab = toKebabCase(name)
   if (isValidIconName(kebab)) return kebab
+  // lucide separates trailing digits: "Minimize2" → "minimize-2".
+  const digitSplit = kebab.replace(/([a-z])(\d)/g, '$1-$2')
+  if (isValidIconName(digitSplit)) return digitSplit
   return null
 }
 

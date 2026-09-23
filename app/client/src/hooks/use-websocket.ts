@@ -5,6 +5,7 @@ import type { WSMessage, WSClientMessage, ParsedEvent, Session, RecentSession } 
 import { pushNotification, clearNotification } from '@/components/sidebar/notification-indicator'
 import { useUIStore } from '@/stores/ui-store'
 import { useFilterStore } from '@/stores/filter-store'
+import { useStackStore } from '@/stores/stack-store'
 
 /** Patch the ['sessions', *] and ['recent-sessions', *] query caches so
  *  that any row matching sessionId with status='ended' flips to 'active'.
@@ -149,15 +150,6 @@ export function useWebSocket(sessionId: string | null) {
             `[WS] Session update → invalidating sessions + session ${sessionData.id?.slice(0, 8) ?? '?'}`,
           )
         }
-      } else if (msg.type === 'instance_update') {
-        queryClient.invalidateQueries({ queryKey: ['instances'] })
-        const instanceData = msg.data as { sessionId?: string }
-        if (instanceData.sessionId) {
-          queryClient.invalidateQueries({ queryKey: ['instances', instanceData.sessionId] })
-        }
-        if (logLevel === 'trace') {
-          console.debug(`[WS] Instance update → invalidating instances`)
-        }
       } else if (msg.type === 'project_update') {
         queryClient.invalidateQueries({ queryKey: ['projects'] })
         // Project changes (rename, slug edit, deletion) can affect
@@ -178,14 +170,18 @@ export function useWebSocket(sessionId: string | null) {
         const { sessionId, ts } = msg.data
         clearNotification(sessionId, ts)
       } else if (msg.type === 'activity') {
-        const { sessionId } = msg.data
-        useUIStore.getState().pulseSession(sessionId)
+        const { sessionId, projectId } = msg.data
+        useUIStore.getState().pulseSession(sessionId, projectId)
         // Flip any cached Session rows for this session to 'active'.
         // Covers the gap where a ping arrives for a session that the
         // most recent /sessions fetch still has marked 'ended'. Next
         // refetch re-syncs from the server, so this is client-side
         // only and non-destructive.
         markSessionActiveInCache(queryClient, sessionId)
+      } else if (msg.type === 'stack_metrics') {
+        useStackStore.getState().pushSample(msg.data.sample, msg.data.totals)
+      } else if (msg.type === 'stack_status') {
+        useStackStore.getState().setStatus(msg.data)
       } else if (msg.type === 'filter:created') {
         useFilterStore.getState().upsertFromBroadcast(msg.filter)
       } else if (msg.type === 'filter:updated') {

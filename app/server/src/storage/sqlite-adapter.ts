@@ -10,10 +10,9 @@ import type {
   OrphanRepairResult,
 } from './types'
 import { DuplicateEventSignatureError } from './types'
-import type { InstanceRow } from '../types'
 import type { Filter, FilterRow, FilterPattern } from '../types'
 import { randomUUID } from 'node:crypto'
-import { SEED_FILTERS } from './seed-filters'
+import { SEED_FILTERS, OBSOLETE_DEFAULT_FILTER_IDS } from './seed-filters'
 
 function escapeLike(str: string): string {
   return str.replace(/[%_]/g, '\\$&')
@@ -189,7 +188,7 @@ export class SqliteAdapter implements EventStore {
         name TEXT,
         description TEXT,
         agent_type TEXT,
-        agent_class TEXT DEFAULT 'claude-code',
+        agent_class TEXT DEFAULT 'pi',
         transcript_path TEXT,
         metadata TEXT,
         created_at INTEGER NOT NULL,
@@ -238,9 +237,6 @@ export class SqliteAdapter implements EventStore {
     if (eventCols.some((c) => c.name === 'status')) {
       this.db.exec('ALTER TABLE events DROP COLUMN status')
     }
-    if (!eventCols.some((c) => c.name === 'instance_id')) {
-      this.db.exec('ALTER TABLE events ADD COLUMN instance_id TEXT')
-    }
     // Additive migration: signature_hash column for event dedup. Existing
     // rows stay NULL (SQLite treats NULLs as distinct under UNIQUE, so they
     // don't collide).
@@ -262,20 +258,13 @@ export class SqliteAdapter implements EventStore {
       `)
     }
 
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS instances (
-        id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'main',
-        name TEXT,
-        machine_id TEXT,
-        pid INTEGER,
-        first_seen INTEGER NOT NULL,
-        last_heartbeat INTEGER NOT NULL,
-        status TEXT NOT NULL DEFAULT 'active',
-        FOREIGN KEY (session_id) REFERENCES sessions(id)
-      )
-    `)
+    // The instances table held OpenClaude's multi-instance topology (daemon,
+    // pipes, coordinator, bridge), which pi has no equivalent of. Dropped
+    // rather than left behind: its FK to sessions would otherwise block
+    // deleting any session that still has instance rows.
+    this.db.exec('DROP INDEX IF EXISTS idx_instances_session')
+    this.db.exec('DROP INDEX IF EXISTS idx_events_instance')
+    this.db.exec('DROP TABLE IF EXISTS instances')
 
     // First-boot setup for the filters table. We don't have any users
     // in the wild with a partial filters schema yet (this branch hasn't
@@ -311,10 +300,14 @@ export class SqliteAdapter implements EventStore {
       `)
       this.runSeedDefaults()
     } else {
-      // Existing installations: backfill seeds added in newer releases.
-      // Purely additive — never updates an existing row, so user
-      // customizations to defaults are preserved.
+      // Existing installations: backfill seeds added in newer releases —
+      // never updating an existing row, so user customizations to defaults
+      // are preserved — and remove the defaults that were retired.
       this.installMissingSeedDefaults()
+      const drop = this.db.prepare("DELETE FROM filters WHERE id = ? AND kind = 'default'")
+      for (const id of OBSOLETE_DEFAULT_FILTER_IDS) {
+        drop.run(id)
+      }
     }
 
     // Create indexes
@@ -336,8 +329,6 @@ export class SqliteAdapter implements EventStore {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_agent_id)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id)')
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_instances_session ON instances(session_id)')
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_events_instance ON events(instance_id)')
   }
 
   async createProject(
@@ -389,8 +380,7 @@ export class SqliteAdapter implements EventStore {
 
   async isSlugAvailable(slug: string): Promise<boolean> {
     const row = this.db.prepare(`SELECT id FROM projects WHERE slug = ?`).get(slug) as
-      | { id: number }
-      | undefined
+      { id: number } | undefined
     return row === undefined
   }
 
@@ -440,19 +430,21 @@ export class SqliteAdapter implements EventStore {
     description: string | null,
     agentType?: string | null,
     transcriptPath?: string | null,
+    agentClass?: string | null,
   ): Promise<void> {
     const now = Date.now()
     const existing = this.db.prepare('SELECT id FROM agents WHERE id = ?').get(id)
     this.db
       .prepare(
         `
-      INSERT INTO agents (id, session_id, parent_agent_id, name, description, agent_type, transcript_path, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agents (id, session_id, parent_agent_id, name, description, agent_type, transcript_path, agent_class, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, 'pi'), ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = COALESCE(excluded.name, agents.name),
         description = COALESCE(excluded.description, agents.description),
         agent_type = COALESCE(excluded.agent_type, agents.agent_type),
         transcript_path = COALESCE(excluded.transcript_path, agents.transcript_path),
+        agent_class = COALESCE(?, agents.agent_class),
         updated_at = ?
     `,
       )
@@ -464,8 +456,10 @@ export class SqliteAdapter implements EventStore {
         description,
         agentType ?? null,
         transcriptPath ?? null,
+        agentClass ?? null,
         now,
         now,
+        agentClass ?? null,
         now,
       )
 
@@ -530,8 +524,8 @@ export class SqliteAdapter implements EventStore {
       const result = this.db
         .prepare(
           `
-        INSERT INTO events (agent_id, session_id, type, subtype, tool_name, timestamp, created_at, payload, tool_use_id, instance_id, signature_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO events (agent_id, session_id, type, subtype, tool_name, timestamp, created_at, payload, tool_use_id, signature_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
         )
         .run(
@@ -544,7 +538,6 @@ export class SqliteAdapter implements EventStore {
           now,
           JSON.stringify(params.payload),
           params.toolUseId || null,
-          params.instanceId || null,
           params.signatureHash ?? null,
         )
 
@@ -716,8 +709,7 @@ export class SqliteAdapter implements EventStore {
 
   async getFilterById(id: string): Promise<Filter | null> {
     const row = this.db.prepare('SELECT * FROM filters WHERE id = ?').get(id) as
-      | FilterRow
-      | undefined
+      FilterRow | undefined
     return row ? this.rowToFilter(row) : null
   }
 
@@ -948,8 +940,7 @@ export class SqliteAdapter implements EventStore {
 
   async getThreadForEvent(eventId: number): Promise<StoredEvent[]> {
     const event = this.db.prepare('SELECT * FROM events WHERE id = ?').get(eventId) as
-      | StoredEvent
-      | undefined
+      StoredEvent | undefined
     if (!event) return []
 
     const sessionId = event.session_id
@@ -1014,7 +1005,6 @@ export class SqliteAdapter implements EventStore {
 
   async deleteSession(sessionId: string): Promise<{ events: number; agents: number }> {
     const tx = this.db.transaction(() => {
-      this.db.prepare('DELETE FROM instances WHERE session_id = ?').run(sessionId)
       const events = this.db
         .prepare('DELETE FROM events WHERE session_id = ?')
         .run(sessionId).changes
@@ -1040,7 +1030,6 @@ export class SqliteAdapter implements EventStore {
       let events = 0
       let agents = 0
       for (const sessionId of sessionIds) {
-        this.db.prepare('DELETE FROM instances WHERE session_id = ?').run(sessionId)
         events += this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId).changes
         agents += this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId).changes
       }
@@ -1059,7 +1048,6 @@ export class SqliteAdapter implements EventStore {
     agents: number
     events: number
   }> {
-    this.db.prepare('DELETE FROM instances WHERE 1=1').run()
     const events = this.db.prepare('DELETE FROM events WHERE 1=1').run().changes
     const agents = this.db.prepare('DELETE FROM agents WHERE 1=1').run().changes
     const sessions = this.db.prepare('DELETE FROM sessions WHERE 1=1').run().changes
@@ -1073,23 +1061,16 @@ export class SqliteAdapter implements EventStore {
     if (sessionIds.length === 0) return { events: 0, agents: 0, sessions: 0 }
     // Wrap in a transaction so a mid-loop failure doesn't leave orphaned
     // events/agents pointing at a deleted session row.
-    //
-    // Mirror deleteSession()'s child-cleanup order: instances → events →
-    // agents → sessions. The previous version skipped `instances` and
-    // crashed with `FOREIGN KEY constraint failed` whenever any session in
-    // the bulk had an instances row pointing at it (instances.session_id
-    // REFERENCES sessions.id). Single-session delete worked because that
-    // path already wiped instances first; the bulk path didn't.
+    // Children first (events, agents), then the session row, as in
+    // deleteSession().
     const tx = this.db.transaction((ids: string[]) => {
       let events = 0
       let agents = 0
       let sessions = 0
-      const delInstances = this.db.prepare('DELETE FROM instances WHERE session_id = ?')
       const delEvents = this.db.prepare('DELETE FROM events WHERE session_id = ?')
       const delAgents = this.db.prepare('DELETE FROM agents WHERE session_id = ?')
       const delSession = this.db.prepare('DELETE FROM sessions WHERE id = ?')
       for (const id of ids) {
-        delInstances.run(id)
         events += delEvents.run(id).changes
         agents += delAgents.run(id).changes
         sessions += delSession.run(id).changes
@@ -1209,24 +1190,28 @@ export class SqliteAdapter implements EventStore {
       .all(limit)
   }
 
-  async getRecentSessions(limit: number = 20): Promise<any[]> {
+  async getRecentSessions(limit: number = 20, since?: number): Promise<any[]> {
     // LEFT JOIN so orphaned sessions (project deleted out from under them)
     // still appear in the recent list. The repairOrphans pass should make
     // this rare, but the LEFT JOIN is defensive — without it, an orphaned
     // active session would silently disappear from the UI.
-    return this.db
-      .prepare(
-        `
+    return (
+      this.db
+        .prepare(
+          `
       SELECT s.*,
         p.slug as project_slug,
         p.name as project_name
       FROM sessions s
       LEFT JOIN projects p ON p.id = s.project_id
+      ${since != null ? 'WHERE COALESCE(s.last_activity, s.started_at) >= ?' : ''}
       ORDER BY COALESCE(s.last_activity, s.started_at) DESC
       LIMIT ?
     `,
-      )
-      .all(limit)
+        )
+        // The window filters on the same expression the list is ordered by.
+        .all(...(since != null ? [since, limit] : [limit]))
+    )
   }
 
   async repairOrphans(): Promise<OrphanRepairResult> {
@@ -1345,42 +1330,6 @@ export class SqliteAdapter implements EventStore {
     })()
   }
 
-  upsertInstance(
-    id: string,
-    sessionId: string,
-    role: string,
-    name: string | null,
-    machineId: string | null,
-    pid: number | null,
-  ): void {
-    const now = Date.now()
-    this.db
-      .prepare(
-        `INSERT INTO instances (id, session_id, role, name, machine_id, pid, first_seen, last_heartbeat, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
-         ON CONFLICT(id) DO UPDATE SET
-           role = excluded.role,
-           name = COALESCE(excluded.name, instances.name),
-           machine_id = COALESCE(excluded.machine_id, instances.machine_id),
-           pid = COALESCE(excluded.pid, instances.pid),
-           last_heartbeat = excluded.last_heartbeat,
-           status = 'active'`,
-      )
-      .run(id, sessionId, role, name, machineId, pid, now, now)
-  }
-
-  updateInstanceHeartbeat(id: string, timestamp: number): void {
-    this.db
-      .prepare('UPDATE instances SET last_heartbeat = ?, status = ? WHERE id = ?')
-      .run(timestamp, 'active', id)
-  }
-
-  getInstancesForSession(sessionId: string): InstanceRow[] {
-    return this.db
-      .prepare('SELECT * FROM instances WHERE session_id = ? ORDER BY first_seen ASC')
-      .all(sessionId) as InstanceRow[]
-  }
-
   async healthCheck(): Promise<{ ok: boolean; error?: string }> {
     try {
       const row = this.db.prepare('SELECT 1 AS ok').get() as { ok: number } | undefined
@@ -1389,11 +1338,11 @@ export class SqliteAdapter implements EventStore {
       // Verify tables exist
       const tables = this.db
         .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('projects','sessions','events','agents','instances')",
+          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('projects','sessions','events','agents')",
         )
         .all() as { name: string }[]
-      if (tables.length < 5) {
-        const missing = ['projects', 'sessions', 'events', 'agents', 'instances'].filter(
+      if (tables.length < 4) {
+        const missing = ['projects', 'sessions', 'events', 'agents'].filter(
           (t) => !tables.some((r) => r.name === t),
         )
         return { ok: false, error: `Missing tables: ${missing.join(', ')}` }

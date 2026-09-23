@@ -26,7 +26,7 @@ function sortKeys(value: unknown): unknown {
  * real events. Native OTel can re-deliver the same span (retries, duplicate
  * exporters); this collapses those at ingestion.
  *
- * The raw payload already encodes agent_id / tool_use_id / instance_id, so
+ * The raw payload already encodes agent_id / tool_use_id, so
  * hashing it (plus the session + dispatch fields + cwd + time bucket) is
  * sufficient to identify a re-delivery of the same logical event.
  */
@@ -36,7 +36,6 @@ export function computeEventSignature(parsed: ParsedRawEvent, cwd: string | null
     subtype: parsed.subtype ?? null,
     tool_name: parsed.toolName ?? null,
     tool_use_id: parsed.toolUseId ?? null,
-    instance_id: parsed.instanceId ?? null,
     cwd: cwd ?? null,
     payload: parsed.raw,
     ts_bucket: Math.floor(parsed.timestamp / BUCKET_MS),

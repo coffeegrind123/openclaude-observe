@@ -2,7 +2,12 @@ import { useState, useMemo, useRef } from 'react'
 import { useEvents } from '@/hooks/use-events'
 import { useAgents } from '@/hooks/use-agents'
 import { useUIStore } from '@/stores/ui-store'
-import { getAgentDisplayName, buildAgentColorMap, getAgentColorById } from '@/lib/agent-utils'
+import {
+  getAgentDisplayName,
+  buildAgentColorMap,
+  getAgentColorById,
+  orderAgentTree,
+} from '@/lib/agent-utils'
 import { AgentLabel } from '@/components/shared/agent-label'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -49,18 +54,8 @@ export function AgentCombobox() {
   const sortedAgents = useMemo(() => {
     if (!open) return snapshotRef.current
 
-    const main = agents.filter((a) => !a.parentAgentId)
-    const subs = agents
-      .filter((a) => a.parentAgentId)
-      .sort((a, b) => {
-        // Active first
-        if (a.status === 'active' && b.status !== 'active') return -1
-        if (a.status !== 'active' && b.status === 'active') return 1
-        // Most recently started first
-        return (b.firstEventAt ?? 0) - (a.firstEventAt ?? 0)
-      })
-
-    const sorted = [...main, ...subs]
+    // Tree order: nested SubAgent children sit under their spawning subagent.
+    const sorted = orderAgentTree(agents).map((n) => n.agent)
     snapshotRef.current = sorted
     return sorted
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -68,6 +63,10 @@ export function AgentCombobox() {
 
   const agentColorMap = useMemo(() => buildAgentColorMap(agents), [agents])
   const agentMap = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents])
+  const depthMap = useMemo(
+    () => new Map(orderAgentTree(agents).map((n) => [n.agent.id, n.depth])),
+    [agents],
+  )
 
   const activeCount = agents.filter((a) => a.status === 'active').length
   const selectedAgents = agents.filter((a) => selectedAgentIds.includes(a.id))
@@ -135,6 +134,9 @@ export function AgentCombobox() {
                       value={agent.id}
                       onSelect={() => toggleAgentId(agent.id)}
                       className="text-xs gap-2 items-start"
+                      style={{
+                        paddingLeft: 8 + Math.max(0, (depthMap.get(agent.id) ?? 0) - 1) * 12,
+                      }}
                     >
                       <div
                         className={cn(

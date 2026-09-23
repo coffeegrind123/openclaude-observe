@@ -1,7 +1,7 @@
-import { lazy } from 'react'
-import type { LucideIcon } from 'lucide-react'
+import { createElement, forwardRef, lazy, Suspense } from 'react'
+import type { LucideIcon, LucideProps } from 'lucide-react'
 import dynamicIconImports from 'lucide-react/dynamicIconImports'
-import { resolveIconName } from '@/lib/dynamic-icon'
+import { resolveIconName, toPascalCase } from '@/lib/dynamic-icon'
 import {
   resolveEventIcon as registryIconName,
   resolveEventColor as registryColor,
@@ -9,15 +9,45 @@ import {
   DEFAULT_ICON as REGISTRY_DEFAULT_ICON_NAME,
 } from '@/lib/event-icon-registry'
 import { getIconCustomization, COLOR_PRESETS } from '@/hooks/use-icon-customizations'
+import { agentClassFor } from '@/agents/registry'
+import type { Agent, ParsedEvent } from '@/types'
 
 // Cache lazy-loaded icon components so we don't create new ones on every render
 const lazyIconCache = new Map<string, LucideIcon>()
+
+type IconName = keyof typeof dynamicIconImports
+
+/**
+ * Wrap a lazily-imported icon in its own Suspense boundary. Without it, a row
+ * rendering an icon whose chunk hasn't loaded suspends up to the nearest
+ * boundary, so whole event lists never commit until every icon chunk arrives.
+ * The fallback reuses the icon's className/size so layout doesn't shift.
+ * displayName carries the PascalCase name for the icon settings UI.
+ */
+function suspendedIcon(name: IconName): LucideIcon {
+  const Lazy = lazy(dynamicIconImports[name])
+  const Icon = forwardRef<SVGSVGElement, LucideProps>((props, ref) =>
+    createElement(
+      Suspense,
+      {
+        fallback: createElement('span', {
+          'aria-hidden': true,
+          className: props.className,
+          style: { display: 'inline-block', width: props.size, height: props.size },
+        }),
+      },
+      createElement(Lazy, { ...props, ref }),
+    ),
+  )
+  Icon.displayName = toPascalCase(name)
+  return Icon as LucideIcon
+}
 
 function resolveIconComponent(iconName: string): LucideIcon | null {
   const resolved = resolveIconName(iconName)
   if (!resolved) return null
   if (!lazyIconCache.has(resolved)) {
-    lazyIconCache.set(resolved, lazy(dynamicIconImports[resolved]) as unknown as LucideIcon)
+    lazyIconCache.set(resolved, suspendedIcon(resolved))
   }
   return lazyIconCache.get(resolved)!
 }
@@ -52,71 +82,48 @@ for (const entry of EVENT_ICON_REGISTRY) {
 
 /** Fallback icon for settings UI. */
 export const defaultEventIcon: LucideIcon =
-  resolveIconComponent(REGISTRY_DEFAULT_ICON_NAME) ??
-  (lazy(dynamicIconImports['pin']) as unknown as LucideIcon)
-
-// ---------------------------------------------------------------------------
-// Key resolver (our format: bare tool names, e.g. "Bash", "_MCP")
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve an event to its logical icon/color key.
- * Tool events resolve by toolName (e.g., "Bash", "Edit").
- * Non-tool events resolve by subtype (e.g., "SessionStart").
- */
-export function resolveEventKey(subtype: string | null, toolName?: string | null): string {
-  const isTool =
-    subtype === 'PreToolUse' || subtype === 'PostToolUse' || subtype === 'PostToolUseFailure'
-  if (isTool && toolName) {
-    // MCP tools share the _MCP icon/color; individual tool names can still be customized
-    if (toolName.startsWith('mcp__')) return '_MCP'
-    return toolName
-  }
-  return subtype || 'unknown'
-}
+  resolveIconComponent(REGISTRY_DEFAULT_ICON_NAME) ?? suspendedIcon('pin')
 
 // ---------------------------------------------------------------------------
 // Icon / color resolvers
 // ---------------------------------------------------------------------------
 
-/**
- * Resolve the LucideIcon for an event, applying user customizations first,
- * then falling back to the centralized registry.
- */
-export function getEventIcon(subtype: string | null, toolName?: string | null): LucideIcon {
-  const key = resolveEventKey(subtype, toolName)
-
-  // 1. User customization
-  const custom = getIconCustomization(key)
-  if (custom?.iconName) {
-    const component = resolveIconComponent(custom.iconName)
-    if (component) return component
-  }
-
-  // 2. Registry default
-  const iconName = registryIconName(key)
-  const component = resolveIconComponent(iconName)
-  if (component) return component
-
-  // 3. Ultimate fallback
-  return (
-    resolveIconComponent(REGISTRY_DEFAULT_ICON_NAME) ??
-    (lazy(dynamicIconImports['pin']) as unknown as LucideIcon)
-  )
+/** Icon id for an event, chosen by its agent class. */
+export function eventIconId(event: ParsedEvent, agent?: Agent | null): string {
+  return agentClassFor(event, agent).iconId(event)
 }
 
 /**
- * Resolve the color classes for an event, applying user customizations first,
+ * Resolve the LucideIcon for an icon id, applying user customizations first,
  * then falling back to the centralized registry.
  */
-export function getEventColor(
-  subtype: string | null,
-  toolName?: string | null,
-): { iconColor: string; dotColor: string; customHex?: string } {
-  const key = resolveEventKey(subtype, toolName)
+export function getEventIcon(iconId: string): LucideIcon {
+  const custom = getIconCustomization(iconId)
+  if (custom?.iconName) {
+    const component = resolveIconComponent(custom.iconName)
+    if (component) {
+      return component
+    }
+  }
 
-  // 1. User customization
-  const custom = getIconCustomization(key)
+  const component = resolveIconComponent(registryIconName(iconId))
+  if (component) {
+    return component
+  }
+
+  return resolveIconComponent(REGISTRY_DEFAULT_ICON_NAME) ?? suspendedIcon('pin')
+}
+
+/**
+ * Resolve the color classes for an icon id, applying user customizations
+ * first, then falling back to the centralized registry.
+ */
+export function getEventColor(iconId: string): {
+  iconColor: string
+  dotColor: string
+  customHex?: string
+} {
+  const custom = getIconCustomization(iconId)
   if (custom?.colorName === 'custom' && custom.customHex) {
     return { iconColor: '', dotColor: '', customHex: custom.customHex }
   }
@@ -125,7 +132,6 @@ export function getEventColor(
     return { iconColor: preset.iconColor, dotColor: preset.dotColor }
   }
 
-  // 2. Registry default
-  const color = registryColor(key)
+  const color = registryColor(iconId)
   return { iconColor: color.iconColor, dotColor: color.dotColor }
 }

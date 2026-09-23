@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Release script for openclaude-observe.
+# Release script for instantcoffee-observe.
 # Uses date-based versioning: DD.MM.YYYY
 # Tags with the date and short git hash.
 #
@@ -50,7 +50,7 @@ sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
 
 echo ""
 echo "=== Building Docker image ==="
-docker build -t openclaude-observe:local .
+docker build -t instantcoffee-observe:local .
 
 if $DRY_RUN; then
   echo ""

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { promises as fs } from 'node:fs'
 import type { EventStore } from '../storage/types'
 import { config } from '../config'
-import { resolveTranscriptPath } from '../services/transcript-path'
+import { resolvePiTranscript } from '../services/transcript-path'
 
 type Env = { Variables: { store: EventStore } }
 
@@ -14,7 +14,7 @@ router.get('/sessions/:sessionId/transcript-stats', async (c) => {
       {
         error: 'disabled',
         message:
-          'Transcript parsing is disabled. Unset OPENCLAUDE_OBSERVE_TRANSCRIPT_STATS (or remove the =0 override) on the server to re-enable.',
+          'Transcript parsing is disabled. Unset INSTANTCOFFEE_OBSERVE_TRANSCRIPT_STATS (or remove the =0 override) on the server to re-enable.',
       },
       404,
     )
@@ -27,7 +27,16 @@ router.get('/sessions/:sessionId/transcript-stats', async (c) => {
     return c.json({ error: 'no_transcript', message: 'No transcript path found for session.' }, 404)
   }
 
-  const resolved = resolveTranscriptPath(hostPath, config.transcriptStats.base)
+  const resolved = await resolvePiTranscript(hostPath, config.pi.homes)
+  if (!resolved) {
+    return c.json(
+      {
+        error: 'outside_pi_sessions',
+        message: `Transcript ${hostPath} is not under a configured pi home's .pi/agent/sessions (INSTANTCOFFEE_OBSERVE_PI_HOMES).`,
+      },
+      403,
+    )
+  }
 
   let stat
   try {

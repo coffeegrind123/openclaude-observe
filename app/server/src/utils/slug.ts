@@ -1,7 +1,7 @@
 /**
- * Extracts the project directory from a transcript path.
- * e.g. "/Users/joe/.claude/projects/-Users-joe-Dev-my-app/session.jsonl"
- *    -> "/Users/joe/.claude/projects/-Users-joe-Dev-my-app"
+ * Extracts the session directory from a transcript path.
+ * e.g. "/home/joe/.pi/agent/sessions/--home-joe-dev-my-app--/2026-…_id.jsonl"
+ *    -> "/home/joe/.pi/agent/sessions/--home-joe-dev-my-app--"
  */
 export function extractProjectDir(transcriptPath: string): string {
   let p = transcriptPath.replace(/\/+$/, '')
@@ -50,13 +50,13 @@ export function deriveSlugCandidatesFromCwd(cwd: string): string[] {
 }
 
 /**
- * Derives slug candidates from a Claude project directory path.
- * The directory name is a dash-joined encoding of the absolute path,
- * e.g. "-Users-joe-Development-acme-openclaude-observe"
+ * Derives slug candidates from a pi session directory path.
+ * The directory name is a dash-joined encoding of the working directory,
+ * e.g. "--home-joe-development-acme-instantcoffee-observe--"
  *
  * Returns candidates in order of preference:
- *   1. Last two segments (e.g. "openclaude-observe")
- *   2. Last three segments (e.g. "acme-openclaude-observe")
+ *   1. Last two segments (e.g. "instantcoffee-observe")
+ *   2. Last three segments (e.g. "acme-instantcoffee-observe")
  *   3. etc.
  *
  * Caller should check each candidate for availability.

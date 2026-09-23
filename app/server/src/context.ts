@@ -1,49 +1,51 @@
-// Per-turn context attribution — classifies the events that preceded each
-// LLMGeneration into categories so users can see what's consuming their
-// context window.
+// Per-turn context attribution for pi sessions: an estimate of what fills the
+// model's window at each LLM call, by category, so the standing costs of a
+// small local window are visible (instantcoffee runs a 96K window where the
+// system prompt alone can be a tenth of it).
 //
-// Categories (discriminated by `category` field on each attribution):
-//   claude-md          — InstructionsLoaded events (CLAUDE.md / rules files)
-//   mentioned-file     — @file mentions in the user's prompt
-//   tool-output        — PostToolUse tool_response content
-//   thinking-text      — Assistant text + extended-thinking from prior turns
-//   team-coordination  — SendMessage / TaskCreate / TaskUpdate / TaskList /
-//                        TaskGet / TeamCreate / TeamDelete tool calls
-//   user-message       — UserPromptSubmit prompt text (excluding @-mentions)
-//   skills             — Skill* tool calls (bundled skill invocations)
+// What a pi window holds at a given call:
+//   - the system prompt (incl. AGENTS.md context files) — every call
+//   - since the last compaction: the compaction summary, then every user
+//     message, tool result, injected message and prior assistant output
 //
-// This module does NOT mutate state — it's a pure read-side computation over
-// the events already stored. Token counts are estimates (chars/4 heuristic),
-// which is the same baseline tokenizer Claude uses as a cheap approximation.
-// The authoritative input_tokens number for the LLM call is returned alongside
-// so the UI can show both the estimate and the true total.
+// So each turn's bucket `tokens` is CUMULATIVE — what is in the window at that
+// call — while its `sources` list only what was ADDED since the previous call
+// (keeping the response linear in session length). Aggregates count each
+// source once: the tokens each category contributed over the session.
+//
+// One agent at a time: a subagent has its own window, so its events never
+// count against its parent's. Token counts are chars/4 estimates; the call's
+// real input_tokens is returned alongside so the gap is visible. Tool schemas
+// are sent with every request but never appear in events, which is most of
+// the gap.
 
 import type { StoredEvent } from './storage/types'
 
 export type ContextCategory =
-  | 'claude-md'
+  | 'system-prompt'
+  | 'compaction-summary'
+  | 'user-message'
   | 'mentioned-file'
   | 'tool-output'
-  | 'thinking-text'
-  | 'team-coordination'
-  | 'user-message'
-  | 'skills'
+  | 'delegation'
+  | 'injected'
+  | 'assistant-output'
 
 export const CONTEXT_CATEGORIES: ContextCategory[] = [
-  'claude-md',
+  'system-prompt',
+  'compaction-summary',
+  'user-message',
   'mentioned-file',
   'tool-output',
-  'thinking-text',
-  'team-coordination',
-  'user-message',
-  'skills',
+  'delegation',
+  'injected',
+  'assistant-output',
 ]
 
 export interface ContextSource {
   eventId: number
   description: string
   tokens: number
-  scope?: string // e.g. 'User' | 'Project' | 'Local' for claude-md
 }
 
 export interface ContextBucket {
@@ -55,7 +57,7 @@ export interface ContextBucket {
 export interface TurnAttribution {
   llmEventId: number
   timestamp: number
-  inputTokens: number // authoritative from LLM call
+  inputTokens: number // authoritative from the LLM call
   cacheReadTokens: number
   cacheCreationTokens: number
   estimatedTokens: number // sum across categories
@@ -64,27 +66,20 @@ export interface TurnAttribution {
 
 export interface SessionContextBreakdown {
   sessionId: string
+  agentId: string
   turns: TurnAttribution[]
-  // Aggregated view (summed across all turns) for the stats tab:
   aggregates: Record<ContextCategory, { tokens: number; count: number }>
   peakInputTokens: number
 }
 
-// --- helpers -----------------------------------------------------------------
+const SPAWN_TOOLS = new Set(['Agent', 'SubAgent'])
+const SUBAGENT_RESULT = 'subagent-result'
+const DESCRIPTION_MAX = 120
 
-const TEAM_COORD_TOOLS = new Set([
-  'SendMessage',
-  'TaskCreate',
-  'TaskUpdate',
-  'TaskList',
-  'TaskGet',
-  'TeamCreate',
-  'TeamDelete',
-])
-
-function estimateTokens(text: string | null | undefined): number {
-  if (!text) return 0
-  // Claude's cheap approximation; within ~15% for English text.
+export function estimateTokens(text: string | null | undefined): number {
+  if (!text) {
+    return 0
+  }
   return Math.max(1, Math.ceil(text.length / 4))
 }
 
@@ -96,9 +91,7 @@ function parsePayload(raw: StoredEvent): Record<string, any> {
   }
 }
 
-// Match @file mentions in the user's prompt. Matches:
-//  @relative/path.ts  @/abs/path  @file.md
-// Stops at whitespace or common punctuation. Ignored inside code fences.
+// @file mentions in a prompt (pi inlines the file). Ignored inside fences.
 const MENTION_RE = /(?:^|\s)@([\w./~\-]+)(?=[\s,.;:!?)\]]|$)/g
 
 function extractMentions(prompt: string): string[] {
@@ -109,7 +102,9 @@ function extractMentions(prompt: string): string[] {
       inFence = !inFence
       continue
     }
-    if (inFence) continue
+    if (inFence) {
+      continue
+    }
     MENTION_RE.lastIndex = 0
     let m: RegExpExecArray | null
     while ((m = MENTION_RE.exec(line))) {
@@ -120,24 +115,21 @@ function extractMentions(prompt: string): string[] {
 }
 
 function truncate(s: string, n: number): string {
-  return s.length <= n ? s : s.slice(0, n - 1) + '…'
+  const flat = s.replace(/\s+/g, ' ').trim()
+  return flat.length <= n ? flat : flat.slice(0, n - 1) + '…'
 }
 
 function toolResponseText(toolResponse: unknown): string {
-  if (!toolResponse) return ''
-  if (typeof toolResponse === 'string') return toolResponse
+  if (!toolResponse) {
+    return ''
+  }
+  if (typeof toolResponse === 'string') {
+    return toolResponse
+  }
   const r = toolResponse as Record<string, any>
-  if (typeof r.content === 'string') return r.content
-  if (Array.isArray(r.content)) {
+  if (typeof r.content === 'string') {
     return r.content
-      .map((c: unknown) => (typeof c === 'string' ? c : ((c as any)?.text ?? '')))
-      .join('\n')
   }
-  if (r.file && typeof r.file.content === 'string') return r.file.content
-  if (typeof r.stdout === 'string' || typeof r.stderr === 'string') {
-    return [r.stdout, r.stderr].filter(Boolean).join('\n')
-  }
-  if (typeof r.output === 'string') return r.output
   try {
     return JSON.stringify(toolResponse)
   } catch {
@@ -145,172 +137,147 @@ function toolResponseText(toolResponse: unknown): string {
   }
 }
 
-// --- main computation --------------------------------------------------------
+function toolDescription(toolName: string, input: Record<string, any>): string {
+  const target = input.path ?? input.file_path ?? input.command ?? input.pattern ?? input.description
+  return typeof target === 'string' ? `${toolName}: ${truncate(target, 60)}` : toolName
+}
 
-export function computeSessionContext(events: StoredEvent[]): SessionContextBreakdown {
-  // Sort defensively; the query layer already returns ASC but we don't want to
-  // assume.
-  const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp)
+type Running = Record<ContextCategory, { tokens: number; added: ContextSource[] }>
+
+function emptyRunning(): Running {
+  return Object.fromEntries(CONTEXT_CATEGORIES.map((c) => [c, { tokens: 0, added: [] }])) as unknown as Running
+}
+
+/**
+ * Attribution for one agent's window. `agentId` defaults to the session's
+ * top-level agent, whose id is the session id.
+ */
+export function computeSessionContext(events: StoredEvent[], agentId?: string): SessionContextBreakdown {
+  const sessionId = events[0]?.session_id ?? ''
+  const owner = agentId ?? sessionId
+  const sorted = events.filter((e) => e.agent_id === owner).sort((a, b) => a.timestamp - b.timestamp || a.id - b.id)
+
+  const aggregates = Object.fromEntries(
+    CONTEXT_CATEGORIES.map((c) => [c, { tokens: 0, count: 0 }]),
+  ) as Record<ContextCategory, { tokens: number; count: number }>
   const turns: TurnAttribution[] = []
+  let running = emptyRunning()
+  let peak = 0
 
-  // Pointer to the first event after the previous LLMGeneration. On the very
-  // first turn, starts at 0.
-  let windowStart = 0
-
-  for (let i = 0; i < sorted.length; i++) {
-    const ev = sorted[i]
-    if (ev.subtype !== 'LLMGeneration') continue
-
-    const buckets: Record<ContextCategory, ContextBucket> = {
-      'claude-md': { category: 'claude-md', tokens: 0, sources: [] },
-      'mentioned-file': { category: 'mentioned-file', tokens: 0, sources: [] },
-      'tool-output': { category: 'tool-output', tokens: 0, sources: [] },
-      'thinking-text': { category: 'thinking-text', tokens: 0, sources: [] },
-      'team-coordination': { category: 'team-coordination', tokens: 0, sources: [] },
-      'user-message': { category: 'user-message', tokens: 0, sources: [] },
-      skills: { category: 'skills', tokens: 0, sources: [] },
+  const add = (category: ContextCategory, source: ContextSource) => {
+    if (source.tokens <= 0) {
+      return
     }
+    running[category].tokens += source.tokens
+    running[category].added.push(source)
+    aggregates[category].tokens += source.tokens
+    aggregates[category].count += 1
+  }
 
-    // Walk the window: events between windowStart and this LLMGeneration.
-    for (let j = windowStart; j < i; j++) {
-      const win = sorted[j]
-      const p = parsePayload(win)
+  for (const ev of sorted) {
+    const p = parsePayload(ev)
 
-      if (win.subtype === 'UserPromptSubmit') {
-        const prompt = (p.prompt as string) || ''
+    switch (ev.subtype) {
+      case 'SystemPrompt': {
+        // Replaces, never accumulates: the window holds one system prompt.
+        const chars = typeof p.system_prompt_chars === 'number' ? p.system_prompt_chars : String(p.system_prompt ?? '').length
+        const tokens = Math.ceil(chars / 4)
+        running['system-prompt'].tokens = 0
+        add('system-prompt', { eventId: ev.id, description: `system prompt (${chars.toLocaleString()} chars)`, tokens })
+        break
+      }
+      case 'PostCompact': {
+        // Compaction replaces the conversation with a summary; only the system
+        // prompt survives from before it.
+        const systemPrompt = running['system-prompt'].tokens
+        running = emptyRunning()
+        running['system-prompt'].tokens = systemPrompt
+        const summary = String(p.summary ?? '')
+        add('compaction-summary', {
+          eventId: ev.id,
+          description: `compaction (${p.trigger ?? 'auto'}): ${truncate(summary, 80)}`,
+          tokens: estimateTokens(summary),
+        })
+        break
+      }
+      case 'UserPromptSubmit': {
+        const prompt = String(p.prompt ?? '')
         const mentions = extractMentions(prompt)
         const mentionTokens = mentions.reduce((t, m) => t + estimateTokens(m), 0)
-        // Estimate the mention text itself (path only; we don't have the file
-        // content). We'll separately bucket the file content when it arrives
-        // via a subsequent Read PostToolUse event.
-        if (mentionTokens > 0) {
-          buckets['mentioned-file'].tokens += mentionTokens
-          buckets['mentioned-file'].sources.push({
-            eventId: win.id,
+        if (mentions.length > 0) {
+          add('mentioned-file', {
+            eventId: ev.id,
             description: `${mentions.length} @-mention${mentions.length === 1 ? '' : 's'}: ${mentions.slice(0, 3).join(', ')}${mentions.length > 3 ? '…' : ''}`,
             tokens: mentionTokens,
           })
         }
-        const promptTokens = estimateTokens(prompt) - mentionTokens
-        if (promptTokens > 0) {
-          buckets['user-message'].tokens += promptTokens
-          buckets['user-message'].sources.push({
-            eventId: win.id,
-            description: truncate(prompt.replace(/\s+/g, ' ').trim(), 120),
-            tokens: promptTokens,
-          })
-        }
-      } else if (win.subtype === 'InstructionsLoaded') {
-        const filePath = (p.file_path as string) || ''
-        const memoryType = (p.memory_type as string) || ''
-        // We don't know the file size server-side, but the dashboard can look
-        // up later. For now, estimate from the path length as a placeholder —
-        // the UI will show "size unknown" and let the user click to load.
-        // Better: walk subsequent events for a Read on the same path and use
-        // that as the true content size. For now, use a small constant baseline.
-        const baselineTokens = 200 // heuristic — real CLAUDE.md is usually 200-2000 tokens
-        buckets['claude-md'].tokens += baselineTokens
-        buckets['claude-md'].sources.push({
-          eventId: win.id,
-          description: filePath,
-          tokens: baselineTokens,
-          scope: memoryType,
+        add('user-message', {
+          eventId: ev.id,
+          description: truncate(prompt, DESCRIPTION_MAX),
+          tokens: estimateTokens(prompt) - mentionTokens,
         })
-      } else if (win.subtype === 'PostToolUse' && win.tool_name) {
-        const toolName = win.tool_name
-        const toolInput = (p.tool_input as Record<string, any>) || {}
-        const resultText = toolResponseText(p.tool_response)
-        const toolTokens = estimateTokens(resultText)
-        if (TEAM_COORD_TOOLS.has(toolName)) {
-          const inputTokens = estimateTokens(JSON.stringify(toolInput))
-          const total = toolTokens + inputTokens
-          buckets['team-coordination'].tokens += total
-          buckets['team-coordination'].sources.push({
-            eventId: win.id,
-            description: `${toolName}: ${truncate(JSON.stringify(toolInput), 80)}`,
-            tokens: total,
-          })
-        } else if (toolName.startsWith('Skill')) {
-          buckets.skills.tokens += toolTokens
-          buckets.skills.sources.push({
-            eventId: win.id,
-            description: `${toolName}${toolInput.skill ? `: ${toolInput.skill}` : ''}`,
-            tokens: toolTokens,
-          })
-        } else if (toolTokens > 0) {
-          const fp = (toolInput.file_path as string) || (toolInput.path as string) || ''
-          const cmd = (toolInput.command as string) || ''
-          const desc = fp
-            ? `${toolName}: ${fp.split('/').pop() || fp}`
-            : cmd
-              ? `${toolName}: ${truncate(cmd, 60)}`
-              : toolName
-          buckets['tool-output'].tokens += toolTokens
-          buckets['tool-output'].sources.push({
-            eventId: win.id,
-            description: desc,
-            tokens: toolTokens,
-          })
+        break
+      }
+      case 'UserBash': {
+        if (p.exclude_from_context !== true) {
+          add('user-message', { eventId: ev.id, description: `!${truncate(String(p.command ?? ''), 60)}`, tokens: estimateTokens(String(p.command ?? '')) })
         }
+        break
+      }
+      case 'PostToolUse':
+      case 'PostToolUseFailure': {
+        const toolName = ev.tool_name ?? String(p.tool_name ?? 'tool')
+        const input = (p.tool_input as Record<string, any>) ?? {}
+        const tokens = estimateTokens(toolResponseText(p.tool_response))
+        add(SPAWN_TOOLS.has(toolName) ? 'delegation' : 'tool-output', {
+          eventId: ev.id,
+          description: toolDescription(toolName, input),
+          tokens,
+        })
+        break
+      }
+      case 'CustomMessage': {
+        const kind = String(p.custom_type ?? 'message')
+        add(kind === SUBAGENT_RESULT ? 'delegation' : 'injected', {
+          eventId: ev.id,
+          description: `${kind}: ${truncate(String(p.text ?? ''), 60)}`,
+          tokens: estimateTokens(String(p.text ?? '')),
+        })
+        break
+      }
+      case 'LLMGeneration': {
+        const inputTokens = Number(p.input_tokens) || 0
+        const cacheReadTokens = Number(p.cache_read_tokens) || 0
+        const cacheCreationTokens = Number(p.cache_creation_tokens) || 0
+        const buckets = CONTEXT_CATEGORIES.map((c) => ({
+          category: c,
+          tokens: running[c].tokens,
+          sources: running[c].added,
+        }))
+        turns.push({
+          llmEventId: ev.id,
+          timestamp: ev.timestamp,
+          inputTokens,
+          cacheReadTokens,
+          cacheCreationTokens,
+          estimatedTokens: buckets.reduce((s, b) => s + b.tokens, 0),
+          buckets,
+        })
+        // pi reports input excluding cache hits; the window is both.
+        peak = Math.max(peak, inputTokens + cacheReadTokens + cacheCreationTokens)
+        for (const c of CONTEXT_CATEGORIES) {
+          running[c].added = []
+        }
+        // This call's output is in the window from the next call on.
+        add('assistant-output', {
+          eventId: ev.id,
+          description: `assistant turn ${new Date(ev.timestamp).toISOString().slice(11, 19)}`,
+          tokens: Number(p.output_tokens) || 0,
+        })
+        break
       }
     }
-
-    // Thinking/text output from any prior LLMGeneration falls into context
-    // for this turn. Prior response_preview tokens are the closest visible
-    // proxy for what the LLM generated and fed back as assistant turns.
-    for (let k = 0; k < windowStart; k++) {
-      const prior = sorted[k]
-      if (prior.subtype !== 'LLMGeneration') continue
-      const pp = parsePayload(prior)
-      const out = (pp.output_tokens as number) || 0
-      if (out > 0) {
-        buckets['thinking-text'].tokens += out
-        if (buckets['thinking-text'].sources.length < 8) {
-          buckets['thinking-text'].sources.push({
-            eventId: prior.id,
-            description: `assistant turn ${new Date(prior.timestamp).toISOString().slice(11, 19)}`,
-            tokens: out,
-          })
-        }
-      }
-    }
-
-    const payload = parsePayload(ev)
-    const inputTokens = (payload.input_tokens as number) || 0
-    const cacheReadTokens = (payload.cache_read_tokens as number) || 0
-    const cacheCreationTokens = (payload.cache_creation_tokens as number) || 0
-    const estimatedTokens = CONTEXT_CATEGORIES.reduce((s, c) => s + buckets[c].tokens, 0)
-
-    turns.push({
-      llmEventId: ev.id,
-      timestamp: ev.timestamp,
-      inputTokens,
-      cacheReadTokens,
-      cacheCreationTokens,
-      estimatedTokens,
-      buckets: CONTEXT_CATEGORIES.map((c) => buckets[c]),
-    })
-
-    windowStart = i + 1
   }
 
-  // Aggregates across all turns
-  const aggregates = Object.fromEntries(
-    CONTEXT_CATEGORIES.map((c) => [c, { tokens: 0, count: 0 }]),
-  ) as Record<ContextCategory, { tokens: number; count: number }>
-  let peak = 0
-  for (const t of turns) {
-    peak = Math.max(peak, t.inputTokens)
-    for (const b of t.buckets) {
-      aggregates[b.category].tokens += b.tokens
-      aggregates[b.category].count += b.sources.length
-    }
-  }
-
-  return {
-    sessionId: events[0]?.session_id ?? '',
-    turns,
-    aggregates,
-    peakInputTokens: peak,
-  }
+  return { sessionId, agentId: owner, turns, aggregates, peakInputTokens: peak }
 }

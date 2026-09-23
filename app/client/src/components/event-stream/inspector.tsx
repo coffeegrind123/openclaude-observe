@@ -3,10 +3,11 @@ import { X } from 'lucide-react'
 import { useUIStore } from '@/stores/ui-store'
 import { useEffectiveEvents } from '@/hooks/use-effective-events'
 import { useAgents } from '@/hooks/use-agents'
-import { useDedupedEvents } from '@/hooks/use-deduped-events'
+import { useSessionDedupedEvents } from '@/hooks/deduped-events-context'
 import { computeRuntimeMs } from '@/lib/runtime'
 import { buildAgentColorMap, getAgentStreamColorById, getAgentDisplayName } from '@/lib/agent-utils'
 import { EventDetail } from './event-detail'
+import { agentClassFor } from '@/agents/registry'
 import type { Agent } from '@/types'
 
 function formatTime(ts: number): string {
@@ -35,7 +36,8 @@ export function Inspector() {
 
   const events = useEffectiveEvents(selectedSessionId).data
   const agents = useAgents(selectedSessionId, events)
-  const { spawnInfo, pairedPayloads } = useDedupedEvents(events)
+  const { spawnInfo, spawnedAgentIds, mergedIdMap, pairedPayloads, deduped } =
+    useSessionDedupedEvents()
 
   const agentMap = useMemo(() => {
     const map = new Map<string, Agent>()
@@ -44,10 +46,17 @@ export function Inspector() {
   }, [agents])
   const agentColorMap = useMemo(() => buildAgentColorMap(agents), [agents])
 
-  const event = useMemo(
-    () => events?.find((e) => e.id === selectedEventId) ?? null,
-    [events, selectedEventId],
-  )
+  // Prefer the deduped row (a tool call's merged Pre+Post); a raw event id
+  // that was merged into another row resolves to that row.
+  const event = useMemo(() => {
+    if (selectedEventId == null) {
+      return null
+    }
+    const rowId = mergedIdMap.get(selectedEventId) ?? selectedEventId
+    return (
+      deduped.find((e) => e.id === rowId) ?? events?.find((e) => e.id === selectedEventId) ?? null
+    )
+  }, [deduped, events, mergedIdMap, selectedEventId])
 
   if (!event) return null
 
@@ -55,7 +64,10 @@ export function Inspector() {
   const agentName = agent ? getAgentDisplayName(agent) : event.agentId.slice(0, 8)
   const agentCss = getAgentStreamColorById(event.agentId, agentColorMap)
   const runtimeMs = events ? computeRuntimeMs(event, events) : null
-  const label = event.subtype || event.type
+  const cls = agentClassFor(event, agent)
+  const label = cls.label(event)
+  const toolLabel = cls.toolLabel(event)
+  const spawnedAgentId = event.toolUseId ? spawnedAgentIds.get(event.toolUseId) : undefined
 
   return (
     <aside className="shadow-insp relative z-[1] flex w-[400px] shrink-0 flex-col overflow-hidden bg-card/40">
@@ -70,7 +82,7 @@ export function Inspector() {
             {agentName} · {label}
           </div>
           <div className="font-mono text-[10.5px] text-ink-3">
-            {event.toolName ? `${event.toolName} · ` : ''}
+            {toolLabel ? `${toolLabel} · ` : ''}
             {formatTime(event.timestamp)} · evt #{event.id}
           </div>
         </div>
@@ -88,6 +100,8 @@ export function Inspector() {
           event={event}
           agentMap={agentMap}
           spawnInfo={spawnInfo.get(event.agentId)}
+          spawnedAgentId={spawnedAgentId}
+          spawnedInfo={spawnedAgentId ? spawnInfo.get(spawnedAgentId) : undefined}
           pairedPayloads={pairedPayloads.get(event.id)}
           runtimeMs={runtimeMs}
         />

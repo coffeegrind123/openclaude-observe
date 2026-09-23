@@ -1,16 +1,15 @@
-# OpenClaude Observe
+# instantcoffee-observe
 
-Real-time observability dashboard for OpenClaude. Receives OTel trace events via native in-process integration — LLM calls, tool executions, agent hierarchy, and multi-instance topology (daemon, pipes, coordinator, bridge).
+Real-time observability dashboard for [instantcoffee](https://github.com/coffeegrind123/instantcoffee) — the pi coding agent on Qwen3.8-27B behind llama.cpp and the forge proxy. Receives every pi session event (prompts, tool calls, LLM generations, compactions, subagents) from the pi extension in instantcoffee's `.pi/extensions/observe/`, and polls llama-server `/metrics` + forge `/forge/usage` for decode speed, draft acceptance and context fill.
 
 ## Quick Start
 
 ```bash
-docker compose up openclaude-observe
+docker compose up -d instantcoffee-observe
 # Dashboard at http://localhost:4981
-# Set CLAUDE_OBSERVE_URL=http://localhost:4981 in OpenClaude
 ```
 
-Restart your OpenClaude session. Events stream in automatically — no plugin, no hook scripts, no MCP server.
+instantcoffee's `scripts/pi-local.sh` loads the extension by default (`OBSERVE_ENABLED=1`, `OBSERVE_URL` to override). Start a pi session and events stream in. The event contract is [docs/pi-protocol.md](docs/pi-protocol.md).
 
 ### Just recipes
 
@@ -30,8 +29,8 @@ Run `just --list` for the full set.
 Requires [just](https://github.com/casey/just), [Node.js](https://nodejs.org/), and [Docker](https://www.docker.com/).
 
 ```bash
-git clone https://github.com/coffeegrind123/openclaude-observe.git
-cd openclaude-observe
+git clone https://github.com/coffeegrind123/instantcoffee-observe.git
+cd instantcoffee-observe
 just install   # install dependencies
 just start     # start server via Docker
 ```
@@ -46,7 +45,7 @@ For dev mode with hot reload: `just dev` (client at http://localhost:5174, API a
 |---------|-----|
 | Server not running | `just start` |
 | Docker not running | Start Docker Desktop, then `just start` |
-| Port conflict | Set `OPENCLAUDE_OBSERVE_SERVER_PORT=<port>` in `.env` |
+| Port conflict | Set `INSTANTCOFFEE_OBSERVE_SERVER_PORT=<port>` in `.env` |
 | Need diagnostics | `just logs` and `just health` |
 | Database issues | `just db-reset` |
 

@@ -12,15 +12,73 @@ export interface ParsedRawEvent {
   toolName: string | null
   toolUseId: string | null
   timestamp: number
-  // The agent this event belongs to (from payload.agent_id — present on subagent hook events)
+  // Producer, e.g. "pi". Stored on the agents it creates.
+  agentClass: string | null
+  // The subagent this event belongs to (payload.agent_id). The pi extension
+  // resolves this itself — pi exposes no parent link — and sends it explicitly
+  // on every event from a subagent, along with who spawned it.
   ownerAgentId: string | null
-  // The subagent being spawned/stopped (from Agent tool response or SubagentStop)
-  subAgentId: string | null
-  subAgentName: string | null
-  subAgentDescription: string | null
-  instanceId: string | null
+  ownerAgentType: string | null
+  ownerAgentName: string | null
+  ownerAgentDescription: string | null
+  // Set when a subagent spawned this one (nested delegation); null when the
+  // top-level session did.
+  parentAgentId: string | null
+  // tool_use_id of the Agent/SubAgent call that spawned the owner.
+  parentToolUseId: string | null
   metadata: Record<string, unknown>
   raw: Record<string, unknown>
+}
+
+// Each pi event name (see docs/pi-protocol.md) and the coarse type the
+// stream groups it under. Anything unlisted is stored as a 'system' event
+// under its own name, so a newer extension never gets its events dropped.
+const EVENT_TYPES: Record<string, string> = {
+  SessionStart: 'session',
+  SessionEnd: 'session',
+  SessionRename: 'session',
+  SessionTree: 'session',
+  SystemPrompt: 'session',
+  UserPromptSubmit: 'user',
+  UserBash: 'user',
+  PreToolUse: 'tool',
+  PostToolUse: 'tool',
+  PostToolUseFailure: 'tool',
+  LLMGeneration: 'llm',
+  Stop: 'system',
+  SubagentStart: 'system',
+  SubagentStop: 'system',
+  PreCompact: 'system',
+  PostCompact: 'system',
+  CompactionFailed: 'system',
+  ModelChange: 'system',
+  ThinkingLevelChange: 'system',
+  CustomMessage: 'system',
+  Notification: 'system',
+}
+
+const TOOL_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailure'])
+
+const METADATA_KEYS = [
+  'cwd',
+  'model',
+  'provider',
+  'agent_class',
+  'thinking_level',
+  'context_window',
+  'pi_mode',
+  'input_tokens',
+  'output_tokens',
+  'cache_read_tokens',
+  'cache_creation_tokens',
+  'ttft_ms',
+  'duration_ms',
+]
+
+const MAX_ID = 256
+
+function str(v: unknown, max = MAX_ID): string | null {
+  return typeof v === 'string' && v !== '' ? v.slice(0, max) : null
 }
 
 export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
@@ -37,11 +95,13 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
         toolName: null,
         toolUseId: null,
         timestamp: Date.now(),
+        agentClass: null,
         ownerAgentId: null,
-        subAgentId: null,
-        subAgentName: null,
-        subAgentDescription: null,
-        instanceId: null,
+        ownerAgentType: null,
+        ownerAgentName: null,
+        ownerAgentDescription: null,
+        parentAgentId: null,
+        parentToolUseId: null,
         metadata: {},
         raw,
       }
@@ -50,217 +110,45 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
     // If serialization throws (e.g. circular reference), continue parsing.
   }
 
-  const projectName = (raw.project_name as string) || null
-  const sessionId =
-    typeof raw.session_id === 'string' ? (raw.session_id as string).slice(0, 256) : 'unknown'
-  const slug = typeof raw.slug === 'string' ? (raw.slug as string).slice(0, 256) : null
-  const transcriptPath = (raw.transcript_path as string) || null
   const meta = raw.meta as Record<string, unknown> | undefined
-  const timestamp = parseTimestamp(meta?.timestamp ?? raw.timestamp)
-  const toolUseId = (raw.tool_use_id as string) || null
-  // agent_id is present on hook events fired from subagents
-  const ownerAgentId = (raw.agent_id as string) || null
+  const hookEventName = str(raw.hook_event_name, 200)
 
   let type: string
-  let subtype: string | null = null
-  let toolName: string | null = null
-  let subAgentId: string | null = null
-  let subAgentName: string | null = null
-  let subAgentDescription: string | null = null
-
-  const hookEventName = raw.hook_event_name as string | undefined
-  const hookToolName = raw.tool_name as string | undefined
-  const toolInput = raw.tool_input as Record<string, unknown> | undefined
-
+  let subtype: string | null
   if (hookEventName) {
-    switch (hookEventName) {
-      case 'SessionStart':
-        type = 'session'
-        subtype = 'SessionStart'
-        break
-      case 'Stop':
-        type = 'system'
-        subtype = 'Stop'
-        break
-      case 'UserPromptSubmit':
-        type = 'user'
-        subtype = 'UserPromptSubmit'
-        break
-      case 'PreToolUse':
-        type = 'tool'
-        subtype = 'PreToolUse'
-        toolName = hookToolName || null
-        if (toolName === 'Agent') {
-          subAgentName = (toolInput?.name as string) || null
-          subAgentDescription = (toolInput?.description as string) || null
-        }
-        break
-      case 'PostToolUse':
-        type = 'tool'
-        subtype = 'PostToolUse'
-        toolName = hookToolName || null
-        if (toolName === 'Agent') {
-          const toolResponse = raw.tool_response as Record<string, unknown> | undefined
-          if (toolResponse) {
-            subAgentId = (toolResponse.agentId as string) || null
-            subAgentName = (toolInput?.name as string) || null
-            subAgentDescription = (toolInput?.description as string) || null
-          }
-        }
-        break
-      case 'PostToolUseFailure':
-        type = 'tool'
-        subtype = 'PostToolUseFailure'
-        toolName = hookToolName || null
-        break
-      case 'ToolBatch':
-        type = 'tool'
-        subtype = 'ToolBatch'
-        break
-      case 'LLMGeneration':
-        type = 'llm'
-        subtype = 'LLMGeneration'
-        break
-      case 'CompactionRun':
-        type = 'system'
-        subtype = 'CompactionRun'
-        break
-      case 'CostUpdate':
-        type = 'system'
-        subtype = 'CostUpdate'
-        break
-      case 'SubagentStart':
-        type = 'system'
-        subtype = 'SubagentStart'
-        subAgentId = (raw.agent_id as string) || null
-        break
-      case 'SubagentStop':
-        type = 'system'
-        subtype = 'SubagentStop'
-        subAgentId = (raw.agent_id as string) || null
-        break
-      case 'DaemonStart':
-        type = 'daemon'
-        subtype = 'DaemonStart'
-        break
-      case 'DaemonStop':
-        type = 'daemon'
-        subtype = 'DaemonStop'
-        break
-      case 'DaemonHeartbeat':
-        type = 'daemon'
-        subtype = 'DaemonHeartbeat'
-        break
-      case 'PipeRoleAssigned':
-        type = 'pipe'
-        subtype = 'PipeRoleAssigned'
-        break
-      case 'PipeAttach':
-        type = 'pipe'
-        subtype = 'PipeAttach'
-        break
-      case 'PipeDetach':
-        type = 'pipe'
-        subtype = 'PipeDetach'
-        break
-      case 'PipePromptRouted':
-        type = 'pipe'
-        subtype = 'PipePromptRouted'
-        break
-      case 'PipePermissionForward':
-        type = 'pipe'
-        subtype = 'PipePermissionForward'
-        break
-      case 'PipeLanPeerDiscovered':
-        type = 'pipe'
-        subtype = 'PipeLanPeerDiscovered'
-        break
-      case 'CoordinatorDispatch':
-        type = 'coordinator'
-        subtype = 'CoordinatorDispatch'
-        break
-      case 'CoordinatorResult':
-        type = 'coordinator'
-        subtype = 'CoordinatorResult'
-        break
-      case 'BridgeConnected':
-        type = 'bridge'
-        subtype = 'BridgeConnected'
-        break
-      case 'BridgeDisconnected':
-        type = 'bridge'
-        subtype = 'BridgeDisconnected'
-        break
-      case 'BridgeWorkReceived':
-        type = 'bridge'
-        subtype = 'BridgeWorkReceived'
-        break
-      case 'SuperModeToggle':
-        type = 'system'
-        subtype = 'SuperModeToggle'
-        break
-      case 'Notification':
-        type = 'system'
-        subtype = 'Notification'
-        break
-      default:
-        type = 'system'
-        subtype = hookEventName.slice(0, 200)
-        break
-    }
+    type = EVENT_TYPES[hookEventName] ?? 'system'
+    subtype = hookEventName
   } else {
-    type = (raw.type as string) || 'unknown'
-    if (raw.subtype) {
-      subtype = raw.subtype as string
-    }
+    type = str(raw.type, 200) ?? 'unknown'
+    subtype = str(raw.subtype, 200)
   }
 
   const metadata: Record<string, unknown> = {}
-  for (const key of [
-    'version',
-    'gitBranch',
-    'cwd',
-    'entrypoint',
-    'permissionMode',
-    'userType',
-    'permission_mode',
-    'model',
-    'provider',
-    'input_tokens',
-    'output_tokens',
-    'cache_read_tokens',
-    'cache_creation_tokens',
-    'ttft_ms',
-    'duration_ms',
-    'instance_id',
-    'instance_role',
-  ]) {
-    if (raw[key] !== undefined) {
-      let value = raw[key]
-      if (key === 'cwd' && typeof value === 'string') {
-        value = (value as string).slice(0, 1024)
-      }
-      metadata[key] = value
+  for (const key of METADATA_KEYS) {
+    if (raw[key] === undefined) {
+      continue
     }
+    const value = raw[key]
+    metadata[key] = key === 'cwd' && typeof value === 'string' ? value.slice(0, 1024) : value
   }
 
-  const instanceId = (raw.instance_id as string) || null
-
   return {
-    projectName,
-    sessionId,
-    slug,
-    transcriptPath,
+    projectName: str(raw.project_name),
+    sessionId: str(raw.session_id) ?? 'unknown',
+    slug: str(raw.slug),
+    transcriptPath: str(raw.transcript_path, 4096),
     type,
     subtype,
-    toolName,
-    toolUseId,
-    timestamp,
-    ownerAgentId,
-    subAgentId,
-    subAgentName,
-    subAgentDescription,
-    instanceId,
+    toolName: hookEventName && TOOL_EVENTS.has(hookEventName) ? str(raw.tool_name) : null,
+    toolUseId: str(raw.tool_use_id),
+    timestamp: parseTimestamp(meta?.timestamp ?? raw.timestamp),
+    agentClass: str(raw.agent_class, 64),
+    ownerAgentId: str(raw.agent_id),
+    ownerAgentType: str(raw.agent_type),
+    ownerAgentName: str(raw.agent_name),
+    ownerAgentDescription: str(raw.agent_description, 2000),
+    parentAgentId: str(raw.parent_agent_id),
+    parentToolUseId: str(raw.parent_tool_use_id),
     metadata,
     raw,
   }
@@ -286,8 +174,24 @@ function parseTimestamp(ts: unknown): number {
   return parsed
 }
 
+// The contract is epoch milliseconds, but some emitters (e.g. Python
+// `time.time()`) send epoch *seconds*, possibly fractional. Read as ms those
+// land in Jan 1970 and drop the session out of every recent-time window.
+// A plausible recent instant in seconds falls in [1e9, 1e12) (2001 onward);
+// the same instant in ms is >= 1e12. Values below 1e9 are fixtures/sentinels
+// and are left untouched; parseTimestamp still clamps the upper extreme.
+const EPOCH_SECONDS_MIN = 1e9
+const EPOCH_MS_MIN = 1e12
+
+function normalizeEpochUnits(ts: number): number {
+  if (ts >= EPOCH_SECONDS_MIN && ts < EPOCH_MS_MIN) {
+    return Math.round(ts * 1000)
+  }
+  return ts
+}
+
 function coerceTimestamp(ts: unknown): number {
-  if (typeof ts === 'number' && !isNaN(ts)) return ts
+  if (typeof ts === 'number' && !isNaN(ts)) return normalizeEpochUnits(ts)
   if (typeof ts === 'string') {
     const parsed = new Date(ts).getTime()
     return isNaN(parsed) ? Date.now() : parsed

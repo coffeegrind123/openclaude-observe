@@ -16,12 +16,13 @@ describe('GET /health', () => {
 
     vi.doMock('../config', () => ({
       config: {
-        apiId: 'openclaude-observe',
+        apiId: 'instantcoffee-observe',
         version: '1.0.0-test',
         gitHash: 'abc1234',
         logLevel: 'debug',
         runtime: 'docker',
         dbPath: '/data/observe.db',
+        hostDbPath: '/home/me/instantcoffee-observe/data/observe.db',
         transcriptStats: { enabled: true },
       },
     }))
@@ -71,13 +72,22 @@ describe('GET /health', () => {
 
     expect(body).toMatchObject({
       ok: true,
-      id: 'openclaude-observe',
+      id: 'instantcoffee-observe',
       version: '1.0.0-test',
       gitHash: 'abc1234',
       logLevel: 'debug',
       runtime: 'docker',
-      dbPath: '/data/observe.db',
     })
+  })
+
+  test('dbPath is the host-side path; the in-container path rides alongside', async () => {
+    mockStore.healthCheck.mockResolvedValue({ ok: true })
+
+    const body = await (await app.request('/api/health')).json()
+
+    // The user can't navigate to /data/observe.db on their machine.
+    expect(body.dbPath).toBe('/home/me/instantcoffee-observe/data/observe.db')
+    expect(body.containerDbPath).toBe('/data/observe.db')
   })
 
   test('includes activeConsumers from consumer-tracker', async () => {

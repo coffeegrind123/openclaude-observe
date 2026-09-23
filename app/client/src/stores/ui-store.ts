@@ -2,84 +2,248 @@ import { create } from 'zustand'
 import type { Label, ParsedEvent } from '@/types'
 import type { TimeRange } from '@/config/time-ranges'
 import { getServerHealth } from '@/lib/server-health'
+import { ACTIVITY_CONFIG } from '@/config/activity'
 
-// Session IDs are UUIDs (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// 'stack' is the inference-stack page (llama-server + forge metrics).
+export type AppView = 'observe' | 'instructions' | 'stack'
 
-interface Route {
-  view: 'observe' | 'memory'
+// URL hash grammar. The first segment either names a top-level surface or is
+// the project; after that it is positional, never pattern-based:
+//   #/                               → home
+//   #/stack                          → inference-stack page
+//   #/instructions[/<store>[/<file>]] → instructions browser
+//   #/<proj>                         → project view
+//   #/<proj>/<sess>                  → session in a project
+//   #/_/<sess>                       → session whose project isn't known yet
+//   …observe routes take an optional `:<view>` deep-link suffix (below).
+// No UUID sniffing: any session id format works, and a legacy `#/<sessionId>`
+// link is resolved by looking the id up (useRouteSync), not by its shape.
+// Every segment is percent-encoded on write and decoded on read, so ids and
+// slugs may contain any character; the structural '/', ':' and '@' only ever
+// appear encoded inside a segment. `stack` and `instructions` are reserved
+// first segments: a project slugged `stack` or `instructions` can't have a
+// project URL of its own.
+export const PROJECT_PLACEHOLDER = '_'
+
+// decodeURIComponent throws on a stray '%'; a hand-mangled URL should degrade
+// to the raw segment instead of crashing the router.
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s)
+  } catch {
+    return s
+  }
+}
+
+// The deep-link view is `scope.name[@target]`: '.' and '@' are structural and
+// scope/name are a fixed vocabulary, so only the @target (a session id) can
+// carry arbitrary characters — encode/decode just that part.
+function encodeViewTarget(view: string): string {
+  const at = view.indexOf('@')
+  return at === -1 ? view : view.slice(0, at + 1) + encodeURIComponent(view.slice(at + 1))
+}
+function decodeViewTarget(view: string): string {
+  const at = view.indexOf('@')
+  return at === -1 ? view : view.slice(0, at + 1) + safeDecode(view.slice(at + 1))
+}
+
+/**
+ * The canonical observe hash for (project, session, deep-link view). A session
+ * without a known project gets the `_` placeholder. Single source of truth for
+ * observe URLs: updateHash, history seeding, useRouteSync and session links.
+ */
+export function buildHash(
+  projectSlug: string | null,
+  sessionId: string | null,
+  view: string | null = null,
+): string {
+  let path = '/'
+  if (sessionId) {
+    const proj = projectSlug ? encodeURIComponent(projectSlug) : PROJECT_PLACEHOLDER
+    path = `/${proj}/${encodeURIComponent(sessionId)}`
+  } else if (projectSlug) {
+    path = `/${encodeURIComponent(projectSlug)}`
+  }
+  return `#${path}${view ? `:${encodeViewTarget(view)}` : ''}`
+}
+
+/**
+ * Parses a deep-link view (the part after `:`):
+ *   `:<name>`               → global            (scope 'global', target null)
+ *   `:<scope>.<name>`       → bound to the URL's session / project
+ *   `:<scope>.<name>@<id>`  → bound to an explicit id
+ * Unknown scopes read as a global name.
+ */
+export function parseView(view: string): {
+  scope: 'global' | 'session' | 'project'
+  name: string
+  target: string | null
+} {
+  let target: string | null = null
+  let body = view
+  const at = view.indexOf('@')
+  if (at !== -1) {
+    target = view.slice(at + 1) || null
+    body = view.slice(0, at)
+  }
+  const dot = body.indexOf('.')
+  if (dot === -1) {
+    return { scope: 'global', name: body, target }
+  }
+  const scope = body.slice(0, dot)
+  const name = body.slice(dot + 1)
+  if (scope === 'session' || scope === 'project') {
+    return { scope, name, target }
+  }
+  return { scope: 'global', name: body, target }
+}
+
+export interface Route {
+  view: AppView
   projectSlug: string | null
   sessionId: string | null
-  memoryStoreId: string | null
-  memoryFile: string | null
+  /** Deep-link modal view (the `:x` suffix), observe routes only. */
+  deepLinkView: string | null
+  instructionsStoreId: string | null
+  instructionsFile: string | null
 }
 
 const EMPTY_ROUTE: Route = {
   view: 'observe',
   projectSlug: null,
   sessionId: null,
-  memoryStoreId: null,
-  memoryFile: null,
+  deepLinkView: null,
+  instructionsStoreId: null,
+  instructionsFile: null,
+}
+
+/** Parses a location hash (with or without the leading '#'). */
+export function parseRoute(rawHash: string): Route {
+  const hash = rawHash.startsWith('#') ? rawHash.slice(1) : rawHash
+  if (!hash || hash === '/') {
+    return EMPTY_ROUTE
+  }
+
+  // Reserved surfaces are matched on the raw first segment, before the view
+  // suffix is split off: instructions paths are percent-encoded, so they
+  // never contain a raw ':' — but a stray one must not change the surface.
+  const first = hash.split('/').filter(Boolean)[0] ?? ''
+  const firstBare = first.split(':')[0]
+  if (firstBare === 'stack') {
+    return { ...EMPTY_ROUTE, view: 'stack' }
+  }
+  if (firstBare === 'instructions') {
+    // #/instructions, #/instructions/<storeId>, #/instructions/<storeId>/<relPath>
+    // (relPath is URI-encoded, so its `/`s don't split into extra parts).
+    const parts = hash.split('/').filter(Boolean)
+    return {
+      ...EMPTY_ROUTE,
+      view: 'instructions',
+      instructionsStoreId: parts[1] ? safeDecode(parts[1]) : null,
+      instructionsFile: parts[2] ? safeDecode(parts[2]) : null,
+    }
+  }
+
+  // Only one raw ':' per URL — the view delimiter. Colons inside a slug or id
+  // are encoded as %3A.
+  let path = hash
+  let deepLinkView: string | null = null
+  const colon = hash.indexOf(':')
+  if (colon !== -1) {
+    const rawView = hash.slice(colon + 1)
+    deepLinkView = rawView ? decodeViewTarget(rawView) : null
+    path = hash.slice(0, colon)
+  }
+
+  const parts = path.split('/').filter(Boolean).map(safeDecode)
+  if (parts.length === 0) {
+    return { ...EMPTY_ROUTE, deepLinkView }
+  }
+  if (parts.length === 1) {
+    // A bare placeholder is meaningless — only a session URL's project slot
+    // uses it — so it reads as home.
+    if (parts[0] === PROJECT_PLACEHOLDER) {
+      return { ...EMPTY_ROUTE, deepLinkView }
+    }
+    return { ...EMPTY_ROUTE, projectSlug: parts[0], deepLinkView }
+  }
+  // [project-or-placeholder, session]. The placeholder is a null project that
+  // useRouteSync fills in from the session.
+  return {
+    ...EMPTY_ROUTE,
+    projectSlug: parts[0] === PROJECT_PLACEHOLDER ? null : parts[0],
+    sessionId: parts[1],
+    deepLinkView,
+  }
 }
 
 function parseHash(): Route {
-  const hash = window.location.hash.slice(1)
-  if (!hash || hash === '/') return EMPTY_ROUTE
-  const parts = hash.split('/').filter(Boolean)
-  // Memory view: #/memory, #/memory/<storeId>, #/memory/<storeId>/<relPath>
-  if (parts[0] === 'memory') {
-    return {
-      ...EMPTY_ROUTE,
-      view: 'memory',
-      memoryStoreId: parts[1] ? decodeURIComponent(parts[1]) : null,
-      memoryFile: parts[2] ? decodeURIComponent(parts[2]) : null,
-    }
-  }
-  if (parts.length === 1) {
-    // Distinguish between session ID (UUID) and project slug
-    if (UUID_RE.test(parts[0])) {
-      return { ...EMPTY_ROUTE, sessionId: parts[0] }
-    }
-    return { ...EMPTY_ROUTE, projectSlug: parts[0] }
-  }
-  if (parts.length >= 2) {
-    return { ...EMPTY_ROUTE, projectSlug: parts[0], sessionId: parts[1] }
-  }
-  return EMPTY_ROUTE
+  return parseRoute(window.location.hash)
 }
 
 // When true, skip pushState (the URL is already correct from browser navigation)
 let suppressHashPush = false
 
-function updateHash(projectSlug: string | null, sessionId: string | null) {
-  if (suppressHashPush) return
-  let hash = '/'
-  if (projectSlug && sessionId) {
-    hash = `/${projectSlug}/${sessionId}`
-  } else if (projectSlug) {
-    hash = `/${projectSlug}`
-  } else if (sessionId) {
-    hash = `/${sessionId}`
+function updateHash(projectSlug: string | null, sessionId: string | null, view: string | null) {
+  if (suppressHashPush) {
+    return
   }
-  window.history.pushState(null, '', `#${hash}`)
+  // No-op guard: re-setting the same selection (or re-opening the same modal)
+  // must not stack duplicate history entries. Compares the parsed route, not
+  // raw strings — segments are encoded and browsers may normalize the stored
+  // hash. The surface is part of the comparison so leaving #/instructions for
+  // home still pushes `#/`.
+  const cur = parseHash()
+  if (
+    cur.view === 'observe' &&
+    cur.projectSlug === projectSlug &&
+    cur.sessionId === sessionId &&
+    cur.deepLinkView === view
+  ) {
+    return
+  }
+  window.history.pushState(null, '', buildHash(projectSlug, sessionId, view))
 }
 
-function updateMemoryHash(storeId: string | null, file: string | null) {
+function updateInstructionsHash(storeId: string | null, file: string | null) {
   if (suppressHashPush) return
-  let hash = '/memory'
+  let hash = '/instructions'
   if (storeId) hash += `/${encodeURIComponent(storeId)}`
   if (storeId && file) hash += `/${encodeURIComponent(file)}`
   window.history.pushState(null, '', `#${hash}`)
 }
 
-const SIDEBAR_TAB_KEY = 'openclaude-observe-sidebar-tab'
+type EditingSessionTab = 'details' | 'stats' | 'labels'
+
+/**
+ * The deep-link view string for the current modal state, or null when no
+ * deep-linkable modal is open. The session modal targeting the selected
+ * session omits the `@<id>`; targeting another session carries it. Extend
+ * this (not ad-hoc writes) as more modals become linkable.
+ */
+function computeDeepLinkView(state: {
+  editingSessionId: string | null
+  editingSessionTab: EditingSessionTab
+  selectedSessionId: string | null
+}): string | null {
+  if (state.editingSessionId === null) {
+    return null
+  }
+  const tab = state.editingSessionTab
+  return state.editingSessionId === state.selectedSessionId
+    ? `session.${tab}`
+    : `session.${tab}@${state.editingSessionId}`
+}
+
+const SIDEBAR_TAB_KEY = 'instantcoffee-observe-sidebar-tab'
 function persistSidebarTab(tab: SidebarTab) {
   try {
     localStorage.setItem(SIDEBAR_TAB_KEY, tab)
   } catch {}
 }
 
-type SidebarTab = 'projects' | 'labels' | 'memory'
+type SidebarTab = 'projects' | 'labels' | 'instructions'
+const SIDEBAR_TABS: readonly SidebarTab[] = ['projects', 'labels', 'instructions']
 
 interface SessionFilterState {
   activePrimaryFilters: string[]
@@ -99,10 +263,11 @@ interface UIState {
   setSidebarCollapsed: (collapsed: boolean) => void
   setSidebarWidth: (width: number) => void
 
-  // Top-level view. 'observe' = the session/event dashboard; 'memory' = the
-  // OpenClaude memory browser/editor. Reflected in the URL hash (#/memory).
-  view: 'observe' | 'memory'
-  setView: (view: 'observe' | 'memory') => void
+  // Top-level view. 'observe' = the session/event dashboard; 'instructions' =
+  // the pi instruction-file browser/editor. Reflected in the URL hash
+  // (#/instructions).
+  view: AppView
+  setView: (view: AppView) => void
 
   selectedProjectId: number | null
   selectedProjectSlug: string | null
@@ -110,17 +275,38 @@ interface UIState {
   selectedAgentIds: string[]
   setSelectedProject: (id: number | null, slug?: string | null) => void
   setSelectedSessionId: (id: string | null) => void
+  /**
+   * Open a session from outside its project (home, constellation, pinned) as
+   * ONE history entry. setSelectedProject + setSelectedSessionId push two
+   * (`#/slug`, then `#/slug/id`), stranding Back on an intermediate page.
+   */
+  openSession: (projectId: number | null, slug: string | null, sessionId: string) => void
+
+  // Preview selection: highlights a session (and expands its project) in the
+  // sidebar WITHOUT navigating or touching the URL. The Constellation home
+  // view's drill-in sets it so the sidebar tracks the focused star while the
+  // home view stays mounted.
+  previewProjectId: number | null
+  previewSessionId: string | null
+  setPreviewSession: (sessionId: string | null, projectId: number | null) => void
+  clearPreviewSession: () => void
+
+  // Home view (a registered dashboard theme id, see src/dashboard/). Persisted.
+  dashboardThemeId: string
+  setDashboardThemeId: (id: string) => void
   updateProjectSlug: (slug: string) => void
   setSelectedAgentIds: (ids: string[]) => void
   toggleAgentId: (id: string) => void
   removeAgentId: (id: string) => void
 
-  // Memory browser selection — which store (project memory dir / global /
-  // agent) and which file within it are open.
-  memorySelectedStoreId: string | null
-  memorySelectedFile: string | null
-  setMemoryStore: (id: string | null) => void
-  setMemoryFile: (relPath: string | null) => void
+  // Instructions browser selection — which store (pi home / home subagents /
+  // project) and which file within it are open.
+  instructionsSelectedStoreId: string | null
+  instructionsSelectedFile: string | null
+  setInstructionsStore: (id: string | null) => void
+  setInstructionsFile: (relPath: string | null) => void
+  /** Jump straight to a file in any store (one history entry). */
+  openInstructionsFile: (storeId: string, relPath: string | null) => void
 
   activePrimaryFilters: string[] // labels from primary filters
   activeSecondaryFilters: string[] // tool names from secondary filters
@@ -159,10 +345,37 @@ interface UIState {
   selectedEventId: number | null
   setSelectedEventId: (id: number | null) => void
 
+  // Default collapse state of the conversation thread in newly opened event
+  // details (in-memory, default expanded). Details SEED their own state from
+  // this at mount and write back on toggle — they must not subscribe, or
+  // toggling one thread would collapse every open detail and jump the stream.
+  threadCollapsed: boolean
+  setThreadCollapsed: (collapsed: boolean) => void
+
+  // Set by an inline detail whose thread toggle changed its row's height, so
+  // EventStream re-measures that row synchronously (layout effect) and the
+  // virtualizer reflows + anchors in the same frame, instead of a frame late
+  // via ResizeObserver (a visible flash). Cleared once handled.
+  threadRemeasureEventId: number | null
+  setThreadRemeasureEventId: (id: number | null) => void
+
   // Session being edited in the SessionEditModal (null = closed)
   editingSessionId: string | null
-  editingSessionTab: 'details' | 'stats' | 'labels'
-  setEditingSessionId: (id: string | null, tab?: 'details' | 'stats' | 'labels') => void
+  editingSessionTab: EditingSessionTab
+  setEditingSessionId: (id: string | null, tab?: EditingSessionTab) => void
+
+  // Deep-link view: the `:session.stats` / `:session.labels@<id>` suffix on
+  // an observe URL. Mirrors the open modal into the URL (the actions above
+  // write it); useRouteSync drives the reverse, URL → modal, on direct loads
+  // and back/forward.
+  deepLinkView: string | null
+  setDeepLinkView: (view: string | null) => void
+
+  // Session id or project slug from the URL that matched nothing, so the
+  // main panel can say "not found" instead of staying blank.
+  routeError: string | null
+  setRouteError: (idOrSlug: string) => void
+  clearRouteError: () => void
 
   // Labels — user-defined bookmarks across sessions (localStorage only)
   labels: Label[]
@@ -181,9 +394,9 @@ interface UIState {
   closeLabelsModal: () => void
   clearLabelsModalScrollTarget: () => void
 
-  // Sidebar Projects/Labels/Memory tab selector — persisted so the sidebar
-  // re-opens on whichever view the user was last using. The Memory tab also
-  // drives the top-level `view`.
+  // Sidebar Projects/Labels/Instructions tab selector — persisted so the
+  // sidebar re-opens on whichever view the user was last using. The
+  // Instructions tab also drives the top-level `view`.
   sidebarTab: SidebarTab
   setSidebarTab: (tab: SidebarTab) => void
 
@@ -205,6 +418,14 @@ interface UIState {
   // Notification alerts — when off, the sidebar bells never appear.
   notificationsEnabled: boolean
   setNotificationsEnabled: (enabled: boolean) => void
+
+  // Active-session indicator — the green pulse on the sidebar session dot /
+  // project folder after activity. `activeIndicatorEnabled` toggles it;
+  // `activeIndicatorSeconds` is how long it stays lit before fading.
+  activeIndicatorEnabled: boolean
+  setActiveIndicatorEnabled: (enabled: boolean) => void
+  activeIndicatorSeconds: number
+  setActiveIndicatorSeconds: (seconds: number) => void
 
   // Rewind mode: freezes the event/timeline view at a snapshot of events
   rewindMode: boolean
@@ -228,6 +449,13 @@ interface UIState {
   reverseFeed: boolean
   setReverseFeed: (enabled: boolean) => void
 
+  // Pre/Post merge (persisted). On (default): a tool call's PostToolUse /
+  // PostToolUseFailure folds into its PreToolUse row. Off: every hook event
+  // is its own row, labelled with its hook name — for seeing exactly what
+  // the extension sent.
+  mergeToolEvents: boolean
+  setMergeToolEvents: (enabled: boolean) => void
+
   // River view lens. false = full "stream" (everything); true = "talk"
   // (conversation only — prompts + assistant / subagent / task messages,
   // tool + topology telemetry hidden). In-memory; resets per session load.
@@ -244,7 +472,14 @@ interface UIState {
   // session's count and play a one-shot pulse animation when it
   // changes.
   sessionPulses: Record<string, number>
-  pulseSession: (sessionId: string) => void
+  /** Project-scoped pulse counter, parallel to sessionPulses. Lets the
+   *  sidebar pulse a project folder without fetching the project's
+   *  session list (activity pings carry projectId). */
+  projectPulses: Record<number, number>
+  /** Wall-clock ms of each session's latest activity ping. The Constellation
+   *  render loop reads it every frame for live star heat without re-fetching. */
+  sessionActivityAt: Record<string, number>
+  pulseSession: (sessionId: string, projectId?: number | null) => void
 
   // Version tracking
   serverVersion: string | null
@@ -253,8 +488,28 @@ interface UIState {
   setLatestVersion: (version: string) => void
 }
 
-const PINNED_STORAGE_KEY = 'openclaude-observe-pinned-sessions'
-const REVERSE_FEED_STORAGE_KEY = 'openclaude-observe-reverse-feed'
+const PINNED_STORAGE_KEY = 'instantcoffee-observe-pinned-sessions'
+const REVERSE_FEED_STORAGE_KEY = 'instantcoffee-observe-reverse-feed'
+const MERGE_TOOL_EVENTS_STORAGE_KEY = 'instantcoffee-observe-merge-tool-events'
+const DASHBOARD_THEME_STORAGE_KEY = 'instantcoffee-observe-dashboard-theme'
+
+// The recent-sessions list stays the home view unless the user picks another
+// (the dashboard registry resolves unknown ids back to it).
+function loadDashboardThemeId(): string {
+  try {
+    return localStorage.getItem(DASHBOARD_THEME_STORAGE_KEY) || 'sessions-list'
+  } catch {
+    return 'sessions-list'
+  }
+}
+
+function loadMergeToolEvents(): boolean {
+  try {
+    return localStorage.getItem(MERGE_TOOL_EVENTS_STORAGE_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
 
 function loadPinnedSessions(): Set<string> {
   try {
@@ -278,8 +533,17 @@ function loadReverseFeed(): boolean {
   }
 }
 
-const LABELS_STORAGE_KEY = 'openclaude-observe-labels'
-const LABEL_MEMBERSHIP_STORAGE_KEY = 'openclaude-observe-label-memberships'
+const ACTIVE_INDICATOR_STORAGE_KEY = 'instantcoffee-observe-active-indicator'
+const ACTIVE_INDICATOR_SECONDS_STORAGE_KEY = 'instantcoffee-observe-active-indicator-seconds'
+
+function readActiveIndicatorSeconds(): number {
+  const raw = localStorage.getItem(ACTIVE_INDICATOR_SECONDS_STORAGE_KEY)
+  const n = raw != null ? Number(raw) : NaN
+  return Number.isFinite(n) && n > 0 ? n : ACTIVITY_CONFIG.pulseDurationMs / 1000
+}
+
+const LABELS_STORAGE_KEY = 'instantcoffee-observe-labels'
+const LABEL_MEMBERSHIP_STORAGE_KEY = 'instantcoffee-observe-label-memberships'
 
 function loadLabels(): Label[] {
   try {
@@ -338,14 +602,24 @@ const {
   projectSlug: initialProjectSlug,
   sessionId: initialSessionId,
   view: initialView,
-  memoryStoreId: initialMemoryStoreId,
-  memoryFile: initialMemoryFile,
+  instructionsStoreId: initialInstructionsStoreId,
+  instructionsFile: initialInstructionsFile,
+  deepLinkView: initialDeepLinkView,
 } = initialRoute
 
+// A persisted value from an older build (e.g. the removed 'memory' tab) falls
+// back to Projects rather than selecting a tab that no longer exists.
+function storedSidebarTab(): SidebarTab {
+  try {
+    const v = localStorage.getItem(SIDEBAR_TAB_KEY)
+    return SIDEBAR_TABS.includes(v as SidebarTab) ? (v as SidebarTab) : 'projects'
+  } catch {
+    return 'projects'
+  }
+}
+
 const initialSidebarTab: SidebarTab =
-  initialView === 'memory'
-    ? 'memory'
-    : ((localStorage.getItem(SIDEBAR_TAB_KEY) as SidebarTab) ?? 'projects')
+  initialView === 'instructions' ? 'instructions' : storedSidebarTab()
 
 export const useUIStore = create<UIState>((set, get) => ({
   sidebarCollapsed: false,
@@ -356,31 +630,45 @@ export const useUIStore = create<UIState>((set, get) => ({
   view: initialView,
   setView: (view) => {
     set({ view })
-    if (view === 'memory') {
+    if (view === 'stack') {
+      if (!suppressHashPush) {
+        window.history.pushState(null, '', '#/stack')
+      }
+    } else if (view === 'instructions') {
       const s = get()
-      updateMemoryHash(s.memorySelectedStoreId, s.memorySelectedFile)
+      updateInstructionsHash(s.instructionsSelectedStoreId, s.instructionsSelectedFile)
     } else {
       const s = get()
-      updateHash(s.selectedProjectSlug, s.selectedSessionId)
+      updateHash(s.selectedProjectSlug, s.selectedSessionId, s.deepLinkView)
     }
   },
 
-  memorySelectedStoreId: initialMemoryStoreId,
-  memorySelectedFile: initialMemoryFile,
-  setMemoryStore: (id) => {
+  instructionsSelectedStoreId: initialInstructionsStoreId,
+  instructionsSelectedFile: initialInstructionsFile,
+  setInstructionsStore: (id) => {
     set({
-      view: 'memory',
-      sidebarTab: 'memory',
-      memorySelectedStoreId: id,
-      memorySelectedFile: null,
+      view: 'instructions',
+      sidebarTab: 'instructions',
+      instructionsSelectedStoreId: id,
+      instructionsSelectedFile: null,
     })
-    persistSidebarTab('memory')
-    updateMemoryHash(id, null)
+    persistSidebarTab('instructions')
+    updateInstructionsHash(id, null)
   },
-  setMemoryFile: (relPath) => {
-    const storeId = get().memorySelectedStoreId
-    set({ view: 'memory', memorySelectedFile: relPath })
-    updateMemoryHash(storeId, relPath)
+  setInstructionsFile: (relPath) => {
+    const storeId = get().instructionsSelectedStoreId
+    set({ view: 'instructions', instructionsSelectedFile: relPath })
+    updateInstructionsHash(storeId, relPath)
+  },
+  openInstructionsFile: (storeId, relPath) => {
+    set({
+      view: 'instructions',
+      sidebarTab: 'instructions',
+      instructionsSelectedStoreId: storeId,
+      instructionsSelectedFile: relPath,
+    })
+    persistSidebarTab('instructions')
+    updateInstructionsHash(storeId, relPath)
   },
 
   selectedProjectId: null,
@@ -401,9 +689,10 @@ export const useUIStore = create<UIState>((set, get) => ({
     }
 
     const newSlug = slug ?? null
-    // Selecting observe content leaves the memory view. If the sidebar was on
-    // the Memory tab, drop back to Projects so the chrome stays coherent.
-    const nextTab: SidebarTab = state.sidebarTab === 'memory' ? 'projects' : state.sidebarTab
+    // Selecting observe content leaves the instructions view. If the sidebar
+    // was on the Instructions tab, drop back to Projects so the chrome stays
+    // coherent.
+    const nextTab: SidebarTab = state.sidebarTab === 'instructions' ? 'projects' : state.sidebarTab
     if (nextTab !== state.sidebarTab) persistSidebarTab(nextTab)
     set({
       view: 'observe',
@@ -421,7 +710,11 @@ export const useUIStore = create<UIState>((set, get) => ({
       activeSecondaryFilters: DEFAULT_FILTER_STATE.activeSecondaryFilters,
       searchQuery: DEFAULT_FILTER_STATE.searchQuery,
     })
-    updateHash(newSlug, null)
+    const view = computeDeepLinkView(get())
+    if (get().deepLinkView !== view) {
+      set({ deepLinkView: view })
+    }
+    updateHash(newSlug, null, view)
   },
   setSelectedSessionId: (id) => {
     const state = get()
@@ -442,7 +735,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     // Auto-exit rewind mode if switching to a different session — frozen events
     // from the old session would be stale.
     const exitingRewind = state.rewindMode && state.selectedSessionId !== id
-    const nextTab: SidebarTab = state.sidebarTab === 'memory' ? 'projects' : state.sidebarTab
+    const nextTab: SidebarTab = state.sidebarTab === 'instructions' ? 'projects' : state.sidebarTab
     if (nextTab !== state.sidebarTab) persistSidebarTab(nextTab)
     set({
       view: 'observe',
@@ -463,12 +756,76 @@ export const useUIStore = create<UIState>((set, get) => ({
         autoFollow: state.autoFollowBeforeRewind,
       }),
     })
-    updateHash(state.selectedProjectSlug, id)
+    const view = computeDeepLinkView(get())
+    if (get().deepLinkView !== view) {
+      set({ deepLinkView: view })
+    }
+    updateHash(state.selectedProjectSlug, id, view)
   },
+  openSession: (projectId, slug, sessionId) => {
+    const state = get()
+    const nextFilterStates = new Map(state.sessionFilterStates)
+    if (state.selectedSessionId) {
+      nextFilterStates.set(state.selectedSessionId, {
+        activePrimaryFilters: state.activePrimaryFilters,
+        activeSecondaryFilters: state.activeSecondaryFilters,
+        searchQuery: state.searchQuery,
+      })
+    }
+    const restored = nextFilterStates.get(sessionId) ?? DEFAULT_FILTER_STATE
+    const newSlug = slug ?? null
+    const exitingRewind = state.rewindMode && state.selectedSessionId !== sessionId
+    const nextTab: SidebarTab = state.sidebarTab === 'instructions' ? 'projects' : state.sidebarTab
+    if (nextTab !== state.sidebarTab) persistSidebarTab(nextTab)
+    set({
+      view: 'observe',
+      sidebarTab: nextTab,
+      selectedProjectId: projectId,
+      selectedProjectSlug: newSlug,
+      selectedSessionId: sessionId,
+      selectedAgentIds: [],
+      expandedEventIds: new Set(),
+      lastExpandedEventId: null,
+      selectedEventId: null,
+      scrollToEventId: null,
+      sessionFilterStates: nextFilterStates,
+      activePrimaryFilters: restored.activePrimaryFilters,
+      activeSecondaryFilters: restored.activeSecondaryFilters,
+      searchQuery: restored.searchQuery,
+      ...(exitingRewind && {
+        rewindMode: false,
+        frozenEvents: null,
+        autoFollow: state.autoFollowBeforeRewind,
+      }),
+    })
+    const view = computeDeepLinkView(get())
+    if (get().deepLinkView !== view) {
+      set({ deepLinkView: view })
+    }
+    updateHash(newSlug, sessionId, view)
+  },
+  previewProjectId: null,
+  previewSessionId: null,
+  setPreviewSession: (sessionId, projectId) =>
+    set({ previewSessionId: sessionId, previewProjectId: projectId }),
+  clearPreviewSession: () => {
+    if (get().previewSessionId !== null || get().previewProjectId !== null) {
+      set({ previewSessionId: null, previewProjectId: null })
+    }
+  },
+
+  dashboardThemeId: loadDashboardThemeId(),
+  setDashboardThemeId: (id) => {
+    try {
+      localStorage.setItem(DASHBOARD_THEME_STORAGE_KEY, id)
+    } catch {}
+    set({ dashboardThemeId: id })
+  },
+
   updateProjectSlug: (slug) => {
     set({ selectedProjectSlug: slug })
     const state = get()
-    updateHash(slug, state.selectedSessionId)
+    updateHash(slug, state.selectedSessionId, state.deepLinkView)
   },
   setSelectedAgentIds: (ids) => set({ selectedAgentIds: ids }),
   toggleAgentId: (id) =>
@@ -539,47 +896,85 @@ export const useUIStore = create<UIState>((set, get) => ({
   selectedEventId: null,
   setSelectedEventId: (id) => set({ selectedEventId: id }),
 
+  threadCollapsed: false,
+  setThreadCollapsed: (collapsed) => set({ threadCollapsed: collapsed }),
+
+  threadRemeasureEventId: null,
+  setThreadRemeasureEventId: (id) => set({ threadRemeasureEventId: id }),
+
   editingSessionId: null,
   editingSessionTab: 'details',
-  setEditingSessionId: (id, tab) =>
-    set({ editingSessionId: id, editingSessionTab: tab ?? 'details' }),
+  setEditingSessionId: (id, tab) => {
+    set({ editingSessionId: id, editingSessionTab: tab ?? 'details' })
+    const state = get()
+    const view = computeDeepLinkView(state)
+    if (state.deepLinkView !== view) {
+      set({ deepLinkView: view })
+    }
+    // The modal can open over the stack / instructions surfaces too; only an
+    // observe URL carries a deep-link suffix.
+    if (state.view === 'observe') {
+      updateHash(state.selectedProjectSlug, state.selectedSessionId, view)
+    }
+  },
+
+  deepLinkView: initialView === 'observe' ? initialDeepLinkView : null,
+  setDeepLinkView: (view) => {
+    set({ deepLinkView: view })
+    const state = get()
+    if (state.view === 'observe') {
+      updateHash(state.selectedProjectSlug, state.selectedSessionId, view)
+    }
+  },
+
+  routeError: null,
+  setRouteError: (idOrSlug) => {
+    if (get().routeError !== idOrSlug) {
+      set({ routeError: idOrSlug })
+    }
+  },
+  clearRouteError: () => {
+    if (get().routeError !== null) {
+      set({ routeError: null })
+    }
+  },
 
   sidebarTab: initialSidebarTab,
   setSidebarTab: (tab) => {
     persistSidebarTab(tab)
-    if (tab === 'memory') {
+    if (tab === 'instructions') {
       const s = get()
-      set({ sidebarTab: tab, view: 'memory' })
-      updateMemoryHash(s.memorySelectedStoreId, s.memorySelectedFile)
+      set({ sidebarTab: tab, view: 'instructions' })
+      updateInstructionsHash(s.instructionsSelectedStoreId, s.instructionsSelectedFile)
     } else {
       const s = get()
       set({ sidebarTab: tab, view: 'observe' })
-      updateHash(s.selectedProjectSlug, s.selectedSessionId)
+      updateHash(s.selectedProjectSlug, s.selectedSessionId, s.deepLinkView)
     }
   },
 
   settingsOpen: false,
   // Remember the last tab the user viewed so the gear icon reopens
   // there. Fall back to 'display' (the leftmost tab) on first use.
-  settingsTab: localStorage.getItem('openclaude-observe-settings-tab') || 'display',
+  settingsTab: localStorage.getItem('instantcoffee-observe-settings-tab') || 'display',
   openSettings: (tab) => {
     if (tab) {
-      localStorage.setItem('openclaude-observe-settings-tab', tab)
+      localStorage.setItem('instantcoffee-observe-settings-tab', tab)
       set({ settingsOpen: true, settingsTab: tab })
     } else {
       set({ settingsOpen: true })
     }
   },
   setSettingsTab: (tab) => {
-    localStorage.setItem('openclaude-observe-settings-tab', tab)
+    localStorage.setItem('instantcoffee-observe-settings-tab', tab)
     set({ settingsTab: tab })
   },
   closeSettings: () => set({ settingsOpen: false }),
 
-  lastFilterId: localStorage.getItem('openclaude-observe-last-filter-id') || null,
+  lastFilterId: localStorage.getItem('instantcoffee-observe-last-filter-id') || null,
   setLastFilterId: (id) => {
-    if (id) localStorage.setItem('openclaude-observe-last-filter-id', id)
-    else localStorage.removeItem('openclaude-observe-last-filter-id')
+    if (id) localStorage.setItem('instantcoffee-observe-last-filter-id', id)
+    else localStorage.removeItem('instantcoffee-observe-last-filter-id')
     set({ lastFilterId: id })
   },
 
@@ -592,10 +987,22 @@ export const useUIStore = create<UIState>((set, get) => ({
       lastExpandedEventId: enabled ? null : s.lastExpandedEventId,
     })),
 
-  notificationsEnabled: localStorage.getItem('openclaude-observe-notifications') !== 'off',
+  notificationsEnabled: localStorage.getItem('instantcoffee-observe-notifications') !== 'off',
   setNotificationsEnabled: (enabled) => {
-    localStorage.setItem('openclaude-observe-notifications', enabled ? 'on' : 'off')
+    localStorage.setItem('instantcoffee-observe-notifications', enabled ? 'on' : 'off')
     set({ notificationsEnabled: enabled })
+  },
+
+  activeIndicatorEnabled: localStorage.getItem(ACTIVE_INDICATOR_STORAGE_KEY) !== 'off',
+  setActiveIndicatorEnabled: (enabled) => {
+    localStorage.setItem(ACTIVE_INDICATOR_STORAGE_KEY, enabled ? 'on' : 'off')
+    set({ activeIndicatorEnabled: enabled })
+  },
+
+  activeIndicatorSeconds: readActiveIndicatorSeconds(),
+  setActiveIndicatorSeconds: (seconds) => {
+    localStorage.setItem(ACTIVE_INDICATOR_SECONDS_STORAGE_KEY, String(seconds))
+    set({ activeIndicatorSeconds: seconds })
   },
 
   rewindMode: false,
@@ -635,6 +1042,14 @@ export const useUIStore = create<UIState>((set, get) => ({
       localStorage.setItem(REVERSE_FEED_STORAGE_KEY, String(enabled))
     } catch {}
     set({ reverseFeed: enabled })
+  },
+
+  mergeToolEvents: loadMergeToolEvents(),
+  setMergeToolEvents: (enabled) => {
+    try {
+      localStorage.setItem(MERGE_TOOL_EVENTS_STORAGE_KEY, String(enabled))
+    } catch {}
+    set({ mergeToolEvents: enabled })
   },
 
   talkMode: false,
@@ -690,7 +1105,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
   labelsModalScrollToId: null,
   openLabelsModal: (scrollToLabelId) => {
-    localStorage.setItem('openclaude-observe-settings-tab', 'labels')
+    localStorage.setItem('instantcoffee-observe-settings-tab', 'labels')
     set({
       settingsOpen: true,
       settingsTab: 'labels',
@@ -705,13 +1120,29 @@ export const useUIStore = create<UIState>((set, get) => ({
     set((s) => ({ iconCustomizationVersion: s.iconCustomizationVersion + 1 })),
 
   sessionPulses: {},
-  pulseSession: (sessionId) =>
-    set((s) => ({
-      sessionPulses: {
+  projectPulses: {},
+  sessionActivityAt: {},
+  pulseSession: (sessionId, projectId) =>
+    set((s) => {
+      const sessionPulses = {
         ...s.sessionPulses,
         [sessionId]: (s.sessionPulses[sessionId] ?? 0) + 1,
-      },
-    })),
+      }
+      const sessionActivityAt = { ...s.sessionActivityAt, [sessionId]: Date.now() }
+      // Leave projectPulses' identity alone on project-less pings so
+      // project subscribers don't re-render for nothing.
+      if (projectId == null) {
+        return { sessionPulses, sessionActivityAt }
+      }
+      return {
+        sessionPulses,
+        sessionActivityAt,
+        projectPulses: {
+          ...s.projectPulses,
+          [projectId]: (s.projectPulses[projectId] ?? 0) + 1,
+        },
+      }
+    }),
 
   serverVersion: null,
   setServerVersion: (version) => set({ serverVersion: version }),
@@ -723,25 +1154,41 @@ if (typeof window !== 'undefined') {
   // Seed history for direct URL loads so the back button has somewhere to go.
   // If loading #/project/session, push #/project first (project view),
   // then replace with the full URL. Back then goes to project view.
-  if (initialView === 'memory') {
-    // Seed history so back from a memory file lands on the memory home.
-    window.history.replaceState(null, '', `#/memory`)
-    if (initialMemoryStoreId) {
-      window.history.pushState(null, '', `#/memory/${encodeURIComponent(initialMemoryStoreId)}`)
-      if (initialMemoryFile) {
+  if (initialView === 'instructions') {
+    // Seed history so back from a file lands on the store, then the home.
+    window.history.replaceState(null, '', `#/instructions`)
+    if (initialInstructionsStoreId) {
+      window.history.pushState(
+        null,
+        '',
+        `#/instructions/${encodeURIComponent(initialInstructionsStoreId)}`,
+      )
+      if (initialInstructionsFile) {
         window.history.pushState(
           null,
           '',
-          `#/memory/${encodeURIComponent(initialMemoryStoreId)}/${encodeURIComponent(initialMemoryFile)}`,
+          `#/instructions/${encodeURIComponent(initialInstructionsStoreId)}/${encodeURIComponent(initialInstructionsFile)}`,
         )
       }
     }
-  } else if (initialProjectSlug && initialSessionId) {
-    window.history.replaceState(null, '', `#/${initialProjectSlug}`)
-    window.history.pushState(null, '', `#/${initialProjectSlug}/${initialSessionId}`)
+  } else if (initialView === 'stack') {
+    // Nothing to seed: the stack page has no parent route.
+  } else if (initialSessionId && initialProjectSlug) {
+    // Back from a session drops to its project page; the :view suffix rides
+    // only on the final entry, so Back peels off the modal first.
+    window.history.replaceState(null, '', buildHash(initialProjectSlug, null, null))
+    window.history.pushState(
+      null,
+      '',
+      buildHash(initialProjectSlug, initialSessionId, initialDeepLinkView),
+    )
+  } else if (initialSessionId) {
+    // `#/_/<sess>`: no meaningful intermediate Back target. Canonicalize in
+    // place; useRouteSync fills in the real project from the session.
+    window.history.replaceState(null, '', buildHash(null, initialSessionId, initialDeepLinkView))
   } else if (initialProjectSlug) {
     window.history.replaceState(null, '', `#/`)
-    window.history.pushState(null, '', `#/${initialProjectSlug}`)
+    window.history.pushState(null, '', buildHash(initialProjectSlug, null, initialDeepLinkView))
   }
 
   window.addEventListener('hashchange', () => {
@@ -751,26 +1198,47 @@ if (typeof window !== 'undefined') {
     // — the URL is already correct, pushing would wipe the forward stack
     suppressHashPush = true
     try {
-      if (route.view === 'memory') {
+      if (route.view === 'stack') {
+        useUIStore.setState({ view: 'stack' })
+      } else if (route.view === 'instructions') {
         useUIStore.setState({
-          view: 'memory',
-          sidebarTab: 'memory',
-          memorySelectedStoreId: route.memoryStoreId,
-          memorySelectedFile: route.memoryFile,
+          view: 'instructions',
+          sidebarTab: 'instructions',
+          instructionsSelectedStoreId: route.instructionsStoreId,
+          instructionsSelectedFile: route.instructionsFile,
         })
-        persistSidebarTab('memory')
+        persistSidebarTab('instructions')
       } else {
-        const leftMemory = state.view === 'memory'
+        const leftInstructions = state.view === 'instructions'
         useUIStore.setState({
           view: 'observe',
-          ...(state.sidebarTab === 'memory' ? { sidebarTab: 'projects' as SidebarTab } : {}),
+          ...(state.sidebarTab === 'instructions' ? { sidebarTab: 'projects' as SidebarTab } : {}),
         })
-        if (leftMemory && state.sidebarTab === 'memory') persistSidebarTab('projects')
+        if (leftInstructions && state.sidebarTab === 'instructions') {
+          persistSidebarTab('projects')
+        }
         if (route.projectSlug !== state.selectedProjectSlug) {
-          useUIStore.setState({ selectedProjectSlug: route.projectSlug })
+          // Browser navigation is authoritative. A URL with no project
+          // (home, or `#/_/<sess>`) also clears the resolved project id —
+          // otherwise the main panel keeps showing the old project and
+          // useRouteSync writes its slug back. A session URL re-resolves its
+          // project from the session id.
+          useUIStore.setState(
+            route.projectSlug
+              ? { selectedProjectSlug: route.projectSlug }
+              : { selectedProjectSlug: null, selectedProjectId: null },
+          )
         }
         if (route.sessionId !== state.selectedSessionId) {
           state.setSelectedSessionId(route.sessionId)
+        }
+        if (route.deepLinkView !== useUIStore.getState().deepLinkView) {
+          useUIStore.setState({ deepLinkView: route.deepLinkView })
+        }
+        // Back off a `…:session.stats` entry closes the modal it opened.
+        // (useRouteSync opens the modal a URL names; nothing else closes it.)
+        if (!route.deepLinkView && useUIStore.getState().editingSessionId !== null) {
+          useUIStore.setState({ editingSessionId: null })
         }
       }
     } finally {

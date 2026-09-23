@@ -1,8 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { useUIStore } from '@/stores/ui-store'
 import { useFilterStore } from '@/stores/filter-store'
-import { useEvents } from '@/hooks/use-events'
-import { useDedupedEvents } from '@/hooks/use-deduped-events'
+import { useSessionDedupedEvents } from '@/hooks/deduped-events-context'
 import { cn } from '@/lib/utils'
 import { focusSiblingMatching } from '@/lib/keyboard-nav'
 import { Search, X } from 'lucide-react'
@@ -17,7 +16,6 @@ export function EventFilterBar() {
     clearAllFilters,
     searchQuery,
     setSearchQuery,
-    selectedSessionId,
     selectedAgentIds,
   } = useUIStore()
 
@@ -41,10 +39,9 @@ export function EventFilterBar() {
     }
   }
 
-  const { data: events } = useEvents(selectedSessionId)
   // Deduped events carry the pre-computed `filters` / `displayEventStream`
   // tags (see use-deduped-events). The pill set is derived from those.
-  const { deduped } = useDedupedEvents(events)
+  const { deduped } = useSessionDedupedEvents()
 
   // Only consider displayed events for the available pill set.
   const displayedEvents = useMemo(

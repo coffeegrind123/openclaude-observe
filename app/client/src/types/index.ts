@@ -1,3 +1,4 @@
+import type { StackSample, StackTotals, StackStatus } from './stack'
 export interface Project {
   id: number
   slug: string
@@ -42,6 +43,9 @@ export interface ServerAgent {
   name: string | null
   description: string | null
   agentType?: string | null
+  /** Producer class ('pi'; legacy rows 'claude-code'). Absent from servers that
+   *  don't expose it — the client then derives it from the agent's events. */
+  agentClass?: string | null
 }
 
 /** Agent with UI-derived state (computed from events) */
@@ -53,23 +57,10 @@ export interface Agent extends ServerAgent {
   cwd?: string | null
 }
 
-export interface Instance {
-  id: string
-  sessionId: string
-  role: string
-  name: string | null
-  machineId: string | null
-  pid: number | null
-  firstSeen: number
-  lastHeartbeat: number
-  status: string
-}
-
 export interface ParsedEvent {
   id: number
   agentId: string
   sessionId: string
-  instanceId?: string
   type: string
   subtype: string | null
   toolName: string | null
@@ -121,14 +112,19 @@ export type WSMessage =
   | { type: 'event'; data: ParsedEvent }
   | { type: 'session_update'; data: Session }
   | { type: 'project_update'; data: { id: number; name: string } }
-  | { type: 'instance_update'; data: Instance }
   | { type: 'notification'; data: { sessionId: string; projectId: number; ts: number } }
   | { type: 'notification_clear'; data: { sessionId: string; ts: number } }
-  | { type: 'activity'; data: { sessionId: string; eventId: number; ts: number } }
+  | {
+      type: 'activity'
+      // projectId is absent from servers predating the project-pulse field.
+      data: { sessionId: string; projectId?: number | null; eventId: number; ts: number }
+    }
   | { type: 'filter:created'; filter: Filter }
   | { type: 'filter:updated'; filter: Filter }
   | { type: 'filter:deleted'; id: string }
   | { type: 'filter:bulk-changed' }
+  | { type: 'stack_metrics'; data: { sample: StackSample; totals: StackTotals } }
+  | { type: 'stack_status'; data: StackStatus }
 
 export type WSClientMessage = { type: 'subscribe'; sessionId: string } | { type: 'unsubscribe' }
 

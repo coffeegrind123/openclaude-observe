@@ -19,13 +19,15 @@ function formatTokens(n: number): string {
 
 interface ContextBadgeProps {
   sessionId: string
+  /** The agent whose window this generation ran in (a subagent has its own). */
+  agentId: string
   llmEventId: number
 }
 
-export function ContextBadge({ sessionId, llmEventId }: ContextBadgeProps) {
+export function ContextBadge({ sessionId, agentId, llmEventId }: ContextBadgeProps) {
   const { data } = useQuery({
-    queryKey: ['context', sessionId],
-    queryFn: () => api.getSessionContext(sessionId),
+    queryKey: ['context', sessionId, agentId],
+    queryFn: () => api.getSessionContext(sessionId, agentId),
     staleTime: 5_000,
   })
 
@@ -193,7 +195,7 @@ function CategoryRow({
   category: ContextCategory
   tokens: number
   pct: number
-  sources: { eventId: number; description: string; tokens: number; scope?: string }[]
+  sources: { eventId: number; description: string; tokens: number }[]
 }) {
   const [expanded, setExpanded] = useState(false)
   const barColor = CATEGORY_COLORS[category]
@@ -226,7 +228,6 @@ function CategoryRow({
           {sources.slice(0, 10).map((s, i) => (
             <div key={`${s.eventId}-${i}`} className="flex gap-2">
               <span className="truncate flex-1" title={s.description}>
-                {s.scope && <span className="text-muted-foreground/60">[{s.scope}] </span>}
                 {s.description || '(no description)'}
               </span>
               <span className="tabular-nums shrink-0">{formatTokens(s.tokens)}</span>

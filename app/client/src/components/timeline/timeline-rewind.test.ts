@@ -9,7 +9,7 @@ function makeEvent(id: number, timestamp: number): ParsedEvent {
     sessionId: 's',
     type: 'tool',
     subtype: 'PreToolUse',
-    toolName: 'Bash',
+    toolName: 'bash',
     toolUseId: null,
     status: 'completed',
     timestamp,

@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { SettingsModal } from '@/components/settings/settings-modal'
 import { ChangelogModal } from '@/components/changelog-modal'
-import { Starburst } from '@/components/shared/starburst'
+import { BrandMark } from '@/components/shared/brand-mark'
+import { StackStrip } from '@/components/stack/stack-strip'
 
 interface SidebarProps {
   connected: boolean
@@ -81,13 +82,13 @@ export function Sidebar({ connected }: SidebarProps) {
               useUIStore.getState().setSelectedProject(null)
             }}
           >
-            <Starburst className="h-6 w-6 shrink-0" />
+            <BrandMark className="h-6 w-6 shrink-0" />
             <span className="font-mono text-sm font-semibold tracking-tight truncate">
-              <span className="text-primary">open</span>claude observe
+              instant<span className="text-primary">coffee</span> observe
             </span>
           </button>
         )}
-        {sidebarCollapsed && <Starburst className="h-6 w-6" />}
+        {sidebarCollapsed && <BrandMark className="h-6 w-6" />}
         {!sidebarCollapsed && <div className="flex-1" />}
         <Button
           variant="ghost"
@@ -115,6 +116,12 @@ export function Sidebar({ connected }: SidebarProps) {
       </div>
 
       <Separator />
+
+      {!sidebarCollapsed && (
+        <div className="px-2 pt-1">
+          <StackStrip onOpen={() => useUIStore.getState().setView('stack')} />
+        </div>
+      )}
 
       {/* Footer */}
       <div

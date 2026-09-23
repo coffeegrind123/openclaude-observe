@@ -1,9 +1,10 @@
 /**
- * Tests for the centralized event-icon-registry.
- *
- * Adapted from the upstream test suite for our event key format.
+ * Tests for the centralized event-icon-registry (icon ids chosen per agent
+ * class — see agents/pi/describe.ts piIconId).
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import dynamicIconImports from 'lucide-react/dynamicIconImports'
+import { resolveIconName } from './dynamic-icon'
 import {
   EVENT_ICON_REGISTRY,
   COLOR_PRESETS,
@@ -14,24 +15,9 @@ import {
   resolveEventColor,
   getEventIcon,
   getEventColor,
-  resolveEventKey,
-  type EventIconEntry,
+  hasIconEntry,
   type IconCustomization,
 } from './event-icon-registry'
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** All unique colour keys referenced by registry entries. */
-function registryColorKeys(): Set<string> {
-  return new Set(EVENT_ICON_REGISTRY.map((e) => e.defaultColor))
-}
-
-/** All unique registry entry IDs. */
-function registryIds(): Set<string> {
-  return new Set(EVENT_ICON_REGISTRY.map((e) => e.id))
-}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -115,93 +101,57 @@ describe('COLOR_PRESETS', () => {
 })
 
 // ---------------------------------------------------------------------------
-// resolveEventIcon
+// resolveEventIcon / resolveEventColor
 // ---------------------------------------------------------------------------
 
 describe('resolveEventIcon', () => {
-  it('returns the correct icon for a known non-tool key', () => {
-    expect(resolveEventIcon('SessionStart')).toBe('Rocket')
-    expect(resolveEventIcon('SessionEnd')).toBe('Flag')
-    expect(resolveEventIcon('Stop')).toBe('CircleStop')
-    expect(resolveEventIcon('StopFailure')).toBe('Bomb')
-    expect(resolveEventIcon('LLMGeneration')).toBe('Brain')
-    expect(resolveEventIcon('Notification')).toBe('Bell')
-    expect(resolveEventIcon('PreCompact')).toBe('Minimize')
-    expect(resolveEventIcon('SubagentStart')).toBe('Bot')
+  it('resolves pi built-in tools', () => {
+    expect(resolveEventIcon('read')).toBe('BookOpen')
+    expect(resolveEventIcon('bash')).toBe('Terminal')
+    expect(resolveEventIcon('edit')).toBe('FilePen')
+    expect(resolveEventIcon('write')).toBe('Pencil')
+    expect(resolveEventIcon('grep')).toBe('SearchCode')
+    expect(resolveEventIcon('find')).toBe('Search')
+    expect(resolveEventIcon('ls')).toBe('FolderOpen')
   })
 
-  it('returns the correct icon for a bare tool-name key', () => {
-    expect(resolveEventIcon('Bash')).toBe('Zap')
-    expect(resolveEventIcon('Read')).toBe('BookOpen')
-    expect(resolveEventIcon('Write')).toBe('Pencil')
-    expect(resolveEventIcon('Edit')).toBe('FilePen')
-    expect(resolveEventIcon('Glob')).toBe('Search')
-    expect(resolveEventIcon('Grep')).toBe('SearchCode')
-    expect(resolveEventIcon('WebSearch')).toBe('Globe')
+  it('resolves subagent, MCP and browser tools', () => {
     expect(resolveEventIcon('Agent')).toBe('Bot')
+    expect(resolveEventIcon('SubAgent')).toBe('Bot')
+    expect(resolveEventIcon('StopAgent')).toBe('OctagonX')
+    expect(resolveEventIcon('AgentStatus')).toBe('ListChecks')
+    expect(resolveEventIcon('mcp')).toBe('Plug')
+    expect(resolveEventIcon('mcpScript')).toBe('FileCode')
+    expect(resolveEventIcon('browser')).toBe('Globe')
   })
 
-  it('returns the correct icon for a per-phase tool key', () => {
-    expect(resolveEventIcon('PreToolUse:Bash')).toBe('Zap')
-    expect(resolveEventIcon('PostToolUse:Bash')).toBe('Zap')
-    expect(resolveEventIcon('PostToolUseFailure:Bash')).toBe('Zap')
+  it('resolves pi events and their variants', () => {
+    expect(resolveEventIcon('SystemPrompt')).toBe('ScrollText')
+    expect(resolveEventIcon('LLMGeneration')).toBe('Brain')
+    expect(resolveEventIcon('LLMGenerationError')).toBe('TriangleAlert')
+    expect(resolveEventIcon('UserPromptSubmit:extension')).toBe('MessageSquareShare')
+    expect(resolveEventIcon('CustomMessage:subagent-result')).toBe('Inbox')
+    expect(resolveEventIcon('CompactionFailed')).toBe('CircleAlert')
   })
 
-  it('falls back to generic phase key for unknown tool names', () => {
-    // "PreToolUse:UnknownTool" has no explicit entry → falls back to "PreToolUse" → Wrench
-    expect(resolveEventIcon('PreToolUse:SomeUnknownTool')).toBe('Wrench')
-    expect(resolveEventIcon('PostToolUse:SomeUnknownTool')).toBe('CircleCheck')
-    expect(resolveEventIcon('PostToolUseFailure:SomeUnknownTool')).toBe('CircleX')
-  })
-
-  it('falls back to DEFAULT_ICON for a completely unknown key', () => {
-    expect(resolveEventIcon('TotallyUnknown')).toBe(DEFAULT_ICON)
+  it('falls back to the default icon for unknown ids', () => {
+    expect(resolveEventIcon('NoSuchEvent')).toBe(DEFAULT_ICON)
     expect(resolveEventIcon('')).toBe(DEFAULT_ICON)
-    expect(resolveEventIcon('Nope:Nothing')).toBe(DEFAULT_ICON) // generic phase not in registry either
-  })
-
-  it('resolves MCP tool keys', () => {
-    expect(resolveEventIcon('PreToolUse:mcp__browser__navigate')).toBe('Plug')
-    expect(resolveEventIcon('PostToolUse:mcp__filesystem__read')).toBe('Plug')
   })
 })
 
-// ---------------------------------------------------------------------------
-// resolveEventColor
-// ---------------------------------------------------------------------------
-
 describe('resolveEventColor', () => {
-  it('returns the correct ColorPreset for known keys', () => {
+  it('resolves registered colours', () => {
     expect(resolveEventColor('SessionStart')).toBe(COLOR_PRESETS.YELLOW)
-    expect(resolveEventColor('UserPromptSubmit')).toBe(COLOR_PRESETS.GREEN)
-    expect(resolveEventColor('PermissionRequest')).toBe(COLOR_PRESETS.ROSE)
-    expect(resolveEventColor('DaemonStart')).toBe(COLOR_PRESETS.ORANGE)
-    expect(resolveEventColor('BridgeConnected')).toBe(COLOR_PRESETS.CYAN)
-    expect(resolveEventColor('Elicitation')).toBe(COLOR_PRESETS.INDIGO)
-    expect(resolveEventColor('StopFailure')).toBe(COLOR_PRESETS.RED)
+    expect(resolveEventColor('bash')).toBe(COLOR_PRESETS.BLUE)
+    expect(resolveEventColor('Agent')).toBe(COLOR_PRESETS.PURPLE)
+    expect(resolveEventColor('browser')).toBe(COLOR_PRESETS.CYAN)
+    expect(resolveEventColor('PostToolUseFailure')).toBe(COLOR_PRESETS.RED)
+    expect(resolveEventColor('UserPromptSubmit:extension')).toBe(COLOR_PRESETS.AMBER)
   })
 
-  it('returns per-phase colours for tool keys', () => {
-    // PreToolUse:Bash → BLUE (same as generic PreToolUse)
-    expect(resolveEventColor('PreToolUse:Bash')).toBe(COLOR_PRESETS.BLUE)
-    // PostToolUse:Bash → BLUE
-    expect(resolveEventColor('PostToolUse:Bash')).toBe(COLOR_PRESETS.BLUE)
-    // PostToolUseFailure:Bash → RED
-    expect(resolveEventColor('PostToolUseFailure:Bash')).toBe(COLOR_PRESETS.RED)
-  })
-
-  it('falls back to generic phase colour for unknown tool names', () => {
-    expect(resolveEventColor('PostToolUseFailure:UnknownTool')).toBe(COLOR_PRESETS.RED)
-    expect(resolveEventColor('PreToolUse:UnknownTool')).toBe(COLOR_PRESETS.BLUE)
-  })
-
-  it('returns DEFAULT_COLOR_PRESET for completely unknown keys', () => {
-    expect(resolveEventColor('TotallyUnknown')).toBe(DEFAULT_COLOR_PRESET)
-  })
-
-  it('resolves MCP tool colours', () => {
-    expect(resolveEventColor('PreToolUse:mcp__anything')).toBe(COLOR_PRESETS.CYAN)
-    expect(resolveEventColor('PostToolUseFailure:mcp__anything')).toBe(COLOR_PRESETS.RED)
+  it('falls back to the default colour for unknown ids', () => {
+    expect(resolveEventColor('NoSuchEvent')).toBe(DEFAULT_COLOR_PRESET)
   })
 })
 
@@ -314,145 +264,58 @@ describe('getEventColor with customizations', () => {
 })
 
 // ---------------------------------------------------------------------------
-// resolveEventKey
-// ---------------------------------------------------------------------------
-
-describe('resolveEventKey', () => {
-  it('returns subtype as-is for non-tool events', () => {
-    expect(resolveEventKey('LLMGeneration')).toBe('LLMGeneration')
-    expect(resolveEventKey('SessionStart')).toBe('SessionStart')
-    expect(resolveEventKey('Stop')).toBe('Stop')
-    expect(resolveEventKey('Notification')).toBe('Notification')
-  })
-
-  it('combines subtype and toolName with colon for tool events', () => {
-    expect(resolveEventKey('PreToolUse', 'Bash')).toBe('PreToolUse:Bash')
-    expect(resolveEventKey('PostToolUse', 'Write')).toBe('PostToolUse:Write')
-    expect(resolveEventKey('PostToolUseFailure', 'Grep')).toBe('PostToolUseFailure:Grep')
-  })
-
-  it('collapses MCP tools to the _MCP key', () => {
-    expect(resolveEventKey('PreToolUse', 'mcp__browser__navigate')).toBe('PreToolUse:_MCP')
-    expect(resolveEventKey('PostToolUse', 'mcp__filesystem__read')).toBe('PostToolUse:_MCP')
-    expect(resolveEventKey('PostToolUseFailure', 'mcp__something')).toBe('PostToolUseFailure:_MCP')
-  })
-
-  it('returns "unknown" for null subtype', () => {
-    expect(resolveEventKey(null)).toBe('unknown')
-    expect(resolveEventKey(null, 'Bash')).toBe('unknown')
-  })
-
-  it('returns subtype-only when tool event has no toolName', () => {
-    expect(resolveEventKey('PreToolUse', null)).toBe('PreToolUse')
-    expect(resolveEventKey('PostToolUse', undefined)).toBe('PostToolUse')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Registry coverage: ensure key event types are present
+// Coverage
 // ---------------------------------------------------------------------------
 
 describe('registry coverage', () => {
-  const ids = registryIds()
-
-  // Non-tool subtypes that MUST be in the registry
-  const requiredNonToolIds = [
+  // Every hook_event_name in docs/pi-protocol.md.
+  const PI_EVENTS = [
     'SessionStart',
     'SessionEnd',
-    'Stop',
-    'StopFailure',
+    'SessionRename',
+    'SystemPrompt',
     'UserPromptSubmit',
-    'UserPromptSubmitResponse',
+    'PreToolUse',
+    'PostToolUse',
+    'PostToolUseFailure',
+    'LLMGeneration',
+    'Stop',
     'SubagentStart',
     'SubagentStop',
     'PreCompact',
     'PostCompact',
-    'LLMGeneration',
+    'CompactionFailed',
+    'ModelChange',
+    'ThinkingLevelChange',
+    'UserBash',
     'Notification',
-    'Elicitation',
-    'ElicitationResult',
-    'PermissionRequest',
-    'PermissionDenied',
-    'InstructionsLoaded',
-    'ConfigChange',
-    'CwdChanged',
-    'FileChanged',
-    'WorktreeCreate',
-    'WorktreeRemove',
-    'DaemonStart',
-    'DaemonStop',
-    'DaemonHeartbeat',
-    'PipeRoleAssigned',
-    'PipeAttach',
-    'PipeDetach',
-    'PipePromptRouted',
-    'PipePermissionForward',
-    'PipeLanPeerDiscovered',
-    'CoordinatorDispatch',
-    'CoordinatorResult',
-    'BridgeConnected',
-    'BridgeDisconnected',
-    'BridgeWorkReceived',
-    'SuperModeToggle',
-    'TaskCreated',
-    'TaskCompleted',
-    'CompactionRun',
-    'CostUpdate',
-    'ToolBatch',
-    'Message',
-    'Error',
-    'Config',
-    'Metrics',
-    'Startup',
-    'Shutdown',
+    'SessionTree',
+    'CustomMessage',
   ]
 
-  // Per-phase tool keys that MUST be in the registry
-  const requiredToolPhaseIds = [
-    'PreToolUse',
-    'PostToolUse',
-    'PostToolUseFailure',
-    'PreToolUse:_MCP',
-    'PostToolUse:_MCP',
-    'PostToolUseFailure:_MCP',
-  ]
+  it.each(PI_EVENTS)('has an entry for pi event %s', (id) => {
+    expect(hasIconEntry(id)).toBe(true)
+  })
 
-  // Bare tool-name keys
-  const requiredToolNameIds = [
-    'Bash',
-    'Read',
-    'Write',
-    'Edit',
-    'Glob',
-    'Grep',
-    'WebSearch',
-    'WebFetch',
-    'Agent',
-  ]
-
-  it('contains all required non-tool event types', () => {
-    for (const id of requiredNonToolIds) {
-      expect(ids.has(id), `missing non-tool registry entry: "${id}"`).toBe(true)
+  it('names only icons that exist in lucide-react', () => {
+    for (const entry of EVENT_ICON_REGISTRY) {
+      const name = resolveIconName(entry.icon)
+      expect(name, `${entry.id}: ${entry.icon}`).not.toBeNull()
+      expect(name! in dynamicIconImports).toBe(true)
     }
   })
 
-  it('contains all required per-phase tool entries', () => {
-    for (const id of requiredToolPhaseIds) {
-      expect(ids.has(id), `missing tool phase registry entry: "${id}"`).toBe(true)
-    }
-  })
-
-  it('contains all required bare tool-name entries', () => {
-    for (const id of requiredToolNameIds) {
-      expect(ids.has(id), `missing tool-name registry entry: "${id}"`).toBe(true)
-    }
-  })
-
-  it('contains per-phase entries for each tool name', () => {
-    for (const tool of requiredToolNameIds) {
-      expect(ids.has(`PreToolUse:${tool}`), `missing PreToolUse:${tool}`).toBe(true)
-      expect(ids.has(`PostToolUse:${tool}`), `missing PostToolUse:${tool}`).toBe(true)
-      expect(ids.has(`PostToolUseFailure:${tool}`), `missing PostToolUseFailure:${tool}`).toBe(true)
+  it('has no OpenClaude / Claude Code entries', () => {
+    for (const id of [
+      'Bash',
+      'Read',
+      'Glob',
+      'StopFailure',
+      'PermissionRequest',
+      'DaemonStart',
+      '_MCP',
+    ]) {
+      expect(hasIconEntry(id), id).toBe(false)
     }
   })
 })

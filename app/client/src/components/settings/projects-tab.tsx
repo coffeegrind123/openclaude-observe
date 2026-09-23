@@ -300,7 +300,7 @@ export function ProjectsTab() {
             <AlertDialogTitle>Delete all logs?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete all Observe logs (projects, sessions, agents, and
-              events). Your original Claude session files are not modified.
+              events). Your original pi session files are not modified.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -330,7 +330,7 @@ export function ProjectsTab() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               This permanently removes the project and all of its sessions, agents, and events from
-              the Observe database. Your original Claude session files are not modified.
+              the Observe database. Your original pi session files are not modified.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
