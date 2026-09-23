@@ -106,6 +106,30 @@ describe('POST /events — pi sessions', () => {
     expect(agents.find((a) => a.id === CHILD_ID)?.agentType).toBe('general-purpose')
   })
 
+  test("a subagent's events don't dismiss the main session's dialog bell", async () => {
+    const start = ENVELOPES[0]
+    const childEvent = ENVELOPES.find((e) => e.agent_id && e.hook_event_name === 'PreToolUse')!
+    const rootEvent = ENVELOPES.find((e) => !e.agent_id && e.hook_event_name === 'PreToolUse')!
+    await post(app, start)
+    await post(app, {
+      ...start,
+      hook_event_name: 'Notification',
+      message: 'Allow bash?',
+      notification_type: 'confirm',
+      timestamp: (start.timestamp as number) + 1,
+    })
+    const cleared = () => broadcasts.filter((b) => b.type === 'notification_clear')
+
+    expect(broadcasts.filter((b) => b.type === 'notification')).toHaveLength(1)
+    await post(app, { ...childEvent, timestamp: (start.timestamp as number) + 2 })
+    expect(cleared()).toHaveLength(0)
+    expect(await store.getSessionsWithPendingNotifications(0)).toHaveLength(1)
+
+    await post(app, { ...rootEvent, timestamp: (start.timestamp as number) + 3 })
+    expect(cleared()).toHaveLength(1)
+    expect(await store.getSessionsWithPendingNotifications(0)).toHaveLength(0)
+  })
+
   test('a grandchild spawned through SubAgent hangs under the child that spawned it', async () => {
     await ingestAll()
     const child = ENVELOPES.find((e) => e.hook_event_name === 'SubagentStart')!

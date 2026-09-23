@@ -74,7 +74,7 @@ reads.
 | `INSTANTCOFFEE_OBSERVE_ALLOW_DB_RESET` | `backup` | DB reset policy: `allow`, `backup`, or `deny` |
 | `INSTANTCOFFEE_OBSERVE_CLIENT_DIST_PATH` | (auto) | Override the client dist directory |
 | `INSTANTCOFFEE_OBSERVE_STORAGE_ADAPTER` | `sqlite` | Storage backend |
-| `INSTANTCOFFEE_OBSERVE_NOTIFICATION_ON_EVENTS` | `Notification` | Comma-separated event names that raise a sidebar/desktop notification (e.g. `Notification,Stop,SubagentStop`) |
+| `INSTANTCOFFEE_OBSERVE_NOTIFICATION_ON_EVENTS` | `Notification` | Comma-separated event names that raise a sidebar/desktop notification (e.g. `Notification,Stop,SubagentStop`). The bell stays lit until the agent that raised it produces another event; a `SubagentStart`/`SubagentStop` hands that to the parent |
 | `INSTANTCOFFEE_OBSERVE_PI_HOMES` | `$HOME` | Comma-separated pi homes. Their `.pi/agent/sessions` are the only transcripts the server will read; their `.pi/agent` holds the context files and subagent definitions the Instructions editor edits |
 | `INSTANTCOFFEE_OBSERVE_TRANSCRIPT_STATS` | `1` | Session stats parsed from pi transcripts; `0` disables |
 | `INSTANTCOFFEE_OBSERVE_INSTRUCTIONS` | `1` | Instructions browser/editor; `0` disables |

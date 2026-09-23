@@ -5,6 +5,8 @@ import { config } from '../config'
 import type {
   EventStore,
   InsertEventParams,
+  InsertEventResult,
+  NotificationTransition,
   EventFilters,
   StoredEvent,
   OrphanRepairResult,
@@ -69,7 +71,9 @@ export class SqliteAdapter implements EventStore {
         event_count INTEGER NOT NULL DEFAULT 0,
         agent_count INTEGER NOT NULL DEFAULT 0,
         last_activity INTEGER,
-        last_notification_ts INTEGER,
+        pending_notification_ts INTEGER,
+        pending_notification_agents TEXT,
+        pending_notification_count INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
@@ -92,13 +96,11 @@ export class SqliteAdapter implements EventStore {
           last_activity = (SELECT MAX(timestamp) FROM events WHERE session_id = sessions.id)
       `)
     }
-    // Notification tracking — `last_notification_ts` alongside the
-    // existing `last_activity` column is enough to test "pending":
-    // a session has a pending notification iff
-    //   last_notification_ts IS NOT NULL AND last_activity = last_notification_ts
-    // (the most recent event IS the notification). Any subsequent
-    // activity auto-clears by bumping `last_activity`.
-    if (!sessionCols.some((c) => c.name === 'last_notification_ts')) {
+    // Legacy notification tracking. Still added to pre-notification databases
+    // because the project_id rebuild below copies it; the pending_notification_*
+    // migration further down converts it and drops it.
+    const hasPendingNotification = sessionCols.some((c) => c.name === 'pending_notification_ts')
+    if (!hasPendingNotification && !sessionCols.some((c) => c.name === 'last_notification_ts')) {
       this.db.exec('ALTER TABLE sessions ADD COLUMN last_notification_ts INTEGER')
       // Backfill from existing events
       this.db.exec(`
@@ -243,6 +245,47 @@ export class SqliteAdapter implements EventStore {
     // don't collide).
     if (!eventCols.some((c) => c.name === 'signature_hash')) {
       this.db.exec('ALTER TABLE events ADD COLUMN signature_hash TEXT')
+    }
+
+    // Pending-notification state replaces last_notification_ts, which only
+    // inferred "pending" from `last_activity = last_notification_ts` — so any
+    // event, a subagent's included, cleared the bell. A session that was
+    // pending under the old rule stays pending, owned by the agent that raised
+    // the notification (the root agent, whose id is the session id, if unknown).
+    if (!hasPendingNotification) {
+      this.db.exec('ALTER TABLE sessions ADD COLUMN pending_notification_ts INTEGER')
+      this.db.exec('ALTER TABLE sessions ADD COLUMN pending_notification_agents TEXT')
+      this.db.exec(
+        'ALTER TABLE sessions ADD COLUMN pending_notification_count INTEGER NOT NULL DEFAULT 0',
+      )
+      this.db.exec(`
+        UPDATE sessions SET
+          pending_notification_ts = last_notification_ts,
+          pending_notification_agents = json_array(COALESCE(
+            (SELECT agent_id FROM events
+               WHERE session_id = sessions.id AND timestamp = sessions.last_notification_ts
+               ORDER BY id DESC LIMIT 1),
+            sessions.id
+          )),
+          pending_notification_count = MAX(1, (
+            SELECT COUNT(*) FROM events e
+            WHERE e.session_id = sessions.id
+              AND e.subtype = 'Notification'
+              AND e.timestamp > COALESCE(
+                (SELECT MAX(timestamp) FROM events e2
+                   WHERE e2.session_id = sessions.id
+                     AND COALESCE(e2.subtype, '') != 'Notification'),
+                0
+              )
+          ))
+        WHERE last_notification_ts IS NOT NULL AND last_activity = last_notification_ts
+      `)
+    }
+    const sessionColsNow = this.db.prepare("PRAGMA table_info('sessions')").all() as {
+      name: string
+    }[]
+    if (sessionColsNow.some((c) => c.name === 'last_notification_ts')) {
+      this.db.exec('ALTER TABLE sessions DROP COLUMN last_notification_ts')
     }
 
     // Run the token backfill now that the events table is guaranteed to exist.
@@ -518,7 +561,7 @@ export class SqliteAdapter implements EventStore {
       .run(name, Date.now(), agentId)
   }
 
-  async insertEvent(params: InsertEventParams): Promise<number> {
+  async insertEvent(params: InsertEventParams): Promise<InsertEventResult> {
     const now = Date.now()
     // Wrap the INSERT + counter UPDATEs in a single transaction so a
     // mid-operation failure doesn't leave the event count out of sync.
@@ -543,24 +586,23 @@ export class SqliteAdapter implements EventStore {
           params.signatureHash ?? null,
         )
 
-      // Update cached counters on session. `last_activity` is the
-      // max across all events; `last_notification_ts` only advances for
-      // notification-subtype events. "Pending" is inferred from those
-      // two columns (see getSessionsWithPendingNotifications).
-      const isNotification =
-        params.isNotification ?? config.notificationEventSubtypes.has(params.subtype ?? '')
       this.db
         .prepare(
           `UPDATE sessions SET
             event_count = event_count + 1,
-            last_activity = MAX(COALESCE(last_activity, 0), ?),
-            last_notification_ts = CASE
-              WHEN ? = 1 THEN MAX(COALESCE(last_notification_ts, 0), ?)
-              ELSE last_notification_ts
-            END
+            last_activity = MAX(COALESCE(last_activity, 0), ?)
           WHERE id = ?`,
         )
-        .run(params.timestamp, isNotification ? 1 : 0, params.timestamp, params.sessionId)
+        .run(params.timestamp, params.sessionId)
+
+      const isNotification =
+        params.isNotification ?? config.notificationEventSubtypes.has(params.subtype ?? '')
+      const notificationTransition = this.applyNotification(
+        params.sessionId,
+        isNotification,
+        isNotification ? (params.notificationOwnerId ?? params.agentId) : params.agentId,
+        params.timestamp,
+      )
 
       // Accumulate token counters for LLM events
       if (params.subtype === 'LLMGeneration') {
@@ -586,7 +628,7 @@ export class SqliteAdapter implements EventStore {
           )
       }
 
-      return Number(result.lastInsertRowid)
+      return { eventId: Number(result.lastInsertRowid), notificationTransition }
     })
 
     try {
@@ -606,36 +648,86 @@ export class SqliteAdapter implements EventStore {
     }
   }
 
+  /**
+   * Update a session's pending-notification state for one event.
+   *
+   * State is the set of agents with an unanswered notification. A
+   * notification adds its owner; any other event removes the agent that
+   * produced it. So only the agent that raised a notification can clear it —
+   * a subagent working in the background leaves the main agent's pending
+   * dialog alone. The session is pending while the set is non-empty.
+   */
+  private applyNotification(
+    sessionId: string,
+    isNotification: boolean,
+    agentId: string,
+    timestamp: number,
+  ): NotificationTransition {
+    const row = this.db
+      .prepare('SELECT pending_notification_agents AS agents FROM sessions WHERE id = ?')
+      .get(sessionId) as { agents: string | null } | undefined
+    if (!row) {
+      return 'none'
+    }
+    let agents: string[] = []
+    try {
+      const parsed = row.agents ? JSON.parse(row.agents) : []
+      agents = Array.isArray(parsed) ? parsed.filter((a) => typeof a === 'string') : []
+    } catch {
+      agents = []
+    }
+
+    if (isNotification) {
+      const next = agents.includes(agentId) ? agents : [...agents, agentId]
+      this.db
+        .prepare(
+          `UPDATE sessions SET
+            pending_notification_ts = MAX(COALESCE(pending_notification_ts, 0), ?),
+            pending_notification_agents = ?,
+            pending_notification_count = pending_notification_count + 1
+          WHERE id = ?`,
+        )
+        .run(timestamp, JSON.stringify(next), sessionId)
+      return 'set'
+    }
+
+    if (!agents.includes(agentId)) {
+      return 'none'
+    }
+    const next = agents.filter((a) => a !== agentId)
+    if (next.length > 0) {
+      this.db
+        .prepare('UPDATE sessions SET pending_notification_agents = ? WHERE id = ?')
+        .run(JSON.stringify(next), sessionId)
+      return 'none'
+    }
+    this.db
+      .prepare(
+        `UPDATE sessions SET
+          pending_notification_ts = NULL,
+          pending_notification_agents = NULL,
+          pending_notification_count = 0
+        WHERE id = ?`,
+      )
+      .run(sessionId)
+    return 'cleared'
+  }
+
   async getSessionsWithPendingNotifications(sinceTs: number): Promise<any[]> {
-    // A session is "pending" when its most recent event is a
-    // Notification — i.e. last_activity equals last_notification_ts.
-    // `sinceTs` lets clients cheaply resume from their last-seen
-    // cursor on page load. The count subquery is O(k) where k is the
-    // number of events on the pending sessions (small N), and hits the
-    // existing (session_id, timestamp) index.
+    // `sinceTs` lets clients cheaply resume from their last-seen cursor on
+    // page load. State is maintained by insertEvent (applyNotification).
     return this.db
       .prepare(
         `
       SELECT
-        s.id as session_id,
-        s.project_id,
-        s.last_notification_ts,
-        (
-          SELECT COUNT(*) FROM events e
-          WHERE e.session_id = s.id
-            AND e.subtype = 'Notification'
-            AND e.timestamp > COALESCE(
-              (SELECT MAX(timestamp) FROM events e2
-                 WHERE e2.session_id = s.id
-                   AND COALESCE(e2.subtype, '') != 'Notification'),
-              0
-            )
-        ) AS count
-      FROM sessions s
-      WHERE s.last_notification_ts IS NOT NULL
-        AND s.last_activity = s.last_notification_ts
-        AND s.last_notification_ts > ?
-      ORDER BY s.last_notification_ts DESC
+        id AS session_id,
+        project_id,
+        pending_notification_ts,
+        pending_notification_count AS count
+      FROM sessions
+      WHERE pending_notification_ts IS NOT NULL
+        AND pending_notification_ts > ?
+      ORDER BY pending_notification_ts DESC
     `,
       )
       .all(sinceTs)

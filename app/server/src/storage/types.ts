@@ -20,10 +20,21 @@ export interface InsertEventParams {
   toolUseId?: string | null
   /** Stable signature for dedup. When set, a UNIQUE constraint is enforced. */
   signatureHash?: string | null
-  /** Whether this event advances last_notification_ts. Computed by the
-   *  route from config.notificationEventSubtypes; falls back to the
-   *  `Notification` subtype when omitted. */
+  /** Whether this event raises a notification. Computed by the route from
+   *  config.notificationEventSubtypes; falls back to that same set when
+   *  omitted. */
   isNotification?: boolean
+  /** The agent whose next event answers this notification. Defaults to
+   *  agentId; a subagent's lifecycle event hands it to the parent. */
+  notificationOwnerId?: string
+}
+
+/** How an insert changed the session's pending-notification state. */
+export type NotificationTransition = 'set' | 'cleared' | 'none'
+
+export interface InsertEventResult {
+  eventId: number
+  notificationTransition: NotificationTransition
 }
 
 export interface EventFilters {
@@ -89,7 +100,7 @@ export interface EventStore {
   updateSessionSlug(sessionId: string, slug: string): Promise<void>
   updateSessionProject(sessionId: string, projectId: number): Promise<void>
   updateAgentName(agentId: string, name: string): Promise<void>
-  insertEvent(params: InsertEventParams): Promise<number>
+  insertEvent(params: InsertEventParams): Promise<InsertEventResult>
   findEventBySignatureHash(hash: string): Promise<{ id: number } | null>
   getProjects(): Promise<any[]>
   getSessionsForProject(projectId: number): Promise<any[]>

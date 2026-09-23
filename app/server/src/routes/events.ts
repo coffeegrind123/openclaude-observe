@@ -1,6 +1,6 @@
 // app/server/src/routes/events.ts
 import { Hono } from 'hono'
-import type { EventStore } from '../storage/types'
+import type { EventStore, NotificationTransition } from '../storage/types'
 import { DuplicateEventSignatureError } from '../storage/types'
 import type { ParsedEvent } from '../types'
 import { parseRawEvent } from '../parser'
@@ -200,8 +200,8 @@ router.post('/events', rateLimit, async (c) => {
     // for nested delegation — but only one this session already knows, so an
     // out-of-order or foreign id can never orphan the tree.
     let agentId = rootAgentId
+    let parentId = rootAgentId
     if (parsed.ownerAgentId && parsed.ownerAgentId !== rootAgentId) {
-      let parentId = rootAgentId
       if (parsed.parentAgentId && parsed.parentAgentId !== parsed.ownerAgentId) {
         const parent = await store.getAgentById(parsed.parentAgentId)
         if (parent && parent.session_id === parsed.sessionId) {
@@ -259,9 +259,15 @@ router.post('/events', rateLimit, async (c) => {
       )
     }
 
+    // A subagent's lifecycle event (e.g. SubagentStop configured as a
+    // notification) is answered by its parent, not by the finished child.
+    const notificationOwnerId =
+      parsed.subtype === 'SubagentStart' || parsed.subtype === 'SubagentStop' ? parentId : agentId
+
     let eventId: number
+    let notificationTransition: NotificationTransition
     try {
-      eventId = await store.insertEvent({
+      ;({ eventId, notificationTransition } = await store.insertEvent({
         agentId,
         sessionId: parsed.sessionId,
         type: parsed.type,
@@ -272,7 +278,8 @@ router.post('/events', rateLimit, async (c) => {
         toolUseId: parsed.toolUseId,
         signatureHash,
         isNotification,
-      })
+        notificationOwnerId,
+      }))
     } catch (err) {
       // Race: a concurrent identical POST inserted the row between our
       // pre-check and this INSERT. The UNIQUE constraint surfaces as
@@ -346,10 +353,10 @@ router.post('/events', rateLimit, async (c) => {
     broadcastActivity(parsed.sessionId, eventId, effectiveProjectId)
 
     // Fan out sidebar notification signals to every connected client so
-    // bells can light up regardless of which session the viewer is on.
-    // Any non-Notification event also bubbles as a clear signal so the
-    // UI can auto-dismiss bells once the agent resumes working.
-    if (isNotification) {
+    // bells can light up regardless of which session the viewer is on — but
+    // only when the session's pending state actually changed (see
+    // SqliteAdapter.applyNotification for who may clear it).
+    if (notificationTransition === 'set') {
       broadcastToAll({
         type: 'notification',
         data: {
@@ -358,7 +365,7 @@ router.post('/events', rateLimit, async (c) => {
           ts: parsed.timestamp,
         },
       })
-    } else {
+    } else if (notificationTransition === 'cleared') {
       broadcastToAll({
         type: 'notification_clear',
         data: {

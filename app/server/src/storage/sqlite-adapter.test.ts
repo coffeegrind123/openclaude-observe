@@ -1,6 +1,10 @@
 import { describe, test, expect, beforeEach } from 'vitest'
 import { SqliteAdapter } from './sqlite-adapter'
 import { SEED_FILTERS } from './seed-filters'
+import Database from 'better-sqlite3'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 let store: SqliteAdapter
 
@@ -235,12 +239,12 @@ describe('SqliteAdapter — sessions', () => {
   })
 
   // -------------------------------------------------------------------------
-  // Pending-notification tracking: last_notification_ts + last_non_notification_ts
-  // are maintained on insertEvent; getSessionsWithPendingNotifications only
-  // surfaces sessions whose notification is newer than any other activity.
+  // Pending-notification tracking: insertEvent sets pending_notification_ts
+  // on a notification and clears it on the next event from the agent that
+  // raised it; getSessionsWithPendingNotifications reads that state.
   // -------------------------------------------------------------------------
   async function insertNotification(sessionId: string, ts: number) {
-    await store.insertEvent({
+    return store.insertEvent({
       agentId: sessionId,
       sessionId,
       type: 'hook',
@@ -250,9 +254,9 @@ describe('SqliteAdapter — sessions', () => {
       payload: {},
     })
   }
-  async function insertTool(sessionId: string, ts: number) {
-    await store.insertEvent({
-      agentId: sessionId,
+  async function insertTool(sessionId: string, ts: number, agentId = sessionId) {
+    return store.insertEvent({
+      agentId,
       sessionId,
       type: 'hook',
       subtype: 'PreToolUse',
@@ -274,11 +278,11 @@ describe('SqliteAdapter — sessions', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].session_id).toBe('sess1')
     expect(rows[0].project_id).toBe(projId)
-    expect(rows[0].last_notification_ts).toBe(2000)
+    expect(rows[0].pending_notification_ts).toBe(2000)
     expect(rows[0].count).toBe(1)
   })
 
-  test('isNotification param advances last_notification_ts on a non-Notification subtype', async () => {
+  test('isNotification param sets pending_notification_ts on a non-Notification subtype', async () => {
     const projId = await store.createProject('proj1', 'Project 1', null)
     await store.upsertSession('sess1', projId, null, null, 100)
     await store.upsertAgent('sess1', 'sess1', null, null, null)
@@ -299,7 +303,7 @@ describe('SqliteAdapter — sessions', () => {
 
     const rows = await store.getSessionsWithPendingNotifications(0)
     expect(rows).toHaveLength(1)
-    expect(rows[0].last_notification_ts).toBe(2000)
+    expect(rows[0].pending_notification_ts).toBe(2000)
   })
 
   test('auto-clears once a non-notification event arrives after the notification', async () => {
@@ -355,7 +359,127 @@ describe('SqliteAdapter — sessions', () => {
     const rows = await store.getSessionsWithPendingNotifications(0)
     expect(rows).toHaveLength(1)
     expect(rows[0].count).toBe(1)
-    expect(rows[0].last_notification_ts).toBe(3000)
+    expect(rows[0].pending_notification_ts).toBe(3000)
+  })
+
+  test("a subagent's activity doesn't clear the main agent's pending notification", async () => {
+    const projId = await store.createProject('proj1', 'Project 1', null)
+    await store.upsertSession('sess1', projId, null, null, 100)
+    await store.upsertAgent('sess1', 'sess1', null, null, null)
+    await store.upsertAgent('sub1', 'sess1', 'sess1', null, null)
+
+    await insertNotification('sess1', 2000)
+    await insertTool('sess1', 3000, 'sub1')
+
+    const rows = await store.getSessionsWithPendingNotifications(0)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].pending_notification_ts).toBe(2000)
+
+    await insertTool('sess1', 4000)
+    expect(await store.getSessionsWithPendingNotifications(0)).toHaveLength(0)
+  })
+
+  test('a notification owned by another agent is cleared by that agent', async () => {
+    const projId = await store.createProject('proj1', 'Project 1', null)
+    await store.upsertSession('sess1', projId, null, null, 100)
+    await store.upsertAgent('sess1', 'sess1', null, null, null)
+    await store.upsertAgent('sub1', 'sess1', 'sess1', null, null)
+
+    // e.g. a SubagentStop configured as a notification: the child's event,
+    // but it's the parent that has to pick the result up.
+    await store.insertEvent({
+      agentId: 'sub1',
+      sessionId: 'sess1',
+      type: 'hook',
+      subtype: 'SubagentStop',
+      toolName: null,
+      timestamp: 2000,
+      payload: {},
+      isNotification: true,
+      notificationOwnerId: 'sess1',
+    })
+    await insertTool('sess1', 3000, 'sub1')
+    expect(await store.getSessionsWithPendingNotifications(0)).toHaveLength(1)
+
+    await insertTool('sess1', 4000)
+    expect(await store.getSessionsWithPendingNotifications(0)).toHaveLength(0)
+  })
+
+  test('pending state counts every configured notification subtype', async () => {
+    const projId = await store.createProject('proj1', 'Project 1', null)
+    await store.upsertSession('sess1', projId, null, null, 100)
+    await store.upsertAgent('sess1', 'sess1', null, null, null)
+
+    for (const [ts, subtype] of [
+      [1000, 'Stop'],
+      [2000, 'Notification'],
+    ] as const) {
+      await store.insertEvent({
+        agentId: 'sess1',
+        sessionId: 'sess1',
+        type: 'hook',
+        subtype,
+        toolName: null,
+        timestamp: ts,
+        payload: {},
+        isNotification: true,
+      })
+    }
+
+    const rows = await store.getSessionsWithPendingNotifications(0)
+    expect(rows[0].count).toBe(2)
+    expect(rows[0].pending_notification_ts).toBe(2000)
+  })
+
+  test('insertEvent reports the notification state transition', async () => {
+    const projId = await store.createProject('proj1', 'Project 1', null)
+    await store.upsertSession('sess1', projId, null, null, 100)
+    await store.upsertAgent('sess1', 'sess1', null, null, null)
+    await store.upsertAgent('sub1', 'sess1', 'sess1', null, null)
+
+    expect((await insertTool('sess1', 500)).notificationTransition).toBe('none')
+    expect((await insertNotification('sess1', 1000)).notificationTransition).toBe('set')
+    expect((await insertTool('sess1', 1500, 'sub1')).notificationTransition).toBe('none')
+    expect((await insertTool('sess1', 2000)).notificationTransition).toBe('cleared')
+    expect((await insertTool('sess1', 2500)).notificationTransition).toBe('none')
+  })
+
+  test('migrates the legacy last_notification_ts column to pending state', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'observe-notify-'))
+    const dbPath = join(dir, 'observe.db')
+    try {
+      const legacy = new Database(dbPath)
+      legacy.exec(`
+        CREATE TABLE projects (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL, transcript_path TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE TABLE sessions (id TEXT PRIMARY KEY, project_id INTEGER REFERENCES projects(id),
+          slug TEXT, status TEXT DEFAULT 'active', started_at INTEGER NOT NULL, stopped_at INTEGER,
+          transcript_path TEXT, metadata TEXT, event_count INTEGER NOT NULL DEFAULT 0,
+          agent_count INTEGER NOT NULL DEFAULT 0, last_activity INTEGER, last_notification_ts INTEGER,
+          created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id TEXT NOT NULL,
+          session_id TEXT NOT NULL, type TEXT NOT NULL, subtype TEXT, tool_name TEXT,
+          timestamp INTEGER NOT NULL, created_at INTEGER NOT NULL, payload TEXT NOT NULL,
+          tool_use_id TEXT);
+        INSERT INTO projects VALUES (1, 'p', 'p', NULL, 0, 0);
+        INSERT INTO sessions VALUES ('pending', 1, NULL, 'active', 0, NULL, NULL, NULL, 1, 0, 2000, 2000, 0, 0);
+        INSERT INTO sessions VALUES ('resolved', 1, NULL, 'active', 0, NULL, NULL, NULL, 2, 0, 3000, 2000, 0, 0);
+        INSERT INTO events (agent_id, session_id, type, subtype, timestamp, created_at, payload)
+          VALUES ('pending', 'pending', 'hook', 'Notification', 2000, 0, '{}');
+      `)
+      legacy.close()
+
+      const migrated = new SqliteAdapter(dbPath)
+      const rows = await migrated.getSessionsWithPendingNotifications(0)
+      expect(rows.map((r: any) => r.session_id)).toEqual(['pending'])
+      expect(rows[0].pending_notification_ts).toBe(2000)
+      expect(rows[0].count).toBe(1)
+      const cols = (migrated as any).db.prepare("PRAGMA table_info('sessions')").all()
+      expect(cols.map((c: { name: string }) => c.name)).not.toContain('last_notification_ts')
+      ;(migrated as any).db.close()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   test('upsertSession stores and preserves transcript_path', async () => {
@@ -506,7 +630,7 @@ describe('SqliteAdapter — agents', () => {
 describe('SqliteAdapter — events', () => {
   test('insertEvent returns auto-incremented id', async () => {
     const { sessionId, rootAgentId } = await seedBasic()
-    const id1 = await store.insertEvent({
+    const { eventId: id1 } = await store.insertEvent({
       agentId: rootAgentId,
       sessionId,
       type: 'user',
@@ -516,7 +640,7 @@ describe('SqliteAdapter — events', () => {
       timestamp: 1000,
       payload: { text: 'hello' },
     })
-    const id2 = await store.insertEvent({
+    const { eventId: id2 } = await store.insertEvent({
       agentId: rootAgentId,
       sessionId,
       type: 'tool',
@@ -791,7 +915,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       timestamp: 1000,
       payload: {},
     })
-    const subEvent1Id = await store.insertEvent({
+    const { eventId: subEvent1Id } = await store.insertEvent({
       agentId: 'sub1',
       sessionId: 'sess1',
       type: 'tool',
@@ -845,7 +969,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       payload: {},
     })
     // SubagentStop is on root agent but tagged with SubagentStop subtype
-    const stopId = await store.insertEvent({
+    const { eventId: stopId } = await store.insertEvent({
       agentId: 'sess1',
       sessionId: 'sess1',
       type: 'system',
@@ -883,7 +1007,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       timestamp: 1000,
       payload: {},
     })
-    const toolEventId = await store.insertEvent({
+    const { eventId: toolEventId } = await store.insertEvent({
       agentId: 'sess1',
       sessionId: 'sess1',
       type: 'tool',
@@ -953,7 +1077,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
       timestamp: 1000,
       payload: {},
     })
-    const toolId = await store.insertEvent({
+    const { eventId: toolId } = await store.insertEvent({
       agentId: 'sess1',
       sessionId: 'sess1',
       type: 'tool',
@@ -986,7 +1110,7 @@ describe('SqliteAdapter — getThreadForEvent', () => {
     await store.upsertAgent('sess1', 'sess1', null, null, null)
 
     // No UserPromptSubmit, just a tool event
-    const toolId = await store.insertEvent({
+    const { eventId: toolId } = await store.insertEvent({
       agentId: 'sess1',
       sessionId: 'sess1',
       type: 'tool',
@@ -1689,7 +1813,7 @@ describe('SqliteAdapter — event dedup', () => {
   })
 
   test('insertEvent persists signature_hash and findEventBySignatureHash locates it', async () => {
-    const id = await insert('sig-abc')
+    const { eventId: id } = await insert('sig-abc')
     const found = await store.findEventBySignatureHash('sig-abc')
     expect(found).toEqual({ id })
   })
@@ -1712,7 +1836,7 @@ describe('SqliteAdapter — event dedup', () => {
 
   test('multiple NULL signature_hash rows are allowed (NULLs distinct under UNIQUE)', async () => {
     const id1 = await insert(null)
-    const id2 = await store.insertEvent({
+    const { eventId: id2 } = await store.insertEvent({
       agentId: 'a1',
       sessionId: 'sess1',
       type: 'tool',

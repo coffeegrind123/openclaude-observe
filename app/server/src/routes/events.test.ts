@@ -150,7 +150,7 @@ function setupSuccessfulPost(
   store.getProjectById.mockResolvedValue({ id: 1, slug: 'test-project' })
   store.upsertSession.mockResolvedValue(undefined)
   store.upsertAgent.mockResolvedValue(undefined)
-  store.insertEvent.mockResolvedValue(42)
+  store.insertEvent.mockResolvedValue({ eventId: 42, notificationTransition: 'none' })
 }
 
 describe('events routes — POST /events', () => {
@@ -244,7 +244,7 @@ describe('events routes — POST /events session lifecycle', () => {
     store.getSessionById.mockResolvedValue(null) // new session
     store.upsertSession.mockResolvedValue(undefined)
     store.upsertAgent.mockResolvedValue(undefined)
-    store.insertEvent.mockResolvedValue(1)
+    store.insertEvent.mockResolvedValue({ eventId: 1, notificationTransition: 'none' })
 
     const res = await app.request('/api/events', {
       method: 'POST',
@@ -273,7 +273,7 @@ describe('events routes — POST /events session lifecycle', () => {
     store.getProjectById.mockResolvedValue(null) // project missing
     store.upsertSession.mockResolvedValue(undefined)
     store.upsertAgent.mockResolvedValue(undefined)
-    store.insertEvent.mockResolvedValue(1)
+    store.insertEvent.mockResolvedValue({ eventId: 1, notificationTransition: 'none' })
     store.updateSessionProject.mockResolvedValue(undefined)
 
     const res = await app.request('/api/events', {
@@ -410,7 +410,7 @@ describe('events routes — POST /events broadcast behavior', () => {
     store.getProjectById.mockResolvedValue({ id: 1 })
     store.upsertSession.mockResolvedValue(undefined)
     store.upsertAgent.mockResolvedValue(undefined)
-    store.insertEvent.mockResolvedValue(1)
+    store.insertEvent.mockResolvedValue({ eventId: 1, notificationTransition: 'set' })
 
     const broadcastToAll = vi.fn()
     const app = new Hono<Env>()
@@ -432,12 +432,34 @@ describe('events routes — POST /events broadcast behavior', () => {
       }),
     })
 
+    expect(store.insertEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ isNotification: true }),
+    )
     expect(broadcastToAll).toHaveBeenCalledWith(expect.objectContaining({ type: 'notification' }))
   })
 
-  it('broadcasts notification_clear for subtypes NOT in notificationEventSubtypes', async () => {
+  it('broadcasts nothing when the notification state is unchanged', async () => {
+    const { app, store, broadcastToAll } = await createApp()
+    setupSuccessfulPost(store, { id: 'sess-quiet' })
+
+    await app.request('/api/events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        hook_payload: { hook_event_name: 'PreToolUse', session_id: 'sess-quiet' },
+        meta: {},
+      }),
+    })
+
+    const types = broadcastToAll.mock.calls.map((call: any[]) => call[0]?.type)
+    expect(types).not.toContain('notification')
+    expect(types).not.toContain('notification_clear')
+  })
+
+  it('broadcasts notification_clear when the store reports a cleared state', async () => {
     const { app, store, broadcastToAll } = await createApp()
     setupSuccessfulPost(store, { id: 'sess-clear' })
+    store.insertEvent.mockResolvedValue({ eventId: 1, notificationTransition: 'cleared' })
 
     await app.request('/api/events', {
       method: 'POST',
