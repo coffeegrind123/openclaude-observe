@@ -10,6 +10,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # `just start` / `just build` pass the checkout's short hash.
+        GIT_HASH: "${GIT_HASH:-unknown}"
     container_name: instantcoffee-observe
     # The server polls llama-server and forge on the host (see
     # INSTANTCOFFEE_OBSERVE_LLAMA_URL). Docker Desktop provides this name;

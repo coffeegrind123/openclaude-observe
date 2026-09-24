@@ -50,7 +50,7 @@ sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
 
 echo ""
 echo "=== Building Docker image ==="
-docker build -t instantcoffee-observe:local .
+docker build --build-arg GIT_HASH="${HASH}" -t instantcoffee-observe:local .
 
 if $DRY_RUN; then
   echo ""

@@ -16,11 +16,15 @@ A small [Hono](https://hono.dev) server that ingests pi's session events over HT
 
 ## Quick start
 
+It ships with instantcoffee. instantcoffee's `docker-compose.yml` runs it as the `observe` service, built from its `vendor/instantcoffee-observe` submodule, so `./scripts/up.sh` there starts the dashboard with llama and forge and `./scripts/update.sh --observe` updates it. Its settings are the `OBSERVE_*` keys in instantcoffee's `.env`; see instantcoffee's `docs/pi.md`.
+
+To run it on its own instead (development, or a stack you manage yourself):
+
 ```bash
 git clone https://github.com/coffeegrind123/instantcoffee-observe.git
 cd instantcoffee-observe
 cp .env.example .env    # set the pi home mounts — see "Host mounts" below
-docker compose up -d instantcoffee-observe   # or: just start
+just start              # docker compose, with the build stamped with this commit
 ```
 
 Open <http://localhost:4981>. On the instantcoffee side there is nothing to install: `scripts/pi-local.sh` loads the observe extension by default (`OBSERVE_ENABLED=1` in instantcoffee's `.env`). Start a session and it streams in; the launch banner says `observe` when the dashboard was reachable.

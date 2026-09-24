@@ -35,13 +35,17 @@ jobs:
 
       - name: Extract version from tag
         id: version
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            GIT_HASH=${{ steps.version.outputs.sha }}
           push: true
           tags: |
             ghcr.io/${{ github.repository }}:${{ steps.version.outputs.tag }}

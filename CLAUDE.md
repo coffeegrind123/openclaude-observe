@@ -4,8 +4,12 @@ Real-time observability dashboard for [instantcoffee](https://github.com/coffeeg
 
 ## Quick Start
 
+Normally it runs as part of instantcoffee: the `observe` service in `~/qwen3.8-forge/docker-compose.yml`, built from the `vendor/instantcoffee-observe` submodule (`./scripts/up.sh` there). A change here reaches that stack only when the submodule is moved (`./scripts/update.sh --observe` in instantcoffee), so push first.
+
+Standalone:
+
 ```bash
-docker compose up -d instantcoffee-observe
+just start   # docker compose, GIT_HASH stamped from this checkout
 # Dashboard at http://localhost:4981
 ```
 

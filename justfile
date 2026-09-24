@@ -37,11 +37,11 @@ start-local:
 
 # Build the Docker image locally
 build:
-    docker build -t instantcoffee-observe:local .
+    docker build --build-arg GIT_HASH=$(git rev-parse --short HEAD) -t instantcoffee-observe:local .
 
 # Start server via docker compose
 start:
-    docker compose up -d instantcoffee-observe
+    GIT_HASH=$(git rev-parse --short HEAD) docker compose up -d --build instantcoffee-observe
     @just open
 
 # Stop the docker compose stack
